@@ -3,24 +3,98 @@
 <head>
   <meta charset="UTF-8">
   <title>Upload Product Photos</title>
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body>
-  <h3>Upload Product Photos</h3>
-  <form id="uploadForm" enctype="multipart/form-data">
-    <input type="file" name="photo" multiple />
-    <button type="submit">Upload</button>
-  </form>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center px-4">
+  <div class="bg-white shadow-lg rounded-xl p-8 max-w-xl w-full">
+    <h1 class="text-2xl font-bold mb-6 text-gray-800">Upload Product Photos</h1>
+
+    <form id="uploadForm" class="space-y-4">
+      <div>
+        <label class="block font-semibold mb-1">Photos</label>
+        <input type="file" name="photo" id="photoInput" multiple accept="image/*" class="block w-full border rounded p-2" />
+        <div id="preview" class="mt-4 grid grid-cols-3 gap-2"></div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block font-semibold mb-1">Truck Number</label>
+          <input type="text" name="truck_number" class="w-full border rounded p-2" />
+        </div>
+        <div>
+          <label class="block font-semibold mb-1">Price</label>
+          <input type="number" name="price" class="w-full border rounded p-2" />
+        </div>
+        <div>
+          <label class="block font-semibold mb-1">Date</label>
+          <input type="date" name="delivery_date" class="w-full border rounded p-2" />
+        </div>
+        <div>
+          <label class="block font-semibold mb-1">Time</label>
+          <input type="time" name="delivery_time" class="w-full border rounded p-2" />
+        </div>
+        <div class="col-span-2">
+          <label class="block font-semibold mb-1">Location</label>
+          <input type="text" name="delivery_location" class="w-full border rounded p-2" />
+        </div>
+      </div>
+
+      <button type="submit" class="bg-blue-600 text-white font-bold px-4 py-2 rounded hover:bg-blue-700 mt-4">
+        Upload
+      </button>
+    </form>
+
+    <div id="response" class="mt-6 bg-gray-100 p-4 rounded text-sm text-gray-800 whitespace-pre-wrap hidden"></div>
+  </div>
 
   <script>
+    const photoInput = document.getElementById('photoInput');
+    const previewContainer = document.getElementById('preview');
+    const responseBox = document.getElementById('response');
+
+    photoInput.addEventListener('change', () => {
+      previewContainer.innerHTML = '';
+      Array.from(photoInput.files).forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = document.createElement('img');
+          img.src = e.target.result;
+          img.className = 'w-full h-24 object-cover rounded shadow';
+          previewContainer.appendChild(img);
+        };
+        reader.readAsDataURL(file);
+      });
+    });
+
     document.getElementById('uploadForm').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const formData = new FormData(e.target);
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData
-      });
-      const result = await response.json();
-      console.log('Upload result:', result);
+      const form = e.target;
+      const formData = new FormData();
+
+      const photoFiles = photoInput.files;
+      for (let i = 0; i < photoFiles.length; i++) {
+        formData.append('photo', photoFiles[i]);
+      }
+
+      formData.append('truck_number', form.truck_number.value);
+      formData.append('price', form.price.value);
+      formData.append('delivery_date', form.delivery_date.value);
+      formData.append('delivery_time', form.delivery_time.value);
+      formData.append('delivery_location', form.delivery_location.value);
+
+      try {
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData
+        });
+
+        const json = await res.json();
+        responseBox.classList.remove('hidden');
+        responseBox.textContent = JSON.stringify(json, null, 2);
+      } catch (err) {
+        responseBox.classList.remove('hidden');
+        responseBox.textContent = '❌ Upload failed: ' + err.message;
+      }
     });
   </script>
 </body>

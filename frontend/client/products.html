@@ -38,15 +38,15 @@
 
         card.innerHTML = `
           <img src="${p.image_url}" class="h-32 w-full object-cover rounded mb-2">
-          <input type="text" class="border p-1 rounded mb-1" value="${p.product_title || p.product_name || ''}" data-field="product_title" />
-          <input type="text" class="border p-1 rounded mb-1" value="${p.category || ''}" data-field="category" />
-          <input type="text" class="border p-1 rounded mb-1" value="${p.truck_number || ''}" data-field="truck_number" />
-          <input type="number" class="border p-1 rounded mb-1" value="${p.price_estimate || ''}" data-field="price_estimate" />
-          <input type="text" class="border p-1 rounded mb-1" value="${p.delivery_location || ''}" data-field="delivery_location" />
-          <input type="date" class="border p-1 rounded mb-1" value="${p.delivery_date ? p.delivery_date.split('T')[0] : ''}" data-field="delivery_date" />
-          <input type="time" class="border p-1 rounded mb-1" value="${p.delivery_time || ''}" data-field="delivery_time" />
-          <textarea class="border p-1 rounded mb-1" data-field="description">${p.description || ''}</textarea>
-          <select class="border p-1 rounded mb-1" data-field="condition">
+          <label class="text-xs text-gray-600">Product Title</label><input type="text" class="border p-1 rounded mb-1" value="${p.product_title || p.product_name || ''}" data-field="product_title" />
+          <label class="text-xs text-gray-600">Product Title</label><input type="text" class="border p-1 rounded mb-1" value="${p.category || ''}" data-field="category"><label class="text-xs text-gray-600">Category</label> />
+          <label class="text-xs text-gray-600">Product Title</label><input type="text" class="border p-1 rounded mb-1" value="${p.truck_number || ''}" data-field="truck_number"><label class="text-xs text-gray-600">Truck Number</label> />
+          <input type="number" class="border p-1 rounded mb-1" value="${p.price_estimate || ''}" data-field="price_estimate"><label class="text-xs text-gray-600">Price Estimate</label> />
+          <label class="text-xs text-gray-600">Product Title</label><input type="text" class="border p-1 rounded mb-1" value="${p.delivery_location || ''}" data-field="delivery_location"><label class="text-xs text-gray-600">Delivery Location</label> />
+          <input type="date" class="border p-1 rounded mb-1" value="${p.delivery_date ? p.delivery_date.split('T')[0] : ''}" data-field="delivery_date"><label class="text-xs text-gray-600">Delivery Date</label> />
+          <input type="time" class="border p-1 rounded mb-1" value="${p.delivery_time || ''}" data-field="delivery_time"><label class="text-xs text-gray-600">Delivery Time</label> />
+          <label class="text-xs text-gray-600">Description</label><textarea class="border p-1 rounded mb-1" data-field="description">${p.description || ''}</textarea>
+          <label class="text-xs text-gray-600">Condition</label><select class="border p-1 rounded mb-1" data-field="condition">
             <option ${p.condition === 'new' ? 'selected' : ''}>new</option>
             <option ${p.condition === 'lightly used' ? 'selected' : ''}>lightly used</option>
             <option ${p.condition === 'used' ? 'selected' : ''}>used</option>

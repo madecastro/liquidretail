@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Uploaded Products</title>
+  <title>Editable Products</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100 p-6">
   <div class="max-w-6xl mx-auto">
     <div class="flex justify-between items-center mb-6">
-      <h1 class="text-2xl font-bold">📦 Uploaded Products</h1>
+      <h1 class="text-2xl font-bold">📝 Editable Product List</h1>
       <a href="index.html" class="text-blue-600 underline">← Back to Upload</a>
     </div>
 
@@ -38,10 +38,23 @@
 
         card.innerHTML = `
           <img src="${p.image_url}" class="h-32 w-full object-cover rounded mb-2">
-          <div class="font-bold text-lg mb-1">${p.product_title || p.product_name || 'Unnamed Product'}</div>
-          <pre class="bg-gray-100 rounded p-2 overflow-x-auto text-xs mb-2">${JSON.stringify(p, null, 2)}</pre>
+          <input type="text" class="border p-1 rounded mb-1" value="${p.product_title || p.product_name || ''}" data-field="product_title" />
+          <input type="text" class="border p-1 rounded mb-1" value="${p.category || ''}" data-field="category" />
+          <input type="text" class="border p-1 rounded mb-1" value="${p.truck_number || ''}" data-field="truck_number" />
+          <input type="number" class="border p-1 rounded mb-1" value="${p.price_estimate || ''}" data-field="price_estimate" />
+          <input type="text" class="border p-1 rounded mb-1" value="${p.delivery_location || ''}" data-field="delivery_location" />
+          <input type="date" class="border p-1 rounded mb-1" value="${p.delivery_date ? p.delivery_date.split('T')[0] : ''}" data-field="delivery_date" />
+          <input type="time" class="border p-1 rounded mb-1" value="${p.delivery_time || ''}" data-field="delivery_time" />
+          <textarea class="border p-1 rounded mb-1" data-field="description">${p.description || ''}</textarea>
+          <select class="border p-1 rounded mb-1" data-field="condition">
+            <option ${p.condition === 'new' ? 'selected' : ''}>new</option>
+            <option ${p.condition === 'lightly used' ? 'selected' : ''}>lightly used</option>
+            <option ${p.condition === 'used' ? 'selected' : ''}>used</option>
+            <option ${p.condition === 'unserviceable' ? 'selected' : ''}>unserviceable</option>
+          </select>
+
           <div class="mt-auto flex gap-2 flex-wrap">
-            <a href="edit.html?id=${p._id}" class="bg-blue-500 text-white px-3 py-1 rounded text-xs">Edit</a>
+            <button onclick="saveProduct('${p._id}', this)" class="bg-green-600 text-white px-3 py-1 rounded text-xs">Save</button>
             ${p.confidence < 0.6 || p.product_name === "unknown" ? `<a href="match.html?id=${p._id}" class="bg-yellow-500 text-white px-3 py-1 rounded text-xs">Match with Amazon</a>` : ''}
             <button onclick="deleteProduct('${p._id}', this)" class="bg-red-600 text-white px-3 py-1 rounded text-xs">Delete</button>
           </div>
@@ -50,13 +63,35 @@
       });
     }
 
-    async function deleteProduct(id, button) {
+    async function saveProduct(id, btn) {
+      const card = btn.closest('div.bg-white');
+      const fields = card.querySelectorAll('[data-field]');
+      const data = {};
+      fields.forEach(input => {
+        const key = input.getAttribute('data-field');
+        data[key] = input.value;
+      });
+
+      const res = await fetch(`/api/products/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+
+      if (res.ok) {
+        alert('✅ Saved!');
+      } else {
+        alert('❌ Save failed.');
+      }
+    }
+
+    async function deleteProduct(id, btn) {
       if (!confirm('Delete this product?')) return;
       const res = await fetch(`/api/products/${id}`, { method: 'DELETE' });
       if (res.ok) {
-        button.closest('div.bg-white').remove();
+        btn.closest('div.bg-white').remove();
       } else {
-        alert('Delete failed');
+        alert('❌ Delete failed.');
       }
     }
 

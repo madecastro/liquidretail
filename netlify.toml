@@ -1,8 +1,10 @@
 [build]
+  base = "frontend"
   publish = "client"
   command = ""
 
 [[redirects]]
-  from = "/*"
-  to = "/index.html"
+  from = "/api/*"
+  to = "https://liquidretail-backend.onrender.com/api/:splat"
   status = 200
+  force = true

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Match with Amazon</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen p-6">
+  <div class="max-w-3xl mx-auto">
+    <h1 class="text-2xl font-bold mb-4">🛒 Match with Amazon</h1>
+    <input id="query" type="text" placeholder="Search for product..." class="w-full p-2 border rounded mb-4" />
+    <button onclick="searchAmazon()" class="bg-blue-600 text-white px-4 py-2 rounded">Search</button>
+    <div id="results" class="mt-6 grid gap-4"></div>
+  </div>
+
+  <script>
+    const id = new URLSearchParams(window.location.search).get('id');
+
+    async function searchAmazon() {
+      const query = document.getElementById('query').value;
+      const res = await fetch('/api/products/' + id + '/match-amazon', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query })
+      });
+      const data = await res.json();
+      const container = document.getElementById('results');
+      container.innerHTML = '';
+      data.matches.forEach(match => {
+        const card = document.createElement('div');
+        card.className = 'bg-white p-4 rounded shadow';
+        card.innerHTML = `
+          <img src="${match.image}" class="h-32 object-cover rounded w-full mb-2">
+          <h2 class="font-bold text-lg">${match.title}</h2>
+          <p class="text-gray-600 text-sm">${match.description}</p>
+          <p class="text-green-600 font-semibold">$${match.price}</p>
+          <button class="mt-2 bg-green-500 text-white px-3 py-1 rounded" onclick='saveMatch(${JSON.stringify(match)})'>Use This</button>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    async function saveMatch(match) {
+      await fetch('/api/products/' + id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product_name: match.title,
+          product_title: match.title,
+          description: match.description,
+          price_estimate: match.price,
+          marketing_images: [match.image]
+        })
+      });
+      alert('Match saved!');
+      location.href = '/products.html';
+    }
+  </script>
+</body>
+</html>

@@ -9,7 +9,7 @@
   <nav class="bg-blue-900 text-white px-6 py-3 mb-6">
     <div class="max-w-5xl mx-auto flex justify-between items-center">
       <span class="font-bold text-lg">LiquidRetail</span>
-      <a href="products.html" class="text-white hover:underline">📦 View Products</a>
+      <a href="#productGallery" class="text-white hover:underline">📦 View Products</a>
     </div>
   </nav>
 
@@ -24,24 +24,99 @@
       <input type="text" name="delivery_location" placeholder="Location" class="w-full border p-2 rounded" />
       <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded">Upload</button>
     </form>
+    <div id="statusMessage" class="mt-4 text-sm"></div>
+    <pre id="responseBox" class="bg-gray-100 mt-4 p-4 text-sm rounded overflow-x-auto"></pre>
+  </div>
 
-    <pre id="responseBox" class="bg-gray-100 mt-6 p-4 text-sm rounded overflow-x-auto"></pre>
+  <div class="max-w-5xl mx-auto mt-12" id="productGallery">
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-2xl font-semibold">Uploaded Products</h2>
+      <select id="sortSelect" class="border p-2 rounded">
+        <option value="date">Sort by Date</option>
+        <option value="price">Sort by Price</option>
+        <option value="truck">Sort by Truck</option>
+      </select>
+    </div>
+    <div id="productList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"></div>
   </div>
 
   <script>
     const form = document.getElementById('uploadForm');
     const responseBox = document.getElementById('responseBox');
+    const statusMessage = document.getElementById('statusMessage');
+    const productList = document.getElementById('productList');
+    const sortSelect = document.getElementById('sortSelect');
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      statusMessage.textContent = "⏳ Uploading...";
       const formData = new FormData(form);
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData
-      });
-      const data = await res.json();
-      responseBox.textContent = JSON.stringify(data, null, 2);
+      try {
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (res.ok) {
+          statusMessage.textContent = "✅ Upload successful!";
+          loadProducts();
+        } else {
+          statusMessage.textContent = "❌ Upload failed: " + (data.error || 'Unknown error');
+        }
+        responseBox.textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        statusMessage.textContent = "❌ Upload failed: " + err.message;
+      }
     });
+
+    sortSelect.addEventListener('change', loadProducts);
+
+    async function loadProducts() {
+      const res = await fetch('/api/products');
+      const products = await res.json();
+      const sorted = [...products].sort((a, b) => {
+        if (sortSelect.value === 'price') return (a.price || 0) - (b.price || 0);
+        if (sortSelect.value === 'truck') return (a.truck_number || '').localeCompare(b.truck_number || '');
+        return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+      });
+
+      productList.innerHTML = '';
+      for (const p of sorted) {
+        const card = document.createElement('div');
+        card.className = "bg-white p-4 rounded shadow space-y-2";
+
+        card.innerHTML = `
+          <img src="${p.image_url}" alt="Product" class="w-full h-48 object-cover rounded" />
+          <div class="flex justify-between text-xs text-gray-500">
+            <span>🚛 ${p.truck_number || 'N/A'}</span>
+            <span>💵 $${p.price_estimate || p.price || '0'}</span>
+          </div>
+          <input type="text" value="${p.product_title || ''}" class="border p-1 w-full rounded title-input" data-id="${p._id}" />
+          <textarea class="border p-1 w-full rounded description-input" data-id="${p._id}">${p.description || ''}</textarea>
+          <div class="text-sm mt-1">
+            <span class="inline-block bg-${p.shopify_status === 'published' ? 'green' : 'yellow'}-200 text-${p.shopify_status === 'published' ? 'green' : 'yellow'}-800 px-2 py-0.5 rounded">${p.shopify_status || 'pending'}</span>
+          </div>
+        `;
+
+        card.querySelector('.title-input').addEventListener('blur', saveField);
+        card.querySelector('.description-input').addEventListener('blur', saveField);
+
+        productList.appendChild(card);
+      }
+    }
+
+    async function saveField(e) {
+      const id = e.target.dataset.id;
+      const field = e.target.classList.contains('title-input') ? 'product_title' : 'description';
+      const body = { [field]: e.target.value };
+      await fetch(`/api/products/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+    }
+
+    loadProducts();
   </script>
 </body>
 </html>

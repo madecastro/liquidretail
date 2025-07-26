@@ -142,13 +142,27 @@
       });
     }
 
-    document.getElementById('pushSelectedBtn').addEventListener('click', async () => {
-      if (selectedProductIds.size === 0) return;
-      const response = await fetch('/api/shopify/push', {
+    
+document.getElementById('pushSelectedBtn').addEventListener('click', async () => {
+  if (selectedProductIds.size === 0) return;
+
+  for (const id of selectedProductIds) {
+    try {
+      const res = await fetch(`/api/products/${id}/push-to-shopify`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productIds: Array.from(selectedProductIds) })
+        headers: { 'Content-Type': 'application/json' }
       });
+      const result = await res.json();
+      console.log(`✅ ${id}: ${result.message || 'Success'}`);
+    } catch (err) {
+      console.error(`❌ Failed to push ${id}: ${err.message}`);
+    }
+  }
+
+  alert('✅ Products pushed to Shopify');
+  selectedProductIds.clear();
+  loadProducts();
+});
       const result = await response.json();
       alert(result.message || 'Products pushed to Shopify');
       selectedProductIds.clear();

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Upload Product Photos</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+  <nav class="bg-blue-900 text-white px-6 py-3 mb-6">
+    <div class="max-w-5xl mx-auto flex justify-between items-center">
+      <span class="font-bold text-lg">LiquidRetail</span>
+      <a href="products.html" class="text-white hover:underline">📦 View Products</a>
+    </div>
+  </nav>
+
+  <div class="max-w-xl mx-auto bg-white p-6 rounded shadow">
+    <h2 class="text-xl font-semibold mb-4">Upload Product Photos</h2>
+    <form id="uploadForm" enctype="multipart/form-data" class="space-y-4">
+      <input type="file" name="photo" accept="image/*" required class="w-full" />
+      <input type="text" name="truck_number" placeholder="Truck Number" class="w-full border p-2 rounded" />
+      <input type="number" name="price" placeholder="Price" class="w-full border p-2 rounded" />
+      <input type="date" name="delivery_date" class="w-full border p-2 rounded" />
+      <input type="time" name="delivery_time" class="w-full border p-2 rounded" />
+      <input type="text" name="delivery_location" placeholder="Location" class="w-full border p-2 rounded" />
+      <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded">Upload</button>
+    </form>
+    <div id="statusMessage" class="mt-4 text-sm"></div>
+    <pre id="responseBox" class="bg-gray-100 mt-4 p-4 text-sm rounded overflow-x-auto"></pre>
+  </div>
+
+  <script>
+    const form = document.getElementById('uploadForm');
+    const responseBox = document.getElementById('responseBox');
+    const statusMessage = document.getElementById('statusMessage');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      statusMessage.textContent = "⏳ Uploading...";
+      const formData = new FormData(form);
+      try {
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (res.ok) {
+          statusMessage.textContent = "✅ Upload successful!";
+        } else {
+          statusMessage.textContent = "❌ Upload failed: " + (data.error || 'Unknown error');
+        }
+        responseBox.textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        statusMessage.textContent = "❌ Upload failed: " + err.message;
+      }
+    });
+  </script>
+</body>
+</html>

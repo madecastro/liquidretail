@@ -2,106 +2,107 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Editable Products</title>
+  <title>Product Gallery</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-100 p-6">
-  <div class="max-w-6xl mx-auto">
-    <div class="flex justify-between items-center mb-6">
-      <h1 class="text-2xl font-bold">📝 Editable Product List</h1>
-      <a href="index.html" class="text-blue-600 underline">← Back to Upload</a>
+<body class="bg-gray-100 min-h-screen">
+  <nav class="bg-blue-900 text-white px-6 py-3 mb-6">
+    <div class="max-w-5xl mx-auto flex justify-between items-center">
+      <span class="font-bold text-lg">LiquidRetail</span>
+      <a href="upload.html" class="text-white hover:underline">⬆️ Upload New</a>
+    </div>
+  </nav>
+
+  <div class="max-w-5xl mx-auto mt-12">
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-2xl font-semibold">Uploaded Products</h2>
+      <select id="sortSelect" class="border p-2 rounded">
+        <option value="date">Sort by Date</option>
+        <option value="price">Sort by Price</option>
+        <option value="truck">Sort by Truck</option>
+      </select>
     </div>
 
-    <div class="bg-white p-4 rounded shadow mb-6 flex gap-4">
-      <input id="truckInput" type="text" placeholder="Truck Number" class="border p-2 rounded w-1/3" />
-      <input id="dateInput" type="date" class="border p-2 rounded w-1/3" />
-      <button onclick="applyFilters()" class="bg-blue-600 text-white px-4 py-2 rounded">Apply Filters</button>
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+      <button id="pushSelectedBtn" class="bg-green-600 text-white px-4 py-2 rounded disabled:opacity-50">Push Selected to Shopify</button>
+      <label class="text-sm flex items-center gap-2">
+        <input type="checkbox" id="hidePublishedToggle" class="accent-blue-600" />
+        Hide published
+      </label>
     </div>
 
-    <div id="productGrid" class="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"></div>
+    <div id="productList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"></div>
   </div>
 
   <script>
+    const productList = document.getElementById('productList');
+    const sortSelect = document.getElementById('sortSelect');
+    const selectedProductIds = new Set();
+
+    sortSelect.addEventListener('change', loadProducts);
+    document.getElementById('hidePublishedToggle').addEventListener('change', loadProducts);
+    document.getElementById('pushSelectedBtn').addEventListener('click', async () => {
+      if (selectedProductIds.size === 0) return;
+      const response = await fetch('/api/shopify/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productIds: Array.from(selectedProductIds) })
+      });
+      const result = await response.json();
+      alert(result.message || 'Products pushed to Shopify');
+      selectedProductIds.clear();
+      loadProducts();
+    });
+
     async function loadProducts() {
-      const urlParams = new URLSearchParams(window.location.search);
-      const truck = urlParams.get('truck');
-      const date = urlParams.get('date');
-
-      const res = await fetch(`/api/products${truck || date ? '?' + urlParams.toString() : ''}`);
+      const res = await fetch('/api/products');
       const products = await res.json();
-      const grid = document.getElementById('productGrid');
-      grid.innerHTML = '';
+      const hidePublished = document.getElementById('hidePublishedToggle').checked;
+      const sorted = [...products].filter(p => !hidePublished || p.shopify_status !== 'published').sort((a, b) => {
+        if (sortSelect.value === 'price') return (a.price || 0) - (b.price || 0);
+        if (sortSelect.value === 'truck') return (a.truck_number || '').localeCompare(b.truck_number || '');
+        return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+      });
 
-      products.forEach(p => {
+      productList.innerHTML = '';
+      for (const p of sorted) {
         const card = document.createElement('div');
-        card.className = 'bg-white p-4 rounded shadow text-sm flex flex-col';
+        card.className = "bg-white p-4 rounded shadow space-y-2 relative";
 
         card.innerHTML = `
-          <img src="${p.image_url}" class="h-32 w-full object-cover rounded mb-2">
-          <label class="text-xs text-gray-600">Product Title</label><input type="text" class="border p-1 rounded mb-1" value="${p.product_title || p.product_name || ''}" data-field="product_title" />
-          <label class="text-xs text-gray-600">Product Title</label><input type="text" class="border p-1 rounded mb-1" value="${p.category || ''}" data-field="category"><label class="text-xs text-gray-600">Category</label> />
-          <label class="text-xs text-gray-600">Product Title</label><input type="text" class="border p-1 rounded mb-1" value="${p.truck_number || ''}" data-field="truck_number"><label class="text-xs text-gray-600">Truck Number</label> />
-          <input type="number" class="border p-1 rounded mb-1" value="${p.price_estimate || ''}" data-field="price_estimate"><label class="text-xs text-gray-600">Price Estimate</label> />
-          <label class="text-xs text-gray-600">Product Title</label><input type="text" class="border p-1 rounded mb-1" value="${p.delivery_location || ''}" data-field="delivery_location"><label class="text-xs text-gray-600">Delivery Location</label> />
-          <input type="date" class="border p-1 rounded mb-1" value="${p.delivery_date ? p.delivery_date.split('T')[0] : ''}" data-field="delivery_date"><label class="text-xs text-gray-600">Delivery Date</label> />
-          <input type="time" class="border p-1 rounded mb-1" value="${p.delivery_time || ''}" data-field="delivery_time"><label class="text-xs text-gray-600">Delivery Time</label> />
-          <label class="text-xs text-gray-600">Description</label><textarea class="border p-1 rounded mb-1" data-field="description">${p.description || ''}</textarea>
-          <label class="text-xs text-gray-600">Condition</label><select class="border p-1 rounded mb-1" data-field="condition">
-            <option ${p.condition === 'new' ? 'selected' : ''}>new</option>
-            <option ${p.condition === 'lightly used' ? 'selected' : ''}>lightly used</option>
-            <option ${p.condition === 'used' ? 'selected' : ''}>used</option>
-            <option ${p.condition === 'unserviceable' ? 'selected' : ''}>unserviceable</option>
-          </select>
-
-          <div class="mt-auto flex gap-2 flex-wrap">
-            <button onclick="saveProduct('${p._id}', this)" class="bg-green-600 text-white px-3 py-1 rounded text-xs">Save</button>
-            ${p.confidence < 0.6 || p.product_name === "unknown" ? `<a href="match.html?id=${p._id}" class="bg-yellow-500 text-white px-3 py-1 rounded text-xs">Match with Amazon</a>` : ''}
-            <button onclick="deleteProduct('${p._id}', this)" class="bg-red-600 text-white px-3 py-1 rounded text-xs">Delete</button>
+          <input type="checkbox" class="absolute top-2 left-2 form-checkbox h-4 w-4 select-box" data-id="${p._id}" />
+          <img src="${p.image_url}" alt="Product" class="w-full h-48 object-cover rounded" />
+          <div class="flex justify-between text-xs text-gray-500">
+            <span>🚛 ${p.truck_number || 'N/A'}</span>
+            <span>💵 $${p.price_estimate || p.price || '0'}</span>
+          </div>
+          <input type="text" value="${p.product_title || ''}" class="border p-1 w-full rounded title-input" data-id="${p._id}" />
+          <textarea class="border p-1 w-full rounded description-input" data-id="${p._id}">${p.description || ''}</textarea>
+          <div class="text-sm mt-1">
+            <span class="inline-block bg-${p.shopify_status === 'published' ? 'green' : 'yellow'}-200 text-${p.shopify_status === 'published' ? 'green' : 'yellow'}-800 px-2 py-0.5 rounded">${p.shopify_status || 'pending'}</span>
           </div>
         `;
-        grid.appendChild(card);
-      });
+
+        card.querySelector('.title-input').addEventListener('blur', saveField);
+        card.querySelector('.description-input').addEventListener('blur', saveField);
+        card.querySelector('.select-box').addEventListener('change', (e) => {
+          const id = e.target.dataset.id;
+          e.target.checked ? selectedProductIds.add(id) : selectedProductIds.delete(id);
+        });
+
+        productList.appendChild(card);
+      }
     }
 
-    async function saveProduct(id, btn) {
-      const card = btn.closest('div.bg-white');
-      const fields = card.querySelectorAll('[data-field]');
-      const data = {};
-      fields.forEach(input => {
-        const key = input.getAttribute('data-field');
-        data[key] = input.value;
-      });
-
-      const res = await fetch(`/api/products/${id}`, {
+    async function saveField(e) {
+      const id = e.target.dataset.id;
+      const field = e.target.classList.contains('title-input') ? 'product_title' : 'description';
+      const body = { [field]: e.target.value };
+      await fetch(`/api/products/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+        body: JSON.stringify(body)
       });
-
-      if (res.ok) {
-        alert('✅ Saved!');
-      } else {
-        alert('❌ Save failed.');
-      }
-    }
-
-    async function deleteProduct(id, btn) {
-      if (!confirm('Delete this product?')) return;
-      const res = await fetch(`/api/products/${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        btn.closest('div.bg-white').remove();
-      } else {
-        alert('❌ Delete failed.');
-      }
-    }
-
-    function applyFilters() {
-      const truck = document.getElementById('truckInput').value;
-      const date = document.getElementById('dateInput').value;
-      const params = new URLSearchParams();
-      if (truck) params.append('truck', truck);
-      if (date) params.append('date', date);
-      window.location.search = params.toString();
     }
 
     loadProducts();

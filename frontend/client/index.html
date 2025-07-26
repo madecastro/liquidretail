@@ -37,6 +37,17 @@
         <option value="truck">Sort by Truck</option>
       </select>
     </div>
+
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+      <div>
+        <button id="pushSelectedBtn" class="bg-green-600 text-white px-4 py-2 rounded disabled:opacity-50">Push Selected to Shopify</button>
+      </div>
+      <label class="text-sm flex items-center gap-2">
+        <input type="checkbox" id="hidePublishedToggle" class="accent-blue-600" />
+        Hide published
+      </label>
+    </div>
+
     <div id="productList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"></div>
   </div>
 
@@ -46,6 +57,8 @@
     const statusMessage = document.getElementById('statusMessage');
     const productList = document.getElementById('productList');
     const sortSelect = document.getElementById('sortSelect');
+    const hidePublishedToggle = document.getElementById('hidePublishedToggle');
+    const selectedProductIds = new Set();
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -70,11 +83,16 @@
     });
 
     sortSelect.addEventListener('change', loadProducts);
+    hidePublishedToggle.addEventListener('change', loadProducts);
 
     async function loadProducts() {
       const res = await fetch('/api/products');
       const products = await res.json();
-      const sorted = [...products].sort((a, b) => {
+      const hidePublished = hidePublishedToggle.checked;
+
+      const filtered = hidePublished ? products.filter(p => p.shopify_status !== 'published') : products;
+
+      const sorted = filtered.sort((a, b) => {
         if (sortSelect.value === 'price') return (a.price || 0) - (b.price || 0);
         if (sortSelect.value === 'truck') return (a.truck_number || '').localeCompare(b.truck_number || '');
         return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
@@ -83,9 +101,10 @@
       productList.innerHTML = '';
       for (const p of sorted) {
         const card = document.createElement('div');
-        card.className = "bg-white p-4 rounded shadow space-y-2";
+        card.className = "bg-white p-4 rounded shadow space-y-2 relative";
 
         card.innerHTML = `
+          <input type="checkbox" class="absolute top-2 left-2 h-4 w-4 select-box" data-id="${p._id}" />
           <img src="${p.image_url}" alt="Product" class="w-full h-48 object-cover rounded" />
           <div class="flex justify-between text-xs text-gray-500">
             <span>🚛 ${p.truck_number || 'N/A'}</span>
@@ -94,12 +113,19 @@
           <input type="text" value="${p.product_title || ''}" class="border p-1 w-full rounded title-input" data-id="${p._id}" />
           <textarea class="border p-1 w-full rounded description-input" data-id="${p._id}">${p.description || ''}</textarea>
           <div class="text-sm mt-1">
-            <span class="inline-block bg-${p.shopify_status === 'published' ? 'green' : 'yellow'}-200 text-${p.shopify_status === 'published' ? 'green' : 'yellow'}-800 px-2 py-0.5 rounded">${p.shopify_status || 'pending'}</span>
+            <span class="inline-block ${p.shopify_status === 'published' ? 'bg-green-200 text-green-800' : 'bg-yellow-200 text-yellow-800'} px-2 py-0.5 rounded">${p.shopify_status || 'pending'}</span>
           </div>
         `;
 
         card.querySelector('.title-input').addEventListener('blur', saveField);
         card.querySelector('.description-input').addEventListener('blur', saveField);
+
+        const checkbox = card.querySelector('.select-box');
+        checkbox.addEventListener('change', (e) => {
+          const id = e.target.dataset.id;
+          if (e.target.checked) selectedProductIds.add(id);
+          else selectedProductIds.delete(id);
+        });
 
         productList.appendChild(card);
       }
@@ -115,6 +141,19 @@
         body: JSON.stringify(body)
       });
     }
+
+    document.getElementById('pushSelectedBtn').addEventListener('click', async () => {
+      if (selectedProductIds.size === 0) return;
+      const response = await fetch('/api/shopify/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productIds: Array.from(selectedProductIds) })
+      });
+      const result = await response.json();
+      alert(result.message || 'Products pushed to Shopify');
+      selectedProductIds.clear();
+      loadProducts();
+    });
 
     loadProducts();
   </script>

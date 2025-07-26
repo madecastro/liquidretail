@@ -53,7 +53,136 @@
 
   <!-- JS remains unchanged -->
   <script>
-    // JavaScript stays the same
+    const form = document.getElementById('uploadForm');
+    const responseBox = document.getElementById('responseBox');
+    const statusMessage = document.getElementById('statusMessage');
+    const productList = document.getElementById('productList');
+    const sortSelect = document.getElementById('sortSelect');
+    const hidePublishedToggle = document.getElementById('hidePublishedToggle');
+    const selectedProductIds = new Set();
+
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.classList.remove('hidden');
+      setTimeout(() => toast.classList.add('hidden'), 3000);
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      statusMessage.textContent = "⏳ Uploading...";
+      const formData = new FormData(form);
+      try {
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (res.ok) {
+          statusMessage.textContent = "✅ Upload successful!";
+          loadProducts();
+        } else {
+          statusMessage.textContent = "❌ Upload failed: " + (data.error || 'Unknown error');
+        }
+        responseBox.textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        statusMessage.textContent = "❌ Upload failed: " + err.message;
+      }
+    });
+
+    sortSelect.addEventListener('change', loadProducts);
+    hidePublishedToggle.addEventListener('change', loadProducts);
+
+    async function loadProducts() {
+      const res = await fetch('/api/products');
+      const products = await res.json();
+      const hidePublished = hidePublishedToggle.checked;
+
+      const filtered = hidePublished ? products.filter(p => p.shopify_status !== 'published') : products;
+
+      const sorted = filtered.sort((a, b) => {
+        if (sortSelect.value === 'price') return (a.price || 0) - (b.price || 0);
+        if (sortSelect.value === 'truck') return (a.truck_number || '').localeCompare(b.truck_number || '');
+        return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+      });
+
+      productList.innerHTML = '';
+      for (const p of sorted) {
+        const card = document.createElement('div');
+        card.className = "bg-white p-4 rounded shadow space-y-2 relative";
+
+        const disabledAttr = p.shopify_status === 'published' ? 'disabled' : '';
+        const shopifyLink = p.shopify_url ? `<a href="${p.shopify_url}" target="_blank" class="text-blue-600 text-xs underline">View in Shopify</a>` : '';
+
+        card.innerHTML = `
+          <input type="checkbox" class="absolute top-2 left-2 h-4 w-4 select-box" data-id="${p._id}" ${disabledAttr} />
+          <img src="${p.image_url}" alt="Product" class="w-full h-48 object-cover rounded" />
+          <div class="flex justify-between text-xs text-gray-500">
+            <span>🚛 ${p.truck_number || 'N/A'}</span>
+            <span>💵 $${p.price_estimate || p.price || '0'}</span>
+          </div>
+          <input type="text" value="${p.product_title || ''}" class="border p-1 w-full rounded title-input" data-id="${p._id}" />
+          <textarea class="border p-1 w-full rounded description-input" data-id="${p._id}">${p.description || ''}</textarea>
+          <div class="text-sm mt-1 flex justify-between items-center">
+            <span class="inline-block ${p.shopify_status === 'published' ? 'bg-green-200 text-green-800' : 'bg-yellow-200 text-yellow-800'} px-2 py-0.5 rounded status-badge">${p.shopify_status || 'pending'}</span>
+            ${shopifyLink}
+          </div>
+        `;
+
+        card.querySelector('.title-input').addEventListener('blur', saveField);
+        card.querySelector('.description-input').addEventListener('blur', saveField);
+
+        const checkbox = card.querySelector('.select-box');
+        checkbox.addEventListener('change', (e) => {
+          const id = e.target.dataset.id;
+          if (e.target.checked) selectedProductIds.add(id);
+          else selectedProductIds.delete(id);
+        });
+
+        productList.appendChild(card);
+      }
+    }
+
+    async function saveField(e) {
+      const id = e.target.dataset.id;
+      const field = e.target.classList.contains('title-input') ? 'product_title' : 'description';
+      const body = { [field]: e.target.value };
+      await fetch(`/api/products/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+    }
+
+    document.getElementById('pushSelectedBtn').addEventListener('click', async () => {
+      if (selectedProductIds.size === 0) return;
+
+      for (const id of selectedProductIds) {
+        const card = document.querySelector(`input[data-id="${id}"]`).closest('div');
+        const badge = card.querySelector('.status-badge');
+        badge.textContent = '⏳ syncing...';
+        badge.className = 'inline-block bg-blue-200 text-blue-800 px-2 py-0.5 rounded status-badge';
+
+        try {
+          const res = await fetch(`/api/products/${id}/push-to-shopify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          const result = await res.json();
+          badge.textContent = 'published';
+          badge.className = 'inline-block bg-green-200 text-green-800 px-2 py-0.5 rounded status-badge';
+          showToast(`✅ ${id} pushed to Shopify`);
+        } catch (err) {
+          badge.textContent = '❌ failed';
+          badge.className = 'inline-block bg-red-200 text-red-800 px-2 py-0.5 rounded status-badge';
+          console.error(`❌ Failed to push ${id}: ${err.message}`);
+        }
+      }
+
+      selectedProductIds.clear();
+    });
+
+    loadProducts();
   </script>
 </body>
 </html>

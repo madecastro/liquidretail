@@ -79,8 +79,8 @@
         });
         const data = await res.json();
         if (res.ok) {
-          statusMessage.textContent = "✅ Upload successful!";
-          loadProducts();
+          statusMessage.textContent = "✅ Upload queued. Processing...";
+          pollJobStatus(data.jobId); // 👈 start polling for result
         } else {
           statusMessage.textContent = "❌ Upload failed: " + (data.error || 'Unknown error');
         }
@@ -89,6 +89,24 @@
         statusMessage.textContent = "❌ Upload failed: " + err.message;
       }
     });
+
+    function pollJobStatus(jobId) {
+      const interval = setInterval(async () => {
+        const res = await fetch(`/api/jobs/${jobId}/status`);
+        const data = await res.json();
+
+    if (data.status === 'completed') {
+      clearInterval(interval);
+      statusMessage.textContent = `✅ Job complete: ${data.products.length} product(s) saved.`;
+      loadProducts(); // refresh product gallery
+    } else if (data.status === 'failed') {
+      clearInterval(interval);
+      statusMessage.textContent = `❌ Job failed: ${data.error}`;
+    } else {
+      console.log('⏳ Still processing job...');
+    }
+  }, 3000); // every 3s
+}
 
     sortSelect.addEventListener('change', loadProducts);
     hidePublishedToggle.addEventListener('change', loadProducts);

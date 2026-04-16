@@ -3,201 +3,359 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Upload Product Photos</title>
+  <title>Flood QRF — Inventory</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="auth.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    * { font-family: 'Inter', system-ui, sans-serif; }
+    body { background-color: #0D0D0D; }
+
+    .stripe-bg {
+      background: repeating-linear-gradient(
+        -55deg, transparent, transparent 60px,
+        rgba(200,16,46,0.03) 60px, rgba(200,16,46,0.03) 120px
+      );
+    }
+
+    /* Upload drop zone */
+    #dropZone { transition: border-color 0.2s, background 0.2s; }
+    #dropZone.drag-over { border-color: #C8102E; background: rgba(200,16,46,0.08); }
+
+    /* Cards */
+    .product-card { transition: transform 0.2s, box-shadow 0.2s; }
+    .product-card:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(0,0,0,0.5); }
+
+    /* Custom checkbox */
+    .select-box { accent-color: #C8102E; width:1.1rem; height:1.1rem; cursor:pointer; }
+
+    /* Inputs inside cards */
+    .card-input {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: white;
+      border-radius: 0.375rem;
+      padding: 0.35rem 0.5rem;
+      width: 100%;
+      font-size: 0.8rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .card-input:focus { border-color: #C8102E; }
+
+    /* Status badge */
+    .badge-pending  { background: rgba(234,179,8,0.15);  color: #fbbf24; border: 1px solid rgba(234,179,8,0.3); }
+    .badge-published{ background: rgba(34,197,94,0.15);  color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
+    .badge-syncing  { background: rgba(59,130,246,0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); }
+    .badge-failed   { background: rgba(239,68,68,0.15);  color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #111; }
+    ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { animation: spin 0.8s linear infinite; }
+
+    @keyframes fadeUp {
+      from { opacity:0; transform:translateY(12px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+    .fade-up { animation: fadeUp 0.3s ease forwards; }
+  </style>
 </head>
-<body class="bg-gray-100 min-h-screen">
-  <nav class="bg-blue-900 text-white px-4 py-3 mb-6">
-    <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center">
-      <span class="font-bold text-lg">LiquidRetail</span>
-      <a href="products.html" class="text-white hover:underline mt-2 sm:mt-0">📦 View Products</a>
+<body class="min-h-screen stripe-bg text-white">
+
+  <!-- ── Navbar ─────────────────────────────────────────────────── -->
+  <nav class="border-b border-white/10 bg-black/40 backdrop-blur-sm sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <img src="assets/logo.png" alt="Flood QRF" class="w-9 h-9 object-contain" />
+        <div>
+          <span class="font-bold text-white tracking-wide">FLOOD QRF</span>
+          <span class="hidden sm:inline text-white/30 text-xs ml-2 uppercase tracking-widest">Inventory</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-4">
+        <span id="userGreeting" class="text-white/40 text-sm hidden sm:block"></span>
+        <button onclick="logout()" class="text-white/40 hover:text-white text-sm transition-colors">Sign out</button>
+      </div>
     </div>
   </nav>
 
-  <div class="w-full px-4 sm:px-6 md:px-0 md:max-w-xl mx-auto bg-white p-6 rounded shadow">
-    <h2 class="text-xl font-semibold mb-4">Upload Product Photos</h2>
-    <form id="uploadForm" enctype="multipart/form-data" class="space-y-4">
-      <input type="file" name="photo" accept="image/*" required class="w-full" />
-      <input type="text" name="truck_number" placeholder="Truck Number" class="w-full border p-2 rounded" />
-      <input type="number" name="price" placeholder="Price" class="w-full border p-2 rounded" />
-      <input type="date" name="delivery_date" class="w-full border p-2 rounded" />
-      <input type="time" name="delivery_time" class="w-full border p-2 rounded" />
-      <input type="text" name="delivery_location" placeholder="Location" class="w-full border p-2 rounded" />
-      <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded w-full">Upload</button>
-    </form>
-    <div id="statusMessage" class="mt-4 text-sm"></div>
-    <pre id="responseBox" class="bg-gray-100 mt-4 p-4 text-sm rounded overflow-x-auto"></pre>
-  </div>
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-10">
 
-  <div class="w-full px-4 sm:px-6 md:max-w-7xl mx-auto mt-12" id="productGallery">
-    <div class="flex flex-col md:flex-row md:justify-between md:items-center gap-2 mb-4">
-      <h2 class="text-2xl font-semibold">Uploaded Products</h2>
-      <select id="sortSelect" class="border p-2 rounded w-full md:w-auto">
-        <option value="date">Sort by Date</option>
-        <option value="price">Sort by Price</option>
-        <option value="truck">Sort by Truck</option>
-      </select>
+    <!-- ── Upload Card ─────────────────────────────────────────── -->
+    <div class="bg-white/5 border border-white/10 rounded-2xl p-6 fade-up">
+      <h2 class="text-lg font-semibold mb-5 flex items-center gap-2">
+        <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
+        Upload Product Photos
+      </h2>
+
+      <form id="uploadForm" enctype="multipart/form-data">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+          <!-- Drop zone -->
+          <div id="dropZone"
+               class="border-2 border-dashed border-white/20 rounded-xl flex flex-col items-center justify-center gap-3 p-8 cursor-pointer min-h-[180px] text-center"
+               onclick="document.getElementById('photoInput').click()">
+            <svg class="w-10 h-10 text-white/20" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M13.5 12h.008v.008H13.5V12zm-4.5 4.5h.008v.008H9V16.5zm12.75-12a2.25 2.25 0 00-2.25-2.25H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15a2.25 2.25 0 002.25-2.25V6z"/></svg>
+            <p id="dropLabel" class="text-white/40 text-sm">Drop photo here or <span class="text-red-500 font-medium">browse</span></p>
+            <input id="photoInput" type="file" name="photo" accept="image/*" required class="hidden" />
+          </div>
+
+          <!-- Metadata fields -->
+          <div class="grid grid-cols-2 gap-3 content-start">
+            <input type="text"   name="truck_number"       placeholder="Truck Number"   class="col-span-2 bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white placeholder-white/30 focus:outline-none focus:border-red-500 transition-colors" />
+            <input type="number" name="price"              placeholder="Price ($)"       class="bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white placeholder-white/30 focus:outline-none focus:border-red-500 transition-colors" />
+            <input type="text"   name="delivery_location"  placeholder="Location"        class="bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white placeholder-white/30 focus:outline-none focus:border-red-500 transition-colors" />
+            <input type="date"   name="delivery_date"                                    class="bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white/70 focus:outline-none focus:border-red-500 transition-colors" />
+            <input type="time"   name="delivery_time"                                    class="bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white/70 focus:outline-none focus:border-red-500 transition-colors" />
+            <button type="submit" class="col-span-2 mt-1 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-semibold py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
+              Upload &amp; Process
+            </button>
+          </div>
+        </div>
+
+        <!-- Status bar -->
+        <div id="statusBar" class="hidden mt-4 rounded-lg px-4 py-3 text-sm flex items-center gap-3"></div>
+      </form>
     </div>
 
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
-      <button id="pushSelectedBtn" class="bg-green-600 text-white px-4 py-2 rounded disabled:opacity-50 w-full sm:w-auto">Push Selected to Shopify</button>
-      <label class="text-sm flex items-center gap-2">
-        <input type="checkbox" id="hidePublishedToggle" class="accent-blue-600" />
-        Hide published
-      </label>
-    </div>
+    <!-- ── Product Gallery ─────────────────────────────────────── -->
+    <div id="productGallery">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+        <h2 class="text-lg font-semibold flex items-center gap-2">
+          <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"/></svg>
+          Products
+          <span id="productCount" class="text-white/30 font-normal text-sm"></span>
+        </h2>
 
-    <div id="toast" class="fixed top-4 right-4 hidden bg-green-600 text-white px-4 py-2 rounded shadow text-sm z-50"></div>
-    <div id="productList" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6"></div>
+        <div class="flex flex-wrap items-center gap-2">
+          <label class="flex items-center gap-2 text-sm text-white/50 cursor-pointer select-none">
+            <input type="checkbox" id="hidePublishedToggle" class="accent-red-600" />
+            Hide published
+          </label>
+          <select id="sortSelect" class="bg-white/5 border border-white/10 text-white/70 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-red-500">
+            <option value="date">Newest first</option>
+            <option value="price">By price</option>
+            <option value="truck">By truck</option>
+          </select>
+          <button id="pushSelectedBtn"
+                  class="bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg>
+            Push to Shopify
+          </button>
+        </div>
+      </div>
+
+      <div id="productList" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5"></div>
+      <div id="emptyState" class="hidden text-center py-20 text-white/20">
+        <svg class="w-12 h-12 mx-auto mb-3 opacity-30" fill="none" stroke="currentColor" stroke-width="1" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"/></svg>
+        <p class="text-sm">No products yet. Upload a photo to get started.</p>
+      </div>
+    </div>
   </div>
 
-  <!-- JS remains unchanged -->
+  <!-- Toast -->
+  <div id="toast" class="fixed bottom-6 right-6 hidden bg-white/10 border border-white/20 backdrop-blur text-white px-5 py-3 rounded-xl shadow-xl text-sm z-50 transition-all"></div>
+
   <script>
-    const form = document.getElementById('uploadForm');
-    const responseBox = document.getElementById('responseBox');
-    const statusMessage = document.getElementById('statusMessage');
-    const productList = document.getElementById('productList');
-    const sortSelect = document.getElementById('sortSelect');
-    const hidePublishedToggle = document.getElementById('hidePublishedToggle');
-    const selectedProductIds = new Set();
+    // ── Auth greeting ───────────────────────────────────────────
+    const userName = localStorage.getItem('auth_user');
+    if (userName) document.getElementById('userGreeting').textContent = 'Hi, ' + userName;
+    document.getElementById('userGreeting').classList.remove('hidden');
 
+    // ── Drop zone ───────────────────────────────────────────────
+    const dropZone = document.getElementById('dropZone');
+    const photoInput = document.getElementById('photoInput');
+    const dropLabel = document.getElementById('dropLabel');
+
+    ['dragover', 'dragenter'].forEach(e => dropZone.addEventListener(e, ev => {
+      ev.preventDefault(); dropZone.classList.add('drag-over');
+    }));
+    ['dragleave', 'drop'].forEach(e => dropZone.addEventListener(e, ev => {
+      ev.preventDefault(); dropZone.classList.remove('drag-over');
+    }));
+    dropZone.addEventListener('drop', ev => {
+      const file = ev.dataTransfer.files[0];
+      if (file) { photoInput.files = ev.dataTransfer.files; dropLabel.textContent = file.name; }
+    });
+    photoInput.addEventListener('change', () => {
+      if (photoInput.files[0]) dropLabel.textContent = photoInput.files[0].name;
+    });
+
+    // ── Status bar ──────────────────────────────────────────────
+    const statusBar = document.getElementById('statusBar');
+    function setStatus(type, html) {
+      const styles = {
+        info:    'bg-blue-500/10 border border-blue-500/20 text-blue-300',
+        success: 'bg-green-500/10 border border-green-500/20 text-green-300',
+        error:   'bg-red-500/10  border border-red-500/20  text-red-300',
+      };
+      statusBar.className = 'mt-4 rounded-lg px-4 py-3 text-sm flex items-center gap-3 ' + styles[type];
+      statusBar.innerHTML = html;
+      statusBar.classList.remove('hidden');
+    }
+    function clearStatus() { statusBar.classList.add('hidden'); }
+
+    // ── Toast ───────────────────────────────────────────────────
     function showToast(message) {
-      const toast = document.getElementById('toast');
-      toast.textContent = message;
-      toast.classList.remove('hidden');
-      setTimeout(() => toast.classList.add('hidden'), 3000);
+      const t = document.getElementById('toast');
+      t.textContent = message;
+      t.classList.remove('hidden');
+      setTimeout(() => t.classList.add('hidden'), 3000);
     }
 
+    // ── Upload ──────────────────────────────────────────────────
+    const form = document.getElementById('uploadForm');
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      statusMessage.textContent = "⏳ Uploading...";
+      setStatus('info', '<svg class="w-4 h-4 spinner flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/></svg> Uploading...');
       const formData = new FormData(form);
       try {
-        const res = await fetch('/api/upload', {
-          method: 'POST',
-          body: formData
-        });
+        const res = await fetch('/api/upload', { method: 'POST', body: formData });
         const data = await res.json();
         if (res.ok) {
-          statusMessage.textContent = "✅ Upload queued. Processing...";
-          pollJobStatus(data.jobId); // 👈 start polling for result
+          setStatus('info', '<svg class="w-4 h-4 spinner flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/></svg> Processing image — detecting and identifying products...');
+          pollJobStatus(data.jobId);
         } else {
-          statusMessage.textContent = "❌ Upload failed: " + (data.error || 'Unknown error');
+          setStatus('error', '&#10007; Upload failed: ' + (data.error || 'Unknown error'));
         }
-        responseBox.textContent = JSON.stringify(data, null, 2);
       } catch (err) {
-        statusMessage.textContent = "❌ Upload failed: " + err.message;
+        setStatus('error', '&#10007; ' + err.message);
       }
     });
 
+    // ── Poll job ────────────────────────────────────────────────
     function pollJobStatus(jobId) {
       const interval = setInterval(async () => {
-        const res = await fetch(`/api/jobs/${jobId}/status`);
+        const res = await fetch('/api/jobs/' + jobId + '/status');
         const data = await res.json();
-
-    if (data.status === 'completed') {
-      clearInterval(interval);
-      statusMessage.textContent = `✅ Job complete: ${data.products.length} product(s) saved.`;
-      loadProducts(); // refresh product gallery
-    } else if (data.status === 'failed') {
-      clearInterval(interval);
-      statusMessage.textContent = `❌ Job failed: ${data.error}`;
-    } else {
-      console.log('⏳ Still processing job...');
+        if (data.status === 'completed') {
+          clearInterval(interval);
+          setStatus('success', '&#10003; ' + data.products.length + ' product(s) identified and saved.');
+          form.reset();
+          dropLabel.textContent = 'Drop photo here or <span class="text-red-500 font-medium">browse</span>';
+          loadProducts();
+        } else if (data.status === 'failed') {
+          clearInterval(interval);
+          setStatus('error', '&#10007; Processing failed: ' + data.error);
+        }
+      }, 3000);
     }
-  }, 3000); // every 3s
-}
 
+    // ── Sorting / filtering ─────────────────────────────────────
+    const sortSelect = document.getElementById('sortSelect');
+    const hidePublishedToggle = document.getElementById('hidePublishedToggle');
     sortSelect.addEventListener('change', loadProducts);
     hidePublishedToggle.addEventListener('change', loadProducts);
+
+    // ── Load products ───────────────────────────────────────────
+    const selectedProductIds = new Set();
 
     async function loadProducts() {
       const res = await fetch('/api/products');
       const products = await res.json();
       const hidePublished = hidePublishedToggle.checked;
-
       const filtered = hidePublished ? products.filter(p => p.shopify_status !== 'published') : products;
-
       const sorted = filtered.sort((a, b) => {
-        if (sortSelect.value === 'price') return (a.price || 0) - (b.price || 0);
+        if (sortSelect.value === 'price') return (a.price_estimate || 0) - (b.price_estimate || 0);
         if (sortSelect.value === 'truck') return (a.truck_number || '').localeCompare(b.truck_number || '');
         return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
       });
 
+      const productList = document.getElementById('productList');
+      const emptyState = document.getElementById('emptyState');
+      document.getElementById('productCount').textContent = sorted.length ? '(' + sorted.length + ')' : '';
       productList.innerHTML = '';
+      emptyState.classList.toggle('hidden', sorted.length > 0);
+
       for (const p of sorted) {
         const card = document.createElement('div');
-        card.className = "bg-white p-4 rounded shadow space-y-2 relative";
+        card.className = 'product-card bg-white/5 border border-white/10 rounded-2xl overflow-hidden fade-up';
 
+        const badgeClass = p.shopify_status === 'published' ? 'badge-published'
+                         : p.shopify_status === 'failed'    ? 'badge-failed'
+                         : 'badge-pending';
+        const badgeText = p.shopify_status || 'pending';
+        const shopifyLink = p.shopify_url
+          ? `<a href="${p.shopify_url}" target="_blank" class="text-white/40 hover:text-white transition-colors" title="View in Shopify">
+               <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg>
+             </a>` : '';
         const disabledAttr = p.shopify_status === 'published' ? 'disabled' : '';
-        const shopifyLink = p.shopify_url ? `<a href="${p.shopify_url}" target="_blank" class="text-blue-600 text-xs underline">View in Shopify</a>` : '';
 
         card.innerHTML = `
-          <input type="checkbox" class="absolute top-2 left-2 h-4 w-4 select-box" data-id="${p._id}" ${disabledAttr} />
-          <img src="${p.image_url}" alt="Product" class="w-full h-48 object-cover rounded" />
-          <div class="flex justify-between text-xs text-gray-500">
-            <span>🚛 ${p.truck_number || 'N/A'}</span>
-            <span>💵 $${p.price_estimate || p.price || '0'}</span>
+          <div class="relative">
+            <img src="${p.image_url}" alt="Product" class="w-full h-44 object-cover" />
+            <div class="absolute top-2 left-2">
+              <input type="checkbox" class="select-box" data-id="${p._id}" ${disabledAttr} />
+            </div>
+            <div class="absolute top-2 right-2">
+              <span class="text-xs font-medium px-2 py-0.5 rounded-full ${badgeClass} status-badge">${badgeText}</span>
+            </div>
           </div>
-          <input type="text" value="${p.product_title || ''}" class="border p-1 w-full rounded title-input" data-id="${p._id}" />
-          <textarea class="border p-1 w-full rounded description-input" data-id="${p._id}">${p.description || ''}</textarea>
-          <div class="text-sm mt-1 flex justify-between items-center">
-            <span class="inline-block ${p.shopify_status === 'published' ? 'bg-green-200 text-green-800' : 'bg-yellow-200 text-yellow-800'} px-2 py-0.5 rounded status-badge">${p.shopify_status || 'pending'}</span>
-            ${shopifyLink}
+          <div class="p-4 space-y-2.5">
+            <div class="flex justify-between items-center text-xs text-white/40">
+              <span>🚛 ${p.truck_number || 'N/A'}</span>
+              <span class="text-white/60 font-semibold">$${p.price_estimate || p.price || '0'}</span>
+            </div>
+            <input type="text" value="${(p.product_title || '').replace(/"/g, '&quot;')}"
+                   class="card-input title-input" data-id="${p._id}" placeholder="Product title" />
+            <textarea rows="2"
+                      class="card-input description-input resize-none" data-id="${p._id}"
+                      placeholder="Description">${p.description || ''}</textarea>
+            <div class="flex items-center justify-between pt-1">
+              <span class="text-white/25 text-xs">${p.confidence ? Math.round(p.confidence * 100) + '% confidence' : ''}</span>
+              ${shopifyLink}
+            </div>
           </div>
         `;
 
         card.querySelector('.title-input').addEventListener('blur', saveField);
         card.querySelector('.description-input').addEventListener('blur', saveField);
-
-        const checkbox = card.querySelector('.select-box');
-        checkbox.addEventListener('change', (e) => {
+        card.querySelector('.select-box').addEventListener('change', (e) => {
           const id = e.target.dataset.id;
-          if (e.target.checked) selectedProductIds.add(id);
-          else selectedProductIds.delete(id);
+          e.target.checked ? selectedProductIds.add(id) : selectedProductIds.delete(id);
         });
 
         productList.appendChild(card);
       }
     }
 
+    // ── Save field inline ───────────────────────────────────────
     async function saveField(e) {
       const id = e.target.dataset.id;
       const field = e.target.classList.contains('title-input') ? 'product_title' : 'description';
-      const body = { [field]: e.target.value };
-      await fetch(`/api/products/${id}`, {
+      await fetch('/api/products/' + id, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+        body: JSON.stringify({ [field]: e.target.value })
       });
     }
 
+    // ── Push to Shopify ─────────────────────────────────────────
     document.getElementById('pushSelectedBtn').addEventListener('click', async () => {
-      if (selectedProductIds.size === 0) return;
+      if (selectedProductIds.size === 0) { showToast('Select at least one product'); return; }
 
       for (const id of selectedProductIds) {
-        const card = document.querySelector(`input[data-id="${id}"]`).closest('div');
-        const badge = card.querySelector('.status-badge');
-        badge.textContent = '⏳ syncing...';
-        badge.className = 'inline-block bg-blue-200 text-blue-800 px-2 py-0.5 rounded status-badge';
+        const checkbox = document.querySelector('.select-box[data-id="' + id + '"]');
+        const card = checkbox?.closest('.product-card');
+        const badge = card?.querySelector('.status-badge');
+        if (badge) { badge.textContent = 'syncing...'; badge.className = 'text-xs font-medium px-2 py-0.5 rounded-full badge-syncing status-badge'; }
 
         try {
-          const res = await fetch(`/api/products/${id}/push-to-shopify`, {
+          await fetch('/api/products/' + id + '/push-to-shopify', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
           });
-          const result = await res.json();
-          badge.textContent = 'published';
-          badge.className = 'inline-block bg-green-200 text-green-800 px-2 py-0.5 rounded status-badge';
-          showToast(`✅ ${id} pushed to Shopify`);
+          if (badge) { badge.textContent = 'published'; badge.className = 'text-xs font-medium px-2 py-0.5 rounded-full badge-published status-badge'; }
+          showToast('Pushed to Shopify');
         } catch (err) {
-          badge.textContent = '❌ failed';
-          badge.className = 'inline-block bg-red-200 text-red-800 px-2 py-0.5 rounded status-badge';
-          console.error(`❌ Failed to push ${id}: ${err.message}`);
+          if (badge) { badge.textContent = 'failed'; badge.className = 'text-xs font-medium px-2 py-0.5 rounded-full badge-failed status-badge'; }
         }
       }
-
       selectedProductIds.clear();
     });
 

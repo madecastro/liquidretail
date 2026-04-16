@@ -9,324 +9,459 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <style>
     * { font-family: 'Inter', system-ui, sans-serif; }
-    body { background-color: #0D0D0D; }
 
-    .stripe-bg {
-      background: repeating-linear-gradient(
-        -55deg, transparent, transparent 60px,
-        rgba(200,16,46,0.03) 60px, rgba(200,16,46,0.03) 120px
-      );
-    }
+    body { background: #0a0a0a; color: #f0f0f0; }
 
-    /* Upload drop zone */
-    #dropZone { transition: border-color 0.2s, background 0.2s; }
-    #dropZone.drag-over { border-color: #C8102E; background: rgba(200,16,46,0.08); }
-
-    /* Cards */
-    .product-card { transition: transform 0.2s, box-shadow 0.2s; }
-    .product-card:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(0,0,0,0.5); }
-
-    /* Custom checkbox */
-    .select-box { accent-color: #C8102E; width:1.1rem; height:1.1rem; cursor:pointer; }
-
-    /* Inputs inside cards */
-    .card-input {
-      background: rgba(255,255,255,0.06);
-      border: 1px solid rgba(255,255,255,0.1);
-      color: white;
-      border-radius: 0.375rem;
-      padding: 0.35rem 0.5rem;
+    /* ── Form inputs ─────────────────────────────────────────── */
+    .field-input {
+      display: block;
       width: 100%;
-      font-size: 0.8rem;
+      background: #1c1c1e;
+      border: 1.5px solid #2e2e2e;
+      color: #f0f0f0;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 0.875rem;
+      outline: none;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .field-input::placeholder { color: #555; }
+    .field-input:focus { border-color: #C8102E; background: #232323; }
+
+    /* date/time need explicit color for webkit */
+    input[type="date"], input[type="time"] { color-scheme: dark; color: #f0f0f0; }
+
+    /* ── Drop zone ───────────────────────────────────────────── */
+    #dropZone {
+      border: 2px dashed #2e2e2e;
+      border-radius: 12px;
+      background: #141414;
+      transition: border-color 0.2s, background 0.2s;
+      cursor: pointer;
+    }
+    #dropZone:hover   { border-color: #444; background: #1a1a1a; }
+    #dropZone.drag-over { border-color: #C8102E; background: #1f1010; }
+
+    /* ── Product cards ───────────────────────────────────────── */
+    .product-card {
+      background: #161616;
+      border: 1.5px solid #242424;
+      border-radius: 16px;
+      overflow: hidden;
+      transition: transform 0.18s, border-color 0.18s;
+    }
+    .product-card:hover { transform: translateY(-3px); border-color: #333; }
+    .product-card.selected { border-color: #C8102E; }
+
+    /* ── Card inputs ─────────────────────────────────────────── */
+    .card-input {
+      display: block;
+      width: 100%;
+      background: #222;
+      border: 1.5px solid #2e2e2e;
+      color: #f0f0f0;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 0.82rem;
       outline: none;
       transition: border-color 0.15s;
+      resize: none;
     }
+    .card-input::placeholder { color: #555; }
     .card-input:focus { border-color: #C8102E; }
 
-    /* Status badge */
-    .badge-pending  { background: rgba(234,179,8,0.15);  color: #fbbf24; border: 1px solid rgba(234,179,8,0.3); }
-    .badge-published{ background: rgba(34,197,94,0.15);  color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
-    .badge-syncing  { background: rgba(59,130,246,0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); }
-    .badge-failed   { background: rgba(239,68,68,0.15);  color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+    /* ── Badges ──────────────────────────────────────────────── */
+    .badge { font-size: 0.7rem; font-weight: 600; padding: 2px 9px; border-radius: 99px; letter-spacing: 0.03em; }
+    .badge-pending   { background: #2a2000; color: #f59e0b; border: 1px solid #3d2f00; }
+    .badge-published { background: #001f0e; color: #34d399; border: 1px solid #003d1c; }
+    .badge-syncing   { background: #001733; color: #60a5fa; border: 1px solid #003066; }
+    .badge-failed    { background: #200000; color: #f87171; border: 1px solid #400000; }
 
-    /* Scrollbar */
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: #111; }
-    ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+    /* ── Select ──────────────────────────────────────────────── */
+    select {
+      background: #1c1c1e;
+      border: 1.5px solid #2e2e2e;
+      color: #f0f0f0;
+      border-radius: 8px;
+      padding: 7px 12px;
+      font-size: 0.875rem;
+      outline: none;
+    }
+    select:focus { border-color: #C8102E; }
+    select option { background: #1c1c1e; }
+
+    /* ── Checkbox ────────────────────────────────────────────── */
+    .select-box { accent-color: #C8102E; width: 1rem; height: 1rem; cursor: pointer; }
+
+    /* ── Nav ─────────────────────────────────────────────────── */
+    nav { background: #111; border-bottom: 1px solid #1f1f1f; }
+
+    /* ── Label ───────────────────────────────────────────────── */
+    .field-label { display: block; font-size: 0.72rem; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 5px; }
+
+    /* ── Scrollbar ───────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: #0a0a0a; }
+    ::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 3px; }
 
     @keyframes spin { to { transform: rotate(360deg); } }
     .spinner { animation: spin 0.8s linear infinite; }
 
     @keyframes fadeUp {
-      from { opacity:0; transform:translateY(12px); }
-      to   { opacity:1; transform:translateY(0); }
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
     }
-    .fade-up { animation: fadeUp 0.3s ease forwards; }
+    .fade-up { animation: fadeUp 0.25s ease forwards; }
+
+    /* ── Divider ─────────────────────────────────────────────── */
+    .section-card { background: #111; border: 1.5px solid #1f1f1f; border-radius: 18px; padding: 24px; }
   </style>
 </head>
-<body class="min-h-screen stripe-bg text-white">
+<body class="min-h-screen">
 
-  <!-- ── Navbar ─────────────────────────────────────────────────── -->
-  <nav class="border-b border-white/10 bg-black/40 backdrop-blur-sm sticky top-0 z-40">
+  <!-- ── Navbar ──────────────────────────────────────────────────── -->
+  <nav class="sticky top-0 z-40">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
       <div class="flex items-center gap-3">
         <img src="assets/logo.png" alt="Flood QRF" class="w-9 h-9 object-contain" />
-        <div>
-          <span class="font-bold text-white tracking-wide">FLOOD QRF</span>
-          <span class="hidden sm:inline text-white/30 text-xs ml-2 uppercase tracking-widest">Inventory</span>
+        <div class="leading-tight">
+          <div class="font-bold text-white tracking-wide text-sm">FLOOD QRF</div>
+          <div class="text-[10px] text-[#555] uppercase tracking-widest hidden sm:block">Inventory Portal</div>
         </div>
       </div>
-      <div class="flex items-center gap-4">
-        <span id="userGreeting" class="text-white/40 text-sm hidden sm:block"></span>
-        <button onclick="logout()" class="text-white/40 hover:text-white text-sm transition-colors">Sign out</button>
+      <div class="flex items-center gap-5">
+        <span id="userGreeting" class="text-[#555] text-sm hidden sm:block"></span>
+        <button onclick="logout()" class="text-[#555] hover:text-white text-sm transition-colors">Sign out</button>
       </div>
     </div>
   </nav>
 
-  <div class="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-10">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
 
-    <!-- ── Upload Card ─────────────────────────────────────────── -->
-    <div class="bg-white/5 border border-white/10 rounded-2xl p-6 fade-up">
-      <h2 class="text-lg font-semibold mb-5 flex items-center gap-2">
-        <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
-        Upload Product Photos
-      </h2>
+    <!-- ── Upload Section ──────────────────────────────────────── -->
+    <div class="section-card fade-up">
+      <div class="flex items-center gap-2 mb-6">
+        <svg class="w-4 h-4 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
+        <h2 class="text-sm font-semibold text-white uppercase tracking-wider">Upload Product Photo</h2>
+      </div>
 
       <form id="uploadForm" enctype="multipart/form-data">
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
 
           <!-- Drop zone -->
           <div id="dropZone"
-               class="border-2 border-dashed border-white/20 rounded-xl flex flex-col items-center justify-center gap-3 p-8 cursor-pointer min-h-[180px] text-center"
+               class="lg:col-span-2 flex flex-col items-center justify-center gap-3 p-8 text-center min-h-[200px]"
                onclick="document.getElementById('photoInput').click()">
-            <svg class="w-10 h-10 text-white/20" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M13.5 12h.008v.008H13.5V12zm-4.5 4.5h.008v.008H9V16.5zm12.75-12a2.25 2.25 0 00-2.25-2.25H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15a2.25 2.25 0 002.25-2.25V6z"/></svg>
-            <p id="dropLabel" class="text-white/40 text-sm">Drop photo here or <span class="text-red-500 font-medium">browse</span></p>
+            <div id="dropPreview" class="hidden w-full h-36 rounded-lg overflow-hidden">
+              <img id="previewImg" class="w-full h-full object-cover" />
+            </div>
+            <div id="dropPlaceholder" class="flex flex-col items-center gap-2">
+              <svg class="w-9 h-9 text-[#333]" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"/></svg>
+              <p class="text-[#444] text-sm">Drop photo here</p>
+              <span class="text-xs text-red-500 font-medium">or browse</span>
+            </div>
+            <p id="fileName" class="hidden text-xs text-[#888] mt-1 truncate max-w-full px-2"></p>
             <input id="photoInput" type="file" name="photo" accept="image/*" required class="hidden" />
           </div>
 
-          <!-- Metadata fields -->
-          <div class="grid grid-cols-2 gap-3 content-start">
-            <input type="text"   name="truck_number"       placeholder="Truck Number"   class="col-span-2 bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white placeholder-white/30 focus:outline-none focus:border-red-500 transition-colors" />
-            <input type="number" name="price"              placeholder="Price ($)"       class="bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white placeholder-white/30 focus:outline-none focus:border-red-500 transition-colors" />
-            <input type="text"   name="delivery_location"  placeholder="Location"        class="bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white placeholder-white/30 focus:outline-none focus:border-red-500 transition-colors" />
-            <input type="date"   name="delivery_date"                                    class="bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white/70 focus:outline-none focus:border-red-500 transition-colors" />
-            <input type="time"   name="delivery_time"                                    class="bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white/70 focus:outline-none focus:border-red-500 transition-colors" />
-            <button type="submit" class="col-span-2 mt-1 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-semibold py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
-              Upload &amp; Process
-            </button>
+          <!-- Fields -->
+          <div class="lg:col-span-3 grid grid-cols-2 gap-4">
+            <div class="col-span-2">
+              <label class="field-label">Truck Number</label>
+              <input type="text" name="truck_number" placeholder="e.g. T-14" class="field-input" />
+            </div>
+            <div>
+              <label class="field-label">Price ($)</label>
+              <input type="number" name="price" placeholder="0.00" class="field-input" />
+            </div>
+            <div>
+              <label class="field-label">Location</label>
+              <input type="text" name="delivery_location" placeholder="City, State" class="field-input" />
+            </div>
+            <div>
+              <label class="field-label">Delivery Date</label>
+              <input type="date" name="delivery_date" class="field-input" />
+            </div>
+            <div>
+              <label class="field-label">Delivery Time</label>
+              <input type="time" name="delivery_time" class="field-input" />
+            </div>
+            <div class="col-span-2 pt-1">
+              <button type="submit"
+                      class="w-full bg-red-600 hover:bg-red-700 active:scale-[0.99] text-white font-semibold py-3 rounded-xl transition-all flex items-center justify-center gap-2 text-sm">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
+                Upload &amp; Process
+              </button>
+            </div>
           </div>
         </div>
 
         <!-- Status bar -->
-        <div id="statusBar" class="hidden mt-4 rounded-lg px-4 py-3 text-sm flex items-center gap-3"></div>
+        <div id="statusBar" class="hidden mt-4 rounded-xl px-4 py-3 text-sm flex items-center gap-3"></div>
       </form>
     </div>
 
-    <!-- ── Product Gallery ─────────────────────────────────────── -->
-    <div id="productGallery">
+    <!-- ── Product Gallery ──────────────────────────────────────── -->
+    <div>
+      <!-- Toolbar -->
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
-        <h2 class="text-lg font-semibold flex items-center gap-2">
-          <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"/></svg>
-          Products
-          <span id="productCount" class="text-white/30 font-normal text-sm"></span>
-        </h2>
-
+        <div class="flex items-center gap-2">
+          <svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"/></svg>
+          <h2 class="text-sm font-semibold text-white uppercase tracking-wider">Products</h2>
+          <span id="productCount" class="text-[#444] text-xs font-normal"></span>
+        </div>
         <div class="flex flex-wrap items-center gap-2">
-          <label class="flex items-center gap-2 text-sm text-white/50 cursor-pointer select-none">
-            <input type="checkbox" id="hidePublishedToggle" class="accent-red-600" />
+          <label class="flex items-center gap-2 text-xs text-[#555] cursor-pointer select-none">
+            <input type="checkbox" id="hidePublishedToggle" class="select-box" />
             Hide published
           </label>
-          <select id="sortSelect" class="bg-white/5 border border-white/10 text-white/70 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-red-500">
+          <select id="sortSelect">
             <option value="date">Newest first</option>
             <option value="price">By price</option>
             <option value="truck">By truck</option>
           </select>
           <button id="pushSelectedBtn"
-                  class="bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors flex items-center gap-2">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg>
+                  class="bg-red-600 hover:bg-red-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg>
             Push to Shopify
           </button>
         </div>
       </div>
 
-      <div id="productList" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5"></div>
-      <div id="emptyState" class="hidden text-center py-20 text-white/20">
-        <svg class="w-12 h-12 mx-auto mb-3 opacity-30" fill="none" stroke="currentColor" stroke-width="1" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"/></svg>
-        <p class="text-sm">No products yet. Upload a photo to get started.</p>
+      <!-- Grid -->
+      <div id="productList" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4"></div>
+
+      <!-- Empty state -->
+      <div id="emptyState" class="hidden text-center py-24">
+        <div class="w-16 h-16 rounded-2xl bg-[#161616] border border-[#222] flex items-center justify-center mx-auto mb-4">
+          <svg class="w-7 h-7 text-[#333]" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"/></svg>
+        </div>
+        <p class="text-[#444] text-sm font-medium">No products yet</p>
+        <p class="text-[#333] text-xs mt-1">Upload a photo above to get started</p>
       </div>
     </div>
   </div>
 
   <!-- Toast -->
-  <div id="toast" class="fixed bottom-6 right-6 hidden bg-white/10 border border-white/20 backdrop-blur text-white px-5 py-3 rounded-xl shadow-xl text-sm z-50 transition-all"></div>
+  <div id="toast" class="fixed bottom-6 right-6 hidden bg-[#1c1c1e] border border-[#2e2e2e] text-white px-5 py-3 rounded-xl shadow-2xl text-sm z-50"></div>
 
   <script>
-    // ── Auth greeting ───────────────────────────────────────────
+    // ── Auth greeting ─────────────────────────────────────────────
     const userName = localStorage.getItem('auth_user');
-    if (userName) document.getElementById('userGreeting').textContent = 'Hi, ' + userName;
-    document.getElementById('userGreeting').classList.remove('hidden');
+    if (userName) {
+      const el = document.getElementById('userGreeting');
+      el.textContent = userName;
+      el.classList.remove('hidden');
+    }
 
-    // ── Drop zone ───────────────────────────────────────────────
-    const dropZone = document.getElementById('dropZone');
-    const photoInput = document.getElementById('photoInput');
-    const dropLabel = document.getElementById('dropLabel');
+    // ── Drop zone + preview ───────────────────────────────────────
+    const dropZone       = document.getElementById('dropZone');
+    const photoInput     = document.getElementById('photoInput');
+    const dropPlaceholder= document.getElementById('dropPlaceholder');
+    const dropPreview    = document.getElementById('dropPreview');
+    const previewImg     = document.getElementById('previewImg');
+    const fileName       = document.getElementById('fileName');
 
-    ['dragover', 'dragenter'].forEach(e => dropZone.addEventListener(e, ev => {
+    function showPreview(file) {
+      const url = URL.createObjectURL(file);
+      previewImg.src = url;
+      dropPlaceholder.classList.add('hidden');
+      dropPreview.classList.remove('hidden');
+      fileName.textContent = file.name;
+      fileName.classList.remove('hidden');
+    }
+
+    ['dragover','dragenter'].forEach(e => dropZone.addEventListener(e, ev => {
       ev.preventDefault(); dropZone.classList.add('drag-over');
     }));
-    ['dragleave', 'drop'].forEach(e => dropZone.addEventListener(e, ev => {
+    ['dragleave','drop'].forEach(e => dropZone.addEventListener(e, ev => {
       ev.preventDefault(); dropZone.classList.remove('drag-over');
     }));
     dropZone.addEventListener('drop', ev => {
       const file = ev.dataTransfer.files[0];
-      if (file) { photoInput.files = ev.dataTransfer.files; dropLabel.textContent = file.name; }
+      if (file) { photoInput.files = ev.dataTransfer.files; showPreview(file); }
     });
     photoInput.addEventListener('change', () => {
-      if (photoInput.files[0]) dropLabel.textContent = photoInput.files[0].name;
+      if (photoInput.files[0]) showPreview(photoInput.files[0]);
     });
 
-    // ── Status bar ──────────────────────────────────────────────
+    // ── Status bar ────────────────────────────────────────────────
     const statusBar = document.getElementById('statusBar');
+    const statusStyles = {
+      info:    'bg-[#0d1a2e] border border-[#1a3a5c] text-[#60a5fa]',
+      success: 'bg-[#0a1f12] border border-[#1a4728] text-[#34d399]',
+      error:   'bg-[#1f0a0a] border border-[#4a1010] text-[#f87171]',
+    };
     function setStatus(type, html) {
-      const styles = {
-        info:    'bg-blue-500/10 border border-blue-500/20 text-blue-300',
-        success: 'bg-green-500/10 border border-green-500/20 text-green-300',
-        error:   'bg-red-500/10  border border-red-500/20  text-red-300',
-      };
-      statusBar.className = 'mt-4 rounded-lg px-4 py-3 text-sm flex items-center gap-3 ' + styles[type];
+      statusBar.className = 'mt-4 rounded-xl px-4 py-3 text-sm flex items-center gap-3 ' + statusStyles[type];
       statusBar.innerHTML = html;
       statusBar.classList.remove('hidden');
     }
-    function clearStatus() { statusBar.classList.add('hidden'); }
 
-    // ── Toast ───────────────────────────────────────────────────
-    function showToast(message) {
+    // ── Toast ─────────────────────────────────────────────────────
+    function showToast(msg) {
       const t = document.getElementById('toast');
-      t.textContent = message;
+      t.textContent = msg;
       t.classList.remove('hidden');
       setTimeout(() => t.classList.add('hidden'), 3000);
     }
 
-    // ── Upload ──────────────────────────────────────────────────
+    // ── Upload ────────────────────────────────────────────────────
     const form = document.getElementById('uploadForm');
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      setStatus('info', '<svg class="w-4 h-4 spinner flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/></svg> Uploading...');
-      const formData = new FormData(form);
+      const spinSvg = '<svg class="w-4 h-4 spinner flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/></svg>';
+      setStatus('info', spinSvg + ' Uploading...');
       try {
-        const res = await fetch('/api/upload', { method: 'POST', body: formData });
+        const res = await fetch('/api/upload', { method: 'POST', body: new FormData(form) });
         const data = await res.json();
         if (res.ok) {
-          setStatus('info', '<svg class="w-4 h-4 spinner flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/></svg> Processing image — detecting and identifying products...');
+          setStatus('info', spinSvg + ' Analyzing image — detecting and identifying products...');
           pollJobStatus(data.jobId);
         } else {
-          setStatus('error', '&#10007; Upload failed: ' + (data.error || 'Unknown error'));
+          setStatus('error', '✕ Upload failed: ' + (data.error || 'Unknown error'));
         }
       } catch (err) {
-        setStatus('error', '&#10007; ' + err.message);
+        setStatus('error', '✕ ' + err.message);
       }
     });
 
-    // ── Poll job ────────────────────────────────────────────────
+    // ── Poll ──────────────────────────────────────────────────────
     function pollJobStatus(jobId) {
       const interval = setInterval(async () => {
-        const res = await fetch('/api/jobs/' + jobId + '/status');
+        const res  = await fetch('/api/jobs/' + jobId + '/status');
         const data = await res.json();
         if (data.status === 'completed') {
           clearInterval(interval);
-          setStatus('success', '&#10003; ' + data.products.length + ' product(s) identified and saved.');
+          setStatus('success', '✓ ' + data.products.length + ' product(s) identified and saved.');
           form.reset();
-          dropLabel.textContent = 'Drop photo here or <span class="text-red-500 font-medium">browse</span>';
+          dropPreview.classList.add('hidden');
+          dropPlaceholder.classList.remove('hidden');
+          fileName.classList.add('hidden');
           loadProducts();
         } else if (data.status === 'failed') {
           clearInterval(interval);
-          setStatus('error', '&#10007; Processing failed: ' + data.error);
+          setStatus('error', '✕ Processing failed: ' + data.error);
         }
       }, 3000);
     }
 
-    // ── Sorting / filtering ─────────────────────────────────────
-    const sortSelect = document.getElementById('sortSelect');
-    const hidePublishedToggle = document.getElementById('hidePublishedToggle');
+    // ── Sorting ───────────────────────────────────────────────────
+    const sortSelect         = document.getElementById('sortSelect');
+    const hidePublishedToggle= document.getElementById('hidePublishedToggle');
     sortSelect.addEventListener('change', loadProducts);
     hidePublishedToggle.addEventListener('change', loadProducts);
 
-    // ── Load products ───────────────────────────────────────────
+    // ── Load products ─────────────────────────────────────────────
     const selectedProductIds = new Set();
 
     async function loadProducts() {
-      const res = await fetch('/api/products');
+      const res      = await fetch('/api/products');
       const products = await res.json();
-      const hidePublished = hidePublishedToggle.checked;
-      const filtered = hidePublished ? products.filter(p => p.shopify_status !== 'published') : products;
-      const sorted = filtered.sort((a, b) => {
-        if (sortSelect.value === 'price') return (a.price_estimate || 0) - (b.price_estimate || 0);
-        if (sortSelect.value === 'truck') return (a.truck_number || '').localeCompare(b.truck_number || '');
-        return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+      const hide     = hidePublishedToggle.checked;
+      const filtered = hide ? products.filter(p => p.shopify_status !== 'published') : products;
+      const sorted   = filtered.sort((a, b) => {
+        if (sortSelect.value === 'price') return (a.price_estimate||0) - (b.price_estimate||0);
+        if (sortSelect.value === 'truck') return (a.truck_number||'').localeCompare(b.truck_number||'');
+        return new Date(b.createdAt||0) - new Date(a.createdAt||0);
       });
 
-      const productList = document.getElementById('productList');
+      const list       = document.getElementById('productList');
       const emptyState = document.getElementById('emptyState');
-      document.getElementById('productCount').textContent = sorted.length ? '(' + sorted.length + ')' : '';
-      productList.innerHTML = '';
+      document.getElementById('productCount').textContent = sorted.length ? sorted.length + ' items' : '';
+      list.innerHTML = '';
       emptyState.classList.toggle('hidden', sorted.length > 0);
 
-      for (const p of sorted) {
+      sorted.forEach((p, i) => {
         const card = document.createElement('div');
-        card.className = 'product-card bg-white/5 border border-white/10 rounded-2xl overflow-hidden fade-up';
+        card.className = 'product-card fade-up';
+        card.style.animationDelay = (i * 30) + 'ms';
 
         const badgeClass = p.shopify_status === 'published' ? 'badge-published'
                          : p.shopify_status === 'failed'    ? 'badge-failed'
                          : 'badge-pending';
-        const badgeText = p.shopify_status || 'pending';
+        const disabled = p.shopify_status === 'published' ? 'disabled' : '';
         const shopifyLink = p.shopify_url
-          ? `<a href="${p.shopify_url}" target="_blank" class="text-white/40 hover:text-white transition-colors" title="View in Shopify">
-               <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg>
+          ? `<a href="${p.shopify_url}" target="_blank" title="View in Shopify"
+                class="text-[#555] hover:text-white transition-colors">
+               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg>
              </a>` : '';
-        const disabledAttr = p.shopify_status === 'published' ? 'disabled' : '';
 
         card.innerHTML = `
+          <!-- Image -->
           <div class="relative">
-            <img src="${p.image_url}" alt="Product" class="w-full h-44 object-cover" />
-            <div class="absolute top-2 left-2">
-              <input type="checkbox" class="select-box" data-id="${p._id}" ${disabledAttr} />
-            </div>
-            <div class="absolute top-2 right-2">
-              <span class="text-xs font-medium px-2 py-0.5 rounded-full ${badgeClass} status-badge">${badgeText}</span>
+            <img src="${p.image_url}" alt="Product" class="w-full h-48 object-cover" />
+            <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
+            <!-- Checkbox -->
+            <label class="absolute top-3 left-3 w-6 h-6 rounded-md bg-black/60 border border-white/20 flex items-center justify-center cursor-pointer hover:border-white/50 transition-colors">
+              <input type="checkbox" class="select-box opacity-0 absolute" data-id="${p._id}" ${disabled} />
+              <svg class="check-icon w-3.5 h-3.5 text-white hidden" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
+            </label>
+            <!-- Badge -->
+            <span class="absolute top-3 right-3 badge ${badgeClass} status-badge">${p.shopify_status || 'pending'}</span>
+            <!-- Price overlay -->
+            <div class="absolute bottom-3 right-3 bg-black/70 backdrop-blur-sm text-white text-sm font-bold px-2.5 py-1 rounded-lg">
+              $${p.price_estimate || p.price || '0'}
             </div>
           </div>
-          <div class="p-4 space-y-2.5">
-            <div class="flex justify-between items-center text-xs text-white/40">
-              <span>🚛 ${p.truck_number || 'N/A'}</span>
-              <span class="text-white/60 font-semibold">$${p.price_estimate || p.price || '0'}</span>
-            </div>
-            <input type="text" value="${(p.product_title || '').replace(/"/g, '&quot;')}"
-                   class="card-input title-input" data-id="${p._id}" placeholder="Product title" />
+
+          <!-- Meta row -->
+          <div class="flex items-center justify-between px-4 pt-3 pb-1">
+            <span class="text-[#555] text-xs flex items-center gap-1">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12"/></svg>
+              ${p.truck_number || 'No truck'}
+            </span>
+            <span class="text-[#444] text-xs">${p.confidence ? Math.round(p.confidence * 100) + '% match' : ''}</span>
+          </div>
+
+          <!-- Editable fields -->
+          <div class="px-4 pb-4 space-y-2">
+            <input type="text"
+                   value="${(p.product_title || '').replace(/"/g, '&quot;')}"
+                   class="card-input title-input font-medium"
+                   data-id="${p._id}"
+                   placeholder="Product title" />
             <textarea rows="2"
-                      class="card-input description-input resize-none" data-id="${p._id}"
+                      class="card-input description-input"
+                      data-id="${p._id}"
                       placeholder="Description">${p.description || ''}</textarea>
-            <div class="flex items-center justify-between pt-1">
-              <span class="text-white/25 text-xs">${p.confidence ? Math.round(p.confidence * 100) + '% confidence' : ''}</span>
+            <div class="flex items-center justify-between pt-0.5">
+              <span class="text-[#444] text-xs">${p.delivery_location || ''}</span>
               ${shopifyLink}
             </div>
           </div>
         `;
 
-        card.querySelector('.title-input').addEventListener('blur', saveField);
-        card.querySelector('.description-input').addEventListener('blur', saveField);
-        card.querySelector('.select-box').addEventListener('change', (e) => {
+        // Checkbox visual toggle
+        const label    = card.querySelector('label');
+        const checkbox = card.querySelector('.select-box');
+        const checkIcon= card.querySelector('.check-icon');
+        checkbox.addEventListener('change', (e) => {
           const id = e.target.dataset.id;
-          e.target.checked ? selectedProductIds.add(id) : selectedProductIds.delete(id);
+          if (e.target.checked) {
+            selectedProductIds.add(id);
+            label.classList.add('bg-red-600/80', 'border-red-500');
+            label.classList.remove('bg-black/60', 'border-white/20');
+            checkIcon.classList.remove('hidden');
+            card.classList.add('selected');
+          } else {
+            selectedProductIds.delete(id);
+            label.classList.remove('bg-red-600/80', 'border-red-500');
+            label.classList.add('bg-black/60', 'border-white/20');
+            checkIcon.classList.add('hidden');
+            card.classList.remove('selected');
+          }
         });
 
-        productList.appendChild(card);
-      }
+        card.querySelector('.title-input').addEventListener('blur', saveField);
+        card.querySelector('.description-input').addEventListener('blur', saveField);
+        list.appendChild(card);
+      });
     }
 
-    // ── Save field inline ───────────────────────────────────────
+    // ── Save field ────────────────────────────────────────────────
     async function saveField(e) {
-      const id = e.target.dataset.id;
+      const id    = e.target.dataset.id;
       const field = e.target.classList.contains('title-input') ? 'product_title' : 'description';
       await fetch('/api/products/' + id, {
         method: 'PUT',
@@ -335,25 +470,18 @@
       });
     }
 
-    // ── Push to Shopify ─────────────────────────────────────────
+    // ── Push to Shopify ───────────────────────────────────────────
     document.getElementById('pushSelectedBtn').addEventListener('click', async () => {
       if (selectedProductIds.size === 0) { showToast('Select at least one product'); return; }
-
       for (const id of selectedProductIds) {
-        const checkbox = document.querySelector('.select-box[data-id="' + id + '"]');
-        const card = checkbox?.closest('.product-card');
-        const badge = card?.querySelector('.status-badge');
-        if (badge) { badge.textContent = 'syncing...'; badge.className = 'text-xs font-medium px-2 py-0.5 rounded-full badge-syncing status-badge'; }
-
+        const badge = document.querySelector(`.select-box[data-id="${id}"]`)?.closest('.product-card')?.querySelector('.status-badge');
+        if (badge) { badge.textContent = 'syncing'; badge.className = 'absolute top-3 right-3 badge badge-syncing status-badge'; }
         try {
-          await fetch('/api/products/' + id + '/push-to-shopify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-          });
-          if (badge) { badge.textContent = 'published'; badge.className = 'text-xs font-medium px-2 py-0.5 rounded-full badge-published status-badge'; }
+          await fetch('/api/products/' + id + '/push-to-shopify', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+          if (badge) { badge.textContent = 'published'; badge.className = 'absolute top-3 right-3 badge badge-published status-badge'; }
           showToast('Pushed to Shopify');
-        } catch (err) {
-          if (badge) { badge.textContent = 'failed'; badge.className = 'text-xs font-medium px-2 py-0.5 rounded-full badge-failed status-badge'; }
+        } catch {
+          if (badge) { badge.textContent = 'failed'; badge.className = 'absolute top-3 right-3 badge badge-failed status-badge'; }
         }
       }
       selectedProductIds.clear();

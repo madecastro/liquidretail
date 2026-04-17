@@ -142,7 +142,7 @@
     <div class="section-card fade-up">
       <div class="flex items-center gap-2 mb-6">
         <svg class="w-4 h-4 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
-        <h2 class="text-sm font-semibold text-white uppercase tracking-wider">Upload Product Photo</h2>
+        <h2 class="text-sm font-semibold text-white uppercase tracking-wider">Upload Photo or Video</h2>
       </div>
 
       <form id="uploadForm" enctype="multipart/form-data">
@@ -156,12 +156,22 @@
               <img id="previewImg" class="w-full h-full object-cover" />
             </div>
             <div id="dropPlaceholder" class="flex flex-col items-center gap-2">
-              <svg class="w-9 h-9 text-[#333]" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"/></svg>
-              <p class="text-[#444] text-sm">Drop photo or video here</p>
+              <!-- icon swaps between image and video -->
+              <div id="iconImage">
+                <svg class="w-9 h-9 text-[#333]" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"/></svg>
+              </div>
+              <div id="iconVideo" class="hidden">
+                <svg class="w-9 h-9 text-[#333]" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9A2.25 2.25 0 0013.5 5.25h-9A2.25 2.25 0 002.25 7.5v9A2.25 2.25 0 004.5 18.75z"/></svg>
+              </div>
+              <p id="dropHint" class="text-[#444] text-sm">Drop photo or video here</p>
               <span class="text-xs text-red-500 font-medium">or browse</span>
               <span class="text-[#333] text-xs">JPG, PNG, MP4, MOV — max 100MB</span>
             </div>
-            <p id="fileName" class="hidden text-xs text-[#888] mt-1 truncate max-w-full px-2"></p>
+            <!-- file type pill + name shown after selection -->
+            <div id="fileInfo" class="hidden flex-col items-center gap-1.5 mt-1">
+              <span id="fileTypePill" class="text-[10px] font-bold uppercase tracking-widest px-2.5 py-0.5 rounded-full"></span>
+              <p id="fileName" class="text-xs text-[#888] truncate max-w-full px-2"></p>
+            </div>
             <input id="photoInput" type="file" name="photo" accept="image/*,video/mp4,video/quicktime,video/webm,video/x-msvideo" required class="hidden" />
           </div>
 
@@ -238,7 +248,7 @@
           <svg class="w-7 h-7 text-[#333]" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"/></svg>
         </div>
         <p class="text-[#444] text-sm font-medium">No products yet</p>
-        <p class="text-[#333] text-xs mt-1">Upload a photo above to get started</p>
+        <p class="text-[#333] text-xs mt-1">Upload a photo or video above to get started</p>
       </div>
     </div>
   </div>
@@ -256,38 +266,72 @@
     }
 
     // ── Drop zone + preview ───────────────────────────────────────
-    const dropZone       = document.getElementById('dropZone');
-    const photoInput     = document.getElementById('photoInput');
-    const dropPlaceholder= document.getElementById('dropPlaceholder');
-    const dropPreview    = document.getElementById('dropPreview');
-    const previewImg     = document.getElementById('previewImg');
-    const fileName       = document.getElementById('fileName');
+    const dropZone        = document.getElementById('dropZone');
+    const photoInput      = document.getElementById('photoInput');
+    const dropPlaceholder = document.getElementById('dropPlaceholder');
+    const dropPreview     = document.getElementById('dropPreview');
+    const previewImg      = document.getElementById('previewImg');
+    const fileInfo        = document.getElementById('fileInfo');
+    const fileName        = document.getElementById('fileName');
+    const fileTypePill    = document.getElementById('fileTypePill');
+    const iconImage       = document.getElementById('iconImage');
+    const iconVideo       = document.getElementById('iconVideo');
+
+    let currentFileType = 'image';
 
     function showPreview(file) {
+      const isVideo = file.type.startsWith('video/');
+      currentFileType = isVideo ? 'video' : 'image';
       const url = URL.createObjectURL(file);
+
+      // Show preview area
       dropPlaceholder.classList.add('hidden');
       dropPreview.classList.remove('hidden');
-      fileName.textContent = file.name;
-      fileName.classList.remove('hidden');
+      fileInfo.classList.remove('hidden');
+      fileInfo.classList.add('flex');
 
-      // Remove any existing video element
+      // File info pill
+      fileName.textContent = file.name;
+      if (isVideo) {
+        fileTypePill.textContent = '● Video';
+        fileTypePill.className = 'text-[10px] font-bold uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-purple-900/60 text-purple-300 border border-purple-700/40';
+      } else {
+        fileTypePill.textContent = '● Photo';
+        fileTypePill.className = 'text-[10px] font-bold uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-blue-900/60 text-blue-300 border border-blue-700/40';
+      }
+
+      // Swap icon in placeholder (still visible until preview loads)
+      iconImage.classList.toggle('hidden', isVideo);
+      iconVideo.classList.toggle('hidden', !isVideo);
+
+      // Media preview
       const existing = dropPreview.querySelector('video');
       if (existing) existing.remove();
 
-      if (file.type.startsWith('video/')) {
+      if (isVideo) {
         previewImg.classList.add('hidden');
         const vid = document.createElement('video');
         vid.src = url;
         vid.className = 'w-full h-full object-cover rounded-lg';
-        vid.muted = true;
-        vid.loop = true;
-        vid.autoplay = true;
-        vid.playsInline = true;
+        vid.muted = true; vid.loop = true; vid.autoplay = true; vid.playsInline = true;
         dropPreview.appendChild(vid);
       } else {
         previewImg.classList.remove('hidden');
         previewImg.src = url;
       }
+    }
+
+    function resetDropZone() {
+      dropPreview.classList.add('hidden');
+      fileInfo.classList.add('hidden');
+      fileInfo.classList.remove('flex');
+      dropPlaceholder.classList.remove('hidden');
+      iconImage.classList.remove('hidden');
+      iconVideo.classList.add('hidden');
+      const vid = dropPreview.querySelector('video');
+      if (vid) vid.remove();
+      previewImg.classList.remove('hidden');
+      currentFileType = 'image';
     }
 
     ['dragover','dragenter'].forEach(e => dropZone.addEventListener(e, ev => {
@@ -332,11 +376,15 @@
       const spinSvg = '<svg class="w-4 h-4 spinner flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/></svg>';
       setStatus('info', spinSvg + ' Uploading...');
       try {
-        const res = await fetch('/api/upload', { method: 'POST', body: new FormData(form) });
+        const res  = await fetch('/api/upload', { method: 'POST', body: new FormData(form) });
         const data = await res.json();
         if (res.ok) {
-          setStatus('info', spinSvg + ' Analyzing image — detecting and identifying products...');
-          pollJobStatus(data.jobId);
+          const isVideo = data.fileType === 'video';
+          const msg = isVideo
+            ? spinSvg + ' Scanning video frames — detecting unique products. This may take a few minutes...'
+            : spinSvg + ' Analyzing image — detecting and identifying products...';
+          setStatus('info', msg);
+          pollJobStatus(data.jobId, isVideo);
         } else {
           setStatus('error', '✕ Upload failed: ' + (data.error || 'Unknown error'));
         }
@@ -346,17 +394,24 @@
     });
 
     // ── Poll ──────────────────────────────────────────────────────
-    function pollJobStatus(jobId) {
+    function pollJobStatus(jobId, isVideo) {
+      const spinSvg = '<svg class="w-4 h-4 spinner flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/></svg>';
+      let dots = 0;
       const interval = setInterval(async () => {
         const res  = await fetch('/api/jobs/' + jobId + '/status');
         const data = await res.json();
+
+        if (data.status === 'processing' && isVideo) {
+          dots = (dots + 1) % 4;
+          setStatus('info', spinSvg + ' Processing video frames' + '.'.repeat(dots + 1));
+        }
+
         if (data.status === 'completed') {
           clearInterval(interval);
-          setStatus('success', '✓ ' + data.products.length + ' product(s) identified and saved.');
+          const label = isVideo ? 'video' : 'image';
+          setStatus('success', '✓ ' + data.products.length + ' product(s) found in ' + label + ' and saved.');
           form.reset();
-          dropPreview.classList.add('hidden');
-          dropPlaceholder.classList.remove('hidden');
-          fileName.classList.add('hidden');
+          resetDropZone();
           loadProducts();
         } else if (data.status === 'failed') {
           clearInterval(interval);

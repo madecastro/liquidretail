@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Flood QRF — Detection Review</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="auth.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    * { font-family: 'Inter', system-ui, sans-serif; }
+    body { background: #0a0a0a; color: #f0f0f0; }
+    nav  { background: #111; border-bottom: 1px solid #1f1f1f; }
+
+    .section-card { background: #111; border: 1.5px solid #1f1f1f; border-radius: 18px; padding: 24px; }
+
+    /* ── Inputs ── */
+    .field-input {
+      display: block; width: 100%;
+      background: #1c1c1e; border: 1.5px solid #2e2e2e;
+      color: #f0f0f0; border-radius: 10px;
+      padding: 10px 14px; font-size: 0.875rem; outline: none;
+      transition: border-color 0.15s;
+    }
+    .field-input::placeholder { color: #555; }
+    .field-input:focus { border-color: #C8102E; }
+    input[type="date"], input[type="time"] { color-scheme: dark; color: #f0f0f0; }
+    .field-label { display: block; font-size: 0.72rem; font-weight: 600; color: #666;
+                   text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 5px; }
+
+    /* ── Drop zone ── */
+    #dropZone {
+      border: 2px dashed #2e2e2e; border-radius: 12px;
+      background: #141414; cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    #dropZone:hover     { border-color: #444; background: #1a1a1a; }
+    #dropZone.drag-over { border-color: #C8102E; background: #1f1010; }
+
+    /* ── Bounding box overlay ── */
+    #imageContainer { position: relative; display: inline-block; line-height: 0; }
+    #imageContainer img { display: block; max-w-full; border-radius: 10px; }
+
+    .bbox {
+      position: absolute;
+      border: 2px solid #f59e0b;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      box-sizing: border-box;
+    }
+    .bbox:hover { border-color: #fcd34d; }
+    .bbox.approved { border-color: #34d399; background: rgba(52,211,153,0.08); }
+    .bbox.rejected { border-color: #f87171; background: rgba(248,113,113,0.08); opacity: 0.5; }
+
+    .bbox-label {
+      position: absolute;
+      top: -22px; left: -1px;
+      background: #f59e0b; color: #000;
+      font-size: 10px; font-weight: 700;
+      padding: 1px 6px; border-radius: 3px 3px 0 0;
+      white-space: nowrap;
+      transition: background 0.15s;
+    }
+    .bbox.approved .bbox-label { background: #34d399; }
+    .bbox.rejected .bbox-label { background: #f87171; color: #fff; }
+
+    /* ── Crop cards ── */
+    .crop-card {
+      background: #161616; border: 1.5px solid #242424;
+      border-radius: 14px; overflow: hidden;
+      transition: border-color 0.15s;
+    }
+    .crop-card.approved { border-color: #34d399; }
+    .crop-card.rejected { border-color: #f87171; opacity: 0.5; }
+
+    /* ── Select ── */
+    select {
+      background: #1c1c1e; border: 1.5px solid #2e2e2e;
+      color: #f0f0f0; border-radius: 8px;
+      padding: 7px 12px; font-size: 0.875rem; outline: none;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { animation: spin 0.8s linear infinite; }
+
+    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+    .pulse { animation: pulse 1.5s ease-in-out infinite; }
+
+    @keyframes fadeUp {
+      from { opacity:0; transform:translateY(10px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+    .fade-up { animation: fadeUp 0.25s ease forwards; }
+
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: #0a0a0a; }
+    ::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 3px; }
+  </style>
+</head>
+<body class="min-h-screen">
+
+  <!-- ── Navbar ───────────────────────────────────────────────────── -->
+  <nav class="sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <img src="assets/logo.png" alt="Flood QRF" class="w-9 h-9 object-contain" />
+        <div class="leading-tight">
+          <div class="font-bold text-white tracking-wide text-sm">FLOOD QRF</div>
+          <div class="text-[10px] text-[#555] uppercase tracking-widest hidden sm:block">Detection Review</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-5">
+        <a href="index.html" class="text-[#555] hover:text-white text-sm transition-colors">← Inventory</a>
+        <button onclick="logout()" class="text-[#555] hover:text-white text-sm transition-colors">Sign out</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+
+    <!-- ── Upload Section ───────────────────────────────────────── -->
+    <div id="uploadSection" class="section-card fade-up">
+      <div class="flex items-center gap-2 mb-6">
+        <svg class="w-4 h-4 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 3.75H6A2.25 2.25 0 003.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        <h2 class="text-sm font-semibold text-white uppercase tracking-wider">Upload for Detection</h2>
+      </div>
+
+      <form id="detectForm" enctype="multipart/form-data">
+        <div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
+
+          <!-- Drop zone -->
+          <div id="dropZone"
+               class="lg:col-span-2 flex flex-col items-center justify-center gap-3 p-8 text-center min-h-[200px]"
+               onclick="document.getElementById('photoInput').click()">
+            <div id="dropPreview" class="hidden w-full h-36 rounded-lg overflow-hidden">
+              <img id="previewImg" class="w-full h-full object-cover" />
+            </div>
+            <div id="dropPlaceholder" class="flex flex-col items-center gap-2">
+              <svg class="w-9 h-9 text-[#333]" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 3.75H6A2.25 2.25 0 003.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+              <p class="text-[#444] text-sm">Drop photo or video here</p>
+              <span class="text-xs text-red-500 font-medium">or browse</span>
+              <span class="text-[#333] text-xs">JPG, PNG, MP4, MOV — max 100MB</span>
+            </div>
+            <p id="fileName" class="hidden text-xs text-[#888] truncate max-w-full px-2"></p>
+            <input id="photoInput" type="file" name="photo"
+                   accept="image/*,video/mp4,video/quicktime,video/webm" required class="hidden" />
+          </div>
+
+          <!-- Metadata -->
+          <div class="lg:col-span-3 grid grid-cols-2 gap-4">
+            <div class="col-span-2">
+              <label class="field-label">Truck Number</label>
+              <input type="text" name="truck_number" placeholder="e.g. T-14" class="field-input" />
+            </div>
+            <div>
+              <label class="field-label">Price ($)</label>
+              <input type="number" name="price" placeholder="0.00" class="field-input" />
+            </div>
+            <div>
+              <label class="field-label">Location</label>
+              <input type="text" name="delivery_location" placeholder="City, State" class="field-input" />
+            </div>
+            <div>
+              <label class="field-label">Delivery Date</label>
+              <input type="date" name="delivery_date" class="field-input" />
+            </div>
+            <div>
+              <label class="field-label">Delivery Time</label>
+              <input type="time" name="delivery_time" class="field-input" />
+            </div>
+            <div class="col-span-2 pt-1">
+              <button type="submit" id="detectBtn"
+                      class="w-full bg-red-600 hover:bg-red-700 active:scale-[0.99] text-white font-semibold py-3 rounded-xl transition-all flex items-center justify-center gap-2 text-sm">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 3.75H6A2.25 2.25 0 003.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                Run Detection
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Status -->
+        <div id="uploadStatus" class="hidden mt-4 rounded-xl px-4 py-3 text-sm flex items-center gap-3"></div>
+      </form>
+    </div>
+
+    <!-- ── Detection Results ─────────────────────────────────────── -->
+    <div id="resultsSection" class="hidden space-y-6 fade-up">
+
+      <!-- Header bar -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h2 class="text-sm font-semibold text-white uppercase tracking-wider flex items-center gap-2">
+            <svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"/></svg>
+            Detection Results
+          </h2>
+          <p id="detectionSummary" class="text-[#555] text-xs mt-0.5"></p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="approveAllBtn"
+                  class="text-xs px-3 py-1.5 rounded-lg bg-emerald-900/40 border border-emerald-700/30 text-emerald-400 hover:bg-emerald-900/70 transition-colors">
+            Approve All
+          </button>
+          <button id="rejectAllBtn"
+                  class="text-xs px-3 py-1.5 rounded-lg bg-red-900/40 border border-red-700/30 text-red-400 hover:bg-red-900/70 transition-colors">
+            Reject All
+          </button>
+        </div>
+      </div>
+
+      <!-- Two-col: image + crops -->
+      <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+
+        <!-- Original image with box overlays -->
+        <div class="section-card">
+          <p class="text-xs text-[#555] uppercase tracking-wider font-semibold mb-3">Source Image</p>
+          <div class="overflow-hidden rounded-xl bg-[#0d0d0d] flex items-center justify-center">
+            <div id="imageContainer">
+              <img id="sourceImage" src="" alt="Source" class="max-w-full rounded-xl" />
+              <!-- bounding boxes injected here -->
+            </div>
+          </div>
+          <p class="text-[#444] text-xs mt-3">Click any box to toggle approved / rejected</p>
+        </div>
+
+        <!-- Crop thumbnails -->
+        <div class="section-card">
+          <p class="text-xs text-[#555] uppercase tracking-wider font-semibold mb-3">Detected Crops</p>
+          <div id="noDetections" class="hidden text-center py-12">
+            <svg class="w-10 h-10 text-[#2a2a2a] mx-auto mb-3" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 3.75H6A2.25 2.25 0 003.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            <p class="text-[#444] text-sm">No products detected</p>
+            <p class="text-[#333] text-xs mt-1">The detection service returned no results for this image.<br/>Try a clearer photo or adjust the view.</p>
+          </div>
+          <div id="cropGrid" class="grid grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-1"></div>
+        </div>
+      </div>
+
+      <!-- Process bar -->
+      <div id="processBar" class="section-card">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <p class="text-white font-semibold text-sm">
+              <span id="approvedCount" class="text-emerald-400">0</span> crop(s) approved
+            </p>
+            <p class="text-[#555] text-xs mt-0.5">Approved crops will be identified by GPT and saved as products</p>
+          </div>
+          <button id="processBtn"
+                  class="bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold px-6 py-3 rounded-xl transition-colors text-sm flex items-center gap-2 whitespace-nowrap">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
+            Process Approved Crops
+          </button>
+        </div>
+        <div id="processStatus" class="hidden mt-4 rounded-xl px-4 py-3 text-sm flex items-center gap-3"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ── State ─────────────────────────────────────────────────────
+    let detections = [];      // [{ id, x1, y1, x2, y2, confidence, label, state }]
+    let sourceImageUrl = '';
+    let imgNaturalW = 0, imgNaturalH = 0;
+    let savedMetadata = {};
+
+    // ── Drop zone ─────────────────────────────────────────────────
+    const dropZone       = document.getElementById('dropZone');
+    const photoInput     = document.getElementById('photoInput');
+    const dropPlaceholder= document.getElementById('dropPlaceholder');
+    const dropPreview    = document.getElementById('dropPreview');
+    const previewImg     = document.getElementById('previewImg');
+    const fileName       = document.getElementById('fileName');
+
+    function showPreview(file) {
+      const url = URL.createObjectURL(file);
+      dropPlaceholder.classList.add('hidden');
+      dropPreview.classList.remove('hidden');
+      const existing = dropPreview.querySelector('video');
+      if (existing) existing.remove();
+      if (file.type.startsWith('video/')) {
+        previewImg.classList.add('hidden');
+        const vid = document.createElement('video');
+        vid.src = url; vid.className = 'w-full h-full object-cover rounded-lg';
+        vid.muted = true; vid.loop = true; vid.autoplay = true; vid.playsInline = true;
+        dropPreview.appendChild(vid);
+      } else {
+        previewImg.classList.remove('hidden');
+        previewImg.src = url;
+      }
+      fileName.textContent = file.name;
+      fileName.classList.remove('hidden');
+    }
+
+    ['dragover','dragenter'].forEach(e => dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.add('drag-over'); }));
+    ['dragleave','drop'].forEach(e => dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.remove('drag-over'); }));
+    dropZone.addEventListener('drop', ev => { const f = ev.dataTransfer.files[0]; if (f) { photoInput.files = ev.dataTransfer.files; showPreview(f); } });
+    photoInput.addEventListener('change', () => { if (photoInput.files[0]) showPreview(photoInput.files[0]); });
+
+    // ── Status helpers ────────────────────────────────────────────
+    function setUploadStatus(type, html) {
+      const el = document.getElementById('uploadStatus');
+      const styles = { info: 'bg-[#0d1a2e] border border-[#1a3a5c] text-[#60a5fa]', error: 'bg-[#1f0a0a] border border-[#4a1010] text-[#f87171]' };
+      el.className = 'mt-4 rounded-xl px-4 py-3 text-sm flex items-center gap-3 ' + styles[type];
+      el.innerHTML = html;
+      el.classList.remove('hidden');
+    }
+    function setProcessStatus(type, html) {
+      const el = document.getElementById('processStatus');
+      const styles = {
+        info:    'bg-[#0d1a2e] border border-[#1a3a5c] text-[#60a5fa]',
+        success: 'bg-[#0a1f12] border border-[#1a4728] text-[#34d399]',
+        error:   'bg-[#1f0a0a] border border-[#4a1010] text-[#f87171]',
+      };
+      el.className = 'mt-4 rounded-xl px-4 py-3 text-sm flex items-center gap-3 ' + styles[type];
+      el.innerHTML = html;
+      el.classList.remove('hidden');
+    }
+    const spin = '<svg class="w-4 h-4 spinner flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/></svg>';
+
+    // ── Detect form submit ────────────────────────────────────────
+    document.getElementById('detectForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      setUploadStatus('info', spin + ' Uploading and running detection...');
+      document.getElementById('detectBtn').disabled = true;
+
+      savedMetadata = {
+        truck_number:      form.truck_number.value,
+        price:             form.price.value,
+        delivery_location: form.delivery_location.value,
+        delivery_date:     form.delivery_date.value,
+        delivery_time:     form.delivery_time.value,
+      };
+
+      try {
+        const res  = await fetch('/api/detect', { method: 'POST', body: new FormData(form) });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Detection failed');
+
+        sourceImageUrl = data.imageUrl;
+        imgNaturalW    = data.width;
+        imgNaturalH    = data.height;
+        detections     = (data.detections || []).map((d, i) => ({ ...d, id: d.id || String(i), state: 'pending' }));
+
+        document.getElementById('uploadStatus').classList.add('hidden');
+        renderResults();
+      } catch (err) {
+        setUploadStatus('error', '✕ ' + err.message);
+      } finally {
+        document.getElementById('detectBtn').disabled = false;
+      }
+    });
+
+    // ── Render results ────────────────────────────────────────────
+    function renderResults() {
+      document.getElementById('resultsSection').classList.remove('hidden');
+      document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+      const n = detections.length;
+      document.getElementById('detectionSummary').textContent =
+        n > 0 ? `${n} object${n !== 1 ? 's' : ''} detected — review and approve before processing`
+               : 'No objects detected in this image';
+
+      document.getElementById('noDetections').classList.toggle('hidden', n > 0);
+      document.getElementById('cropGrid').classList.toggle('hidden', n === 0);
+
+      renderBoxes();
+      renderCrops();
+      updateApprovedCount();
+    }
+
+    // ── Bounding box overlays ─────────────────────────────────────
+    function renderBoxes() {
+      const container = document.getElementById('imageContainer');
+      const img       = document.getElementById('sourceImage');
+
+      // Clear old boxes
+      container.querySelectorAll('.bbox').forEach(b => b.remove());
+      img.src = sourceImageUrl;
+
+      img.onload = () => {
+        imgNaturalW = imgNaturalW || img.naturalWidth;
+        imgNaturalH = imgNaturalH || img.naturalHeight;
+        detections.forEach(d => createBox(d));
+      };
+      // If already loaded
+      if (img.complete && img.naturalWidth) {
+        imgNaturalW = imgNaturalW || img.naturalWidth;
+        imgNaturalH = imgNaturalH || img.naturalHeight;
+        detections.forEach(d => createBox(d));
+      }
+    }
+
+    function createBox(det) {
+      const container = document.getElementById('imageContainer');
+      const xPct = (det.x1 / imgNaturalW) * 100;
+      const yPct = (det.y1 / imgNaturalH) * 100;
+      const wPct = ((det.x2 - det.x1) / imgNaturalW) * 100;
+      const hPct = ((det.y2 - det.y1) / imgNaturalH) * 100;
+
+      const box = document.createElement('div');
+      box.className = 'bbox ' + det.state;
+      box.dataset.id = det.id;
+      box.style.cssText = `left:${xPct}%;top:${yPct}%;width:${wPct}%;height:${hPct}%;`;
+
+      const label = document.createElement('div');
+      label.className = 'bbox-label';
+      label.textContent = `#${det.id} · ${Math.round(det.confidence * 100)}%`;
+      box.appendChild(label);
+
+      box.addEventListener('click', () => toggleDetection(det.id));
+      container.appendChild(box);
+    }
+
+    // ── Crop thumbnails ───────────────────────────────────────────
+    function renderCrops() {
+      const grid = document.getElementById('cropGrid');
+      grid.innerHTML = '';
+      detections.forEach((d, i) => {
+        const card = document.createElement('div');
+        card.className = 'crop-card ' + d.state;
+        card.dataset.id = d.id;
+        card.style.animationDelay = (i * 40) + 'ms';
+        card.classList.add('fade-up');
+
+        // Generate crop thumbnail on canvas
+        const canvas = document.createElement('canvas');
+        const w = d.x2 - d.x1, h = d.y2 - d.y1;
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          ctx.drawImage(img, d.x1, d.y1, w, h, 0, 0, w, h);
+          card.querySelector('.crop-img').src = canvas.toDataURL('image/jpeg', 0.9);
+        };
+        img.src = sourceImageUrl;
+
+        card.innerHTML = `
+          <div class="relative">
+            <img class="crop-img w-full h-28 object-cover bg-[#0d0d0d]" src="" alt="Crop ${d.id}" />
+            <span class="absolute top-2 right-2 text-[10px] font-bold px-2 py-0.5 rounded-full
+                         bg-black/60 text-white">${Math.round(d.confidence * 100)}%</span>
+          </div>
+          <div class="p-3">
+            <p class="text-white text-xs font-semibold mb-2">Object #${d.id}
+              ${d.label ? '<span class="text-[#555] font-normal ml-1">' + d.label + '</span>' : ''}
+            </p>
+            <div class="flex gap-2">
+              <button class="approve-btn flex-1 text-xs py-1.5 rounded-lg border transition-colors
+                             ${d.state === 'approved'
+                               ? 'bg-emerald-900/60 border-emerald-600/50 text-emerald-300'
+                               : 'bg-transparent border-[#2e2e2e] text-[#555] hover:border-emerald-600/50 hover:text-emerald-400'}">
+                ✓ Approve
+              </button>
+              <button class="reject-btn flex-1 text-xs py-1.5 rounded-lg border transition-colors
+                             ${d.state === 'rejected'
+                               ? 'bg-red-900/60 border-red-600/50 text-red-300'
+                               : 'bg-transparent border-[#2e2e2e] text-[#555] hover:border-red-600/50 hover:text-red-400'}">
+                ✕ Reject
+              </button>
+            </div>
+          </div>
+        `;
+
+        card.querySelector('.approve-btn').addEventListener('click', () => setDetectionState(d.id, 'approved'));
+        card.querySelector('.reject-btn').addEventListener('click',  () => setDetectionState(d.id, 'rejected'));
+        grid.appendChild(card);
+      });
+    }
+
+    // ── State management ──────────────────────────────────────────
+    function toggleDetection(id) {
+      const det = detections.find(d => d.id === id);
+      if (!det) return;
+      const next = det.state === 'approved' ? 'rejected' : det.state === 'rejected' ? 'pending' : 'approved';
+      setDetectionState(id, next);
+    }
+
+    function setDetectionState(id, state) {
+      const det = detections.find(d => d.id === id);
+      if (!det) return;
+      det.state = state;
+
+      // Update bounding box
+      const box = document.querySelector(`.bbox[data-id="${id}"]`);
+      if (box) box.className = 'bbox ' + state;
+
+      // Update crop card
+      const card = document.querySelector(`.crop-card[data-id="${id}"]`);
+      if (card) {
+        card.className = 'crop-card ' + state;
+        const approveBtn = card.querySelector('.approve-btn');
+        const rejectBtn  = card.querySelector('.reject-btn');
+        approveBtn.className = approveBtn.className.replace(/bg-emerald[^\s]*/g, '').replace(/border-emerald[^\s]*/g, '').replace(/text-emerald[^\s]*/g, '').trim();
+        rejectBtn.className  = rejectBtn.className.replace(/bg-red[^\s]*/g, '').replace(/border-red[^\s]*/g, '').replace(/text-red[^\s]*/g, '').trim();
+        if (state === 'approved') {
+          approveBtn.className += ' bg-emerald-900/60 border-emerald-600/50 text-emerald-300';
+        } else if (state === 'rejected') {
+          rejectBtn.className += ' bg-red-900/60 border-red-600/50 text-red-300';
+        }
+      }
+
+      updateApprovedCount();
+    }
+
+    function updateApprovedCount() {
+      const n = detections.filter(d => d.state === 'approved').length;
+      document.getElementById('approvedCount').textContent = n;
+      document.getElementById('processBtn').disabled = n === 0;
+    }
+
+    // ── Approve/Reject all ────────────────────────────────────────
+    document.getElementById('approveAllBtn').addEventListener('click', () => {
+      detections.forEach(d => setDetectionState(d.id, 'approved'));
+    });
+    document.getElementById('rejectAllBtn').addEventListener('click', () => {
+      detections.forEach(d => setDetectionState(d.id, 'rejected'));
+    });
+
+    // ── Process approved ──────────────────────────────────────────
+    document.getElementById('processBtn').addEventListener('click', async () => {
+      const approved = detections.filter(d => d.state === 'approved');
+      if (!approved.length) return;
+
+      setProcessStatus('info', spin + ` Queuing ${approved.length} crop(s) for identification...`);
+      document.getElementById('processBtn').disabled = true;
+
+      try {
+        const res  = await fetch('/api/detect/process', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageUrl: sourceImageUrl,
+            approvedBoxes: approved.map(d => ({ id: d.id, x1: d.x1, y1: d.y1, x2: d.x2, y2: d.y2, confidence: d.confidence })),
+            metadata: savedMetadata
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Processing failed');
+
+        setProcessStatus('success',
+          `✓ Job queued (${data.jobId}). Products will appear in <a href="index.html" class="underline hover:text-white">Inventory</a> once processed.`
+        );
+      } catch (err) {
+        setProcessStatus('error', '✕ ' + err.message);
+        document.getElementById('processBtn').disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

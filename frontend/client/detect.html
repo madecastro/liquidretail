@@ -13,6 +13,7 @@
     nav  { background: #111; border-bottom: 1px solid #1f1f1f; }
 
     .section-card { background: #111; border: 1.5px solid #1f1f1f; border-radius: 18px; padding: 24px; }
+    .panel-label  { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: #555; margin-bottom: 12px; }
 
     /* ── Inputs ── */
     .field-input {
@@ -37,61 +38,101 @@
     #dropZone:hover     { border-color: #444; background: #1a1a1a; }
     #dropZone.drag-over { border-color: #C8102E; background: #1f1010; }
 
-    /* ── Bounding box overlay ── */
-    #imageContainer { position: relative; display: inline-block; line-height: 0; }
-    #imageContainer img { display: block; max-w-full; border-radius: 10px; }
+    /* ── Image containers ── */
+    .img-wrap { position: relative; display: inline-block; line-height: 0; }
+    .img-wrap img { display: block; width: 100%; border-radius: 8px; }
 
+    /* ── Product bboxes ── */
     .bbox {
-      position: absolute;
-      border: 2px solid #f59e0b;
-      border-radius: 4px;
-      cursor: pointer;
-      transition: border-color 0.15s, background 0.15s;
-      box-sizing: border-box;
+      position: absolute; border: 2px solid #f59e0b; border-radius: 4px;
+      cursor: pointer; transition: border-color 0.15s, background 0.15s; box-sizing: border-box;
     }
     .bbox:hover { border-color: #fcd34d; }
     .bbox.approved { border-color: #34d399; background: rgba(52,211,153,0.08); }
     .bbox.rejected { border-color: #f87171; background: rgba(248,113,113,0.08); opacity: 0.5; }
-
     .bbox-label {
-      position: absolute;
-      top: -22px; left: -1px;
+      position: absolute; top: -22px; left: -1px;
       background: #f59e0b; color: #000;
-      font-size: 10px; font-weight: 700;
-      padding: 1px 6px; border-radius: 3px 3px 0 0;
-      white-space: nowrap;
-      transition: background 0.15s;
+      font-size: 10px; font-weight: 700; padding: 1px 6px;
+      border-radius: 3px 3px 0 0; white-space: nowrap; transition: background 0.15s;
     }
     .bbox.approved .bbox-label { background: #34d399; }
     .bbox.rejected .bbox-label { background: #f87171; color: #fff; }
 
-    /* ── Crop cards ── */
-    .crop-card {
-      background: #161616; border: 1.5px solid #242424;
-      border-radius: 14px; overflow: hidden;
+    /* ── Subject overlay ── */
+    .sbox {
+      position: absolute; border-radius: 6px; box-sizing: border-box;
+      pointer-events: none;
+    }
+    .sbox.primary   { border: 2px solid #818cf8; background: rgba(129,140,248,0.08); }
+    .sbox.secondary { border: 2px dashed #4f5d87; background: rgba(79,93,135,0.05); }
+    .sbox-label {
+      position: absolute; top: -22px; left: -1px;
+      background: #818cf8; color: #fff;
+      font-size: 10px; font-weight: 700; padding: 1px 6px;
+      border-radius: 3px 3px 0 0; white-space: nowrap; max-width: 160px; overflow: hidden; text-overflow: ellipsis;
+    }
+    .sbox.secondary .sbox-label { background: #4f5d87; }
+
+    /* ── Text overlay ── */
+    .tbox {
+      position: absolute; border: 1.5px solid #f472b6; background: rgba(244,114,182,0.08);
+      border-radius: 3px; box-sizing: border-box; pointer-events: none;
+    }
+    .tbox-label {
+      position: absolute; top: -20px; left: -1px;
+      background: #f472b6; color: #000;
+      font-size: 9px; font-weight: 700; padding: 1px 5px;
+      border-radius: 2px 2px 0 0; white-space: nowrap; max-width: 160px; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    /* ── Crop frame overlay ── */
+    .crop-frame {
+      position: absolute; box-sizing: border-box; border-radius: 4px; pointer-events: none;
+      border: 2px solid #60a5fa; background: rgba(96,165,250,0.06);
+      transition: opacity 0.2s;
+    }
+    .crop-frame.winner { border-color: #34d399; border-width: 2.5px; background: rgba(52,211,153,0.1); }
+    .crop-frame.dim    { border-color: #2563eb33; opacity: 0.4; }
+
+    /* ── Cards ── */
+    .det-card {
+      background: #161616; border: 1.5px solid #242424; border-radius: 12px; overflow: hidden;
       transition: border-color 0.15s;
     }
-    .crop-card.approved { border-color: #34d399; }
-    .crop-card.rejected { border-color: #f87171; opacity: 0.5; }
+    .det-card.approved { border-color: #34d399; }
+    .det-card.rejected { border-color: #f87171; opacity: 0.5; }
+    .det-card.winner   { border-color: #34d399; }
 
-    /* ── Select ── */
-    select {
-      background: #1c1c1e; border: 1.5px solid #2e2e2e;
-      color: #f0f0f0; border-radius: 8px;
-      padding: 7px 12px; font-size: 0.875rem; outline: none;
+    .crop-card {
+      background: #161616; border: 1.5px solid #242424; border-radius: 12px; overflow: hidden;
+      cursor: pointer; transition: border-color 0.15s, transform 0.1s;
     }
+    .crop-card:hover   { border-color: #3a3a3a; transform: translateY(-1px); }
+    .crop-card.selected { border-color: #34d399; }
 
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .spinner { animation: spin 0.8s linear infinite; }
-
-    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
-    .pulse { animation: pulse 1.5s ease-in-out infinite; }
-
-    @keyframes fadeUp {
-      from { opacity:0; transform:translateY(10px); }
-      to   { opacity:1; transform:translateY(0); }
+    /* ── Tabs ── */
+    .tab-btn {
+      font-size: 0.7rem; font-weight: 700; padding: 6px 14px; border-radius: 8px;
+      text-transform: uppercase; letter-spacing: 0.07em; transition: background 0.15s, color 0.15s;
+      color: #555; cursor: pointer; border: none; background: transparent;
     }
-    .fade-up { animation: fadeUp 0.25s ease forwards; }
+    .tab-btn.active { background: #1f1f1f; color: #f0f0f0; }
+
+    /* ── Judge badge ── */
+    .judge-badge {
+      font-size: 9px; font-weight: 700; padding: 2px 7px; border-radius: 999px;
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .judge-badge.winner { background: #064e3b; color: #34d399; border: 1px solid #065f46; }
+    .judge-badge.normal { background: #1c1c1e; color: #555; border: 1px solid #2a2a2a; }
+
+    @keyframes spin    { to { transform: rotate(360deg); } }
+    @keyframes pulse   { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+    @keyframes fadeUp  { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+    .spinner  { animation: spin 0.8s linear infinite; }
+    .pulse    { animation: pulse 1.5s ease-in-out infinite; }
+    .fade-up  { animation: fadeUp 0.25s ease forwards; }
 
     ::-webkit-scrollbar { width: 5px; }
     ::-webkit-scrollbar-track { background: #0a0a0a; }
@@ -100,7 +141,7 @@
 </head>
 <body class="min-h-screen">
 
-  <!-- ── Navbar ───────────────────────────────────────────────────── -->
+  <!-- ── Navbar ─────────────────────────────────────────────────────── -->
   <nav class="sticky top-0 z-40">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
       <div class="flex items-center gap-3">
@@ -119,10 +160,12 @@
 
   <div class="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
 
-    <!-- ── Upload Section ───────────────────────────────────────── -->
+    <!-- ── Upload Section ─────────────────────────────────────────── -->
     <div id="uploadSection" class="section-card fade-up">
       <div class="flex items-center gap-2 mb-6">
-        <svg class="w-4 h-4 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 3.75H6A2.25 2.25 0 003.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        <svg class="w-4 h-4 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 3.75H6A2.25 2.25 0 003.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+        </svg>
         <h2 class="text-sm font-semibold text-white uppercase tracking-wider">Upload for Detection</h2>
       </div>
 
@@ -137,7 +180,9 @@
               <img id="previewImg" class="w-full h-full object-cover" />
             </div>
             <div id="dropPlaceholder" class="flex flex-col items-center gap-2">
-              <svg class="w-9 h-9 text-[#333]" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 3.75H6A2.25 2.25 0 003.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+              <svg class="w-9 h-9 text-[#333]" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 3.75H6A2.25 2.25 0 003.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+              </svg>
               <p class="text-[#444] text-sm">Drop photo or video here</p>
               <span class="text-xs text-red-500 font-medium">or browse</span>
               <span class="text-[#333] text-xs">JPG, PNG, MP4, MOV — max 100MB</span>
@@ -171,382 +216,693 @@
             </div>
             <div class="col-span-2 pt-1">
               <button type="submit" id="detectBtn"
-                      class="w-full bg-red-600 hover:bg-red-700 active:scale-[0.99] text-white font-semibold py-3 rounded-xl transition-all flex items-center justify-center gap-2 text-sm">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 3.75H6A2.25 2.25 0 003.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                      class="w-full bg-red-600 hover:bg-red-700 active:scale-[0.99] disabled:opacity-50
+                             text-white font-semibold py-3 rounded-xl transition-all flex items-center justify-center gap-2 text-sm">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 3.75H6A2.25 2.25 0 003.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                </svg>
                 Run Detection
               </button>
             </div>
           </div>
         </div>
-
-        <!-- Status -->
         <div id="uploadStatus" class="hidden mt-4 rounded-xl px-4 py-3 text-sm flex items-center gap-3"></div>
       </form>
     </div>
 
-    <!-- ── Detection Results ─────────────────────────────────────── -->
+    <!-- ── Results: 5 Panels ──────────────────────────────────────── -->
     <div id="resultsSection" class="hidden space-y-6 fade-up">
 
-      <!-- Header bar -->
+      <!-- Results header -->
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 class="text-sm font-semibold text-white uppercase tracking-wider flex items-center gap-2">
-            <svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"/></svg>
+            <svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"/>
+            </svg>
             Detection Results
           </h2>
           <p id="detectionSummary" class="text-[#555] text-xs mt-0.5"></p>
         </div>
         <div class="flex items-center gap-2">
-          <button id="approveAllBtn"
-                  class="text-xs px-3 py-1.5 rounded-lg bg-emerald-900/40 border border-emerald-700/30 text-emerald-400 hover:bg-emerald-900/70 transition-colors">
-            Approve All
-          </button>
-          <button id="rejectAllBtn"
-                  class="text-xs px-3 py-1.5 rounded-lg bg-red-900/40 border border-red-700/30 text-red-400 hover:bg-red-900/70 transition-colors">
-            Reject All
-          </button>
+          <button id="approveAllBtn" class="text-xs px-3 py-1.5 rounded-lg bg-emerald-900/40 border border-emerald-700/30 text-emerald-400 hover:bg-emerald-900/70 transition-colors">Approve All</button>
+          <button id="rejectAllBtn"  class="text-xs px-3 py-1.5 rounded-lg bg-red-900/40 border border-red-700/30 text-red-400 hover:bg-red-900/70 transition-colors">Reject All</button>
         </div>
       </div>
 
-      <!-- Two-col: image + crops -->
-      <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
-
-        <!-- Original image with box overlays -->
-        <div class="section-card">
-          <p class="text-xs text-[#555] uppercase tracking-wider font-semibold mb-3">Source Image</p>
-          <div class="overflow-hidden rounded-xl bg-[#0d0d0d] flex items-center justify-center">
-            <div id="imageContainer">
-              <img id="sourceImage" src="" alt="Source" class="max-w-full rounded-xl" />
-              <!-- bounding boxes injected here -->
+      <!-- ╔══ Panel 1: Products ══╗ -->
+      <div class="section-card">
+        <div class="flex items-center justify-between mb-4">
+          <p class="panel-label flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-amber-400 inline-block"></span>
+            Products <span id="productCount" class="ml-1 text-[#444]">(0)</span>
+          </p>
+          <p class="text-[10px] text-[#444]">Click box or card to toggle approval</p>
+        </div>
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+          <!-- Source image with product bboxes -->
+          <div class="bg-[#0d0d0d] rounded-xl overflow-hidden flex items-center justify-center">
+            <div class="img-wrap w-full" id="productImageWrap">
+              <img id="productSourceImg" src="" alt="" class="w-full rounded-xl" crossorigin="anonymous" />
             </div>
           </div>
-          <p class="text-[#444] text-xs mt-3">Click any box to toggle approved / rejected</p>
-        </div>
-
-        <!-- Crop thumbnails -->
-        <div class="section-card">
-          <p class="text-xs text-[#555] uppercase tracking-wider font-semibold mb-3">Detected Crops</p>
-          <div id="noDetections" class="hidden text-center py-12">
-            <svg class="w-10 h-10 text-[#2a2a2a] mx-auto mb-3" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 3.75H6A2.25 2.25 0 003.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-            <p class="text-[#444] text-sm">No products detected</p>
-            <p class="text-[#333] text-xs mt-1">The detection service returned no results for this image.<br/>Try a clearer photo or adjust the view.</p>
+          <!-- Product crop cards -->
+          <div>
+            <div id="noProducts" class="hidden text-center py-10">
+              <p class="text-[#444] text-sm">No products detected by YOLO</p>
+              <p class="text-[#333] text-xs mt-1">Subjects or smart crops may still be useful</p>
+            </div>
+            <div id="productGrid" class="grid grid-cols-2 gap-3 max-h-[420px] overflow-y-auto pr-1"></div>
           </div>
-          <div id="cropGrid" class="grid grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-1"></div>
         </div>
       </div>
 
-      <!-- Process bar -->
+      <!-- ╔══ Panel 2: Subjects ══╗ -->
+      <div class="section-card">
+        <p class="panel-label flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-indigo-400 inline-block"></span>
+          Subjects <span id="subjectCount" class="ml-1 text-[#444]">(0)</span>
+        </p>
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+          <!-- Image with subject overlays -->
+          <div class="bg-[#0d0d0d] rounded-xl overflow-hidden flex items-center justify-center">
+            <div class="img-wrap w-full" id="subjectImageWrap">
+              <img id="subjectSourceImg" src="" alt="" class="w-full rounded-xl" crossorigin="anonymous" />
+            </div>
+          </div>
+          <!-- Subject list -->
+          <div id="subjectList" class="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+            <p id="noSubjects" class="text-[#444] text-sm py-4 text-center hidden">No subjects detected</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ╔══ Panel 3: Text Regions ══╗ -->
+      <div class="section-card">
+        <p class="panel-label flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-pink-400 inline-block"></span>
+          Text Regions <span id="textCount" class="ml-1 text-[#444]">(0)</span>
+        </p>
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+          <!-- Image with text overlays -->
+          <div class="bg-[#0d0d0d] rounded-xl overflow-hidden flex items-center justify-center">
+            <div class="img-wrap w-full" id="textImageWrap">
+              <img id="textSourceImg" src="" alt="" class="w-full rounded-xl" crossorigin="anonymous" />
+            </div>
+          </div>
+          <!-- Text region list -->
+          <div id="textList" class="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+            <p id="noText" class="text-[#444] text-sm py-4 text-center hidden">No text detected</p>
+          </div>
+        </div>
+        <!-- Judge text treatment -->
+        <div id="textTreatmentBar" class="hidden mt-4 p-3 bg-[#161616] rounded-xl border border-[#2a2a2a] text-xs text-[#aaa] flex items-center gap-2">
+          <svg class="w-4 h-4 text-indigo-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18v-5.25m0 0a6.01 6.01 0 001.5-.189m-1.5.189a6.01 6.01 0 01-1.5-.189m3.75 7.478a12.06 12.06 0 01-4.5 0m3.75 2.311a7.5 7.5 0 01-3.75.187m3.75-.187c0-.308-.063-.608-.185-.882m0 0a1.5 1.5 0 00-2.63 0m2.63 0A1.5 1.5 0 0112 21m-3.75-2.311a12.06 12.06 0 004.5 0m-4.5 0c0-.308.063-.608.185-.882m0 0a1.5 1.5 0 012.63 0"/></svg>
+          <span id="textTreatmentText"></span>
+        </div>
+      </div>
+
+      <!-- ╔══ Panel 4: Smart Crops ══╗ -->
+      <div class="section-card">
+        <p class="panel-label flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-blue-400 inline-block"></span>
+          Smart Crops
+        </p>
+
+        <!-- Ratio tabs -->
+        <div class="flex items-center gap-1 mb-5">
+          <button class="tab-btn active" data-ratio="5:4" onclick="selectRatioTab('5:4', this)">5:4</button>
+          <button class="tab-btn"        data-ratio="1:1" onclick="selectRatioTab('1:1', this)">1:1</button>
+          <button class="tab-btn"        data-ratio="4:5" onclick="selectRatioTab('4:5', this)">4:5</button>
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+          <!-- Source image with crop frame -->
+          <div class="bg-[#0d0d0d] rounded-xl overflow-hidden flex items-center justify-center">
+            <div class="img-wrap w-full" id="cropImageWrap">
+              <img id="cropSourceImg" src="" alt="" class="w-full rounded-xl" crossorigin="anonymous" />
+            </div>
+          </div>
+          <!-- Crop candidates -->
+          <div>
+            <div id="cropCards" class="grid grid-cols-3 gap-3"></div>
+            <!-- Judge reasoning -->
+            <div id="cropReasoning" class="hidden mt-3 p-3 bg-[#161616] rounded-xl border border-[#2a2a2a] text-xs text-[#888] leading-relaxed"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ╔══ Panel 5: Process Bar ══╗ -->
       <div id="processBar" class="section-card">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <p class="text-white font-semibold text-sm">
-              <span id="approvedCount" class="text-emerald-400">0</span> crop(s) approved
+              <span id="approvedCount" class="text-emerald-400">0</span> product(s) approved
             </p>
-            <p class="text-[#555] text-xs mt-0.5">Approved crops will be identified by GPT and saved as products</p>
+            <p class="text-[#555] text-xs mt-0.5">Approved products will be identified by GPT and saved to inventory</p>
           </div>
-          <button id="processBtn"
-                  class="bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold px-6 py-3 rounded-xl transition-colors text-sm flex items-center gap-2 whitespace-nowrap">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
-            Process Approved Crops
+          <button id="processBtn" disabled
+                  class="bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed
+                         text-white font-semibold px-6 py-3 rounded-xl transition-colors text-sm
+                         flex items-center gap-2 whitespace-nowrap">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
+            </svg>
+            Process Approved
           </button>
         </div>
         <div id="processStatus" class="hidden mt-4 rounded-xl px-4 py-3 text-sm flex items-center gap-3"></div>
       </div>
-    </div>
 
+    </div><!-- /resultsSection -->
   </div>
 
   <script>
-    // ── State ─────────────────────────────────────────────────────
-    let detections = [];      // [{ id, x1, y1, x2, y2, confidence, label, state }]
-    let sourceImageUrl = '';
-    let imgNaturalW = 0, imgNaturalH = 0;
-    let savedMetadata = {};
+  // ══════════════════════════════════════════════════════════════
+  //  State
+  // ══════════════════════════════════════════════════════════════
+  let state = {
+    imageUrl: '', imgW: 0, imgH: 0,
+    products: [],   // { id, x1,y1,x2,y2, confidence, className, state:'pending'|'approved'|'rejected' }
+    subjects: [],   // { id, role, description, x1,y1,x2,y2 }  (normalized)
+    text: [],       // { id, content, type, x1,y1,x2,y2, confidence } (normalized)
+    crops: {},      // { '5:4': [...], '1:1': [...], '4:5': [...] }
+    judge: null,
+    selectedRatio: '5:4',
+    selectedCropId: null,
+    metadata: {}
+  };
 
-    // ── Drop zone ─────────────────────────────────────────────────
-    const dropZone       = document.getElementById('dropZone');
-    const photoInput     = document.getElementById('photoInput');
-    const dropPlaceholder= document.getElementById('dropPlaceholder');
-    const dropPreview    = document.getElementById('dropPreview');
-    const previewImg     = document.getElementById('previewImg');
-    const fileName       = document.getElementById('fileName');
+  // ══════════════════════════════════════════════════════════════
+  //  Drop zone
+  // ══════════════════════════════════════════════════════════════
+  const dropZone    = document.getElementById('dropZone');
+  const photoInput  = document.getElementById('photoInput');
 
-    function showPreview(file) {
-      const url = URL.createObjectURL(file);
-      dropPlaceholder.classList.add('hidden');
-      dropPreview.classList.remove('hidden');
-      const existing = dropPreview.querySelector('video');
-      if (existing) existing.remove();
-      if (file.type.startsWith('video/')) {
-        previewImg.classList.add('hidden');
-        const vid = document.createElement('video');
-        vid.src = url; vid.className = 'w-full h-full object-cover rounded-lg';
-        vid.muted = true; vid.loop = true; vid.autoplay = true; vid.playsInline = true;
-        dropPreview.appendChild(vid);
-      } else {
-        previewImg.classList.remove('hidden');
-        previewImg.src = url;
-      }
-      fileName.textContent = file.name;
-      fileName.classList.remove('hidden');
+  function showPreview(file) {
+    const url = URL.createObjectURL(file);
+    document.getElementById('dropPlaceholder').classList.add('hidden');
+    document.getElementById('dropPreview').classList.remove('hidden');
+    const existing = document.getElementById('dropPreview').querySelector('video');
+    if (existing) existing.remove();
+    if (file.type.startsWith('video/')) {
+      document.getElementById('previewImg').classList.add('hidden');
+      const vid = document.createElement('video');
+      vid.src = url; vid.className = 'w-full h-full object-cover rounded-lg';
+      vid.muted = true; vid.loop = true; vid.autoplay = true; vid.playsInline = true;
+      document.getElementById('dropPreview').appendChild(vid);
+    } else {
+      document.getElementById('previewImg').classList.remove('hidden');
+      document.getElementById('previewImg').src = url;
+    }
+    document.getElementById('fileName').textContent = file.name;
+    document.getElementById('fileName').classList.remove('hidden');
+  }
+
+  ['dragover','dragenter'].forEach(e => dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.add('drag-over'); }));
+  ['dragleave','drop'].forEach(e => dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.remove('drag-over'); }));
+  dropZone.addEventListener('drop', ev => { const f = ev.dataTransfer.files[0]; if (f) { photoInput.files = ev.dataTransfer.files; showPreview(f); } });
+  photoInput.addEventListener('change', () => { if (photoInput.files[0]) showPreview(photoInput.files[0]); });
+
+  // ══════════════════════════════════════════════════════════════
+  //  Status helpers
+  // ══════════════════════════════════════════════════════════════
+  const SPIN = '<svg class="w-4 h-4 spinner flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/></svg>';
+
+  function setStatus(elId, type, html) {
+    const styles = {
+      info:    'bg-[#0d1a2e] border border-[#1a3a5c] text-[#60a5fa]',
+      success: 'bg-[#0a1f12] border border-[#1a4728] text-[#34d399]',
+      error:   'bg-[#1f0a0a] border border-[#4a1010] text-[#f87171]',
+    };
+    const el = document.getElementById(elId);
+    el.className = 'mt-4 rounded-xl px-4 py-3 text-sm flex items-center gap-3 ' + styles[type];
+    el.innerHTML = html;
+    el.classList.remove('hidden');
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  Form submit
+  // ══════════════════════════════════════════════════════════════
+  document.getElementById('detectForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const btn  = document.getElementById('detectBtn');
+    btn.disabled = true;
+    setStatus('uploadStatus', 'info', SPIN + ' Uploading and running detection pipeline...');
+
+    state.metadata = {
+      truck_number:      form.truck_number.value,
+      price:             form.price.value,
+      delivery_location: form.delivery_location.value,
+      delivery_date:     form.delivery_date.value,
+      delivery_time:     form.delivery_time.value,
+    };
+
+    try {
+      const res  = await fetch('/api/detect', { method: 'POST', body: new FormData(form) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Detection failed');
+
+      state.imageUrl  = data.imageUrl;
+      state.imgW      = data.width  || 1024;
+      state.imgH      = data.height || 768;
+      state.products  = (data.products || []).map(p => ({ ...p, state: 'pending' }));
+      state.subjects  = data.subjects || [];
+      state.text      = data.text     || [];
+      state.crops     = data.crops    || {};
+      state.judge     = data.judge    || null;
+      state.selectedRatio  = '5:4';
+      state.selectedCropId = null;
+
+      document.getElementById('uploadStatus').classList.add('hidden');
+      renderAll();
+    } catch (err) {
+      setStatus('uploadStatus', 'error', '✕ ' + err.message);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // ══════════════════════════════════════════════════════════════
+  //  Render all panels
+  // ══════════════════════════════════════════════════════════════
+  function renderAll() {
+    const rs = document.getElementById('resultsSection');
+    rs.classList.remove('hidden');
+    rs.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    const np = state.products.length;
+    const ns = state.subjects.length;
+    const nt = state.text.length;
+    document.getElementById('detectionSummary').textContent =
+      `${np} product${np!==1?'s':''} · ${ns} subject${ns!==1?'s':''} · ${nt} text region${nt!==1?'s':''}`;
+
+    document.getElementById('productCount').textContent = `(${np})`;
+    document.getElementById('subjectCount').textContent = `(${ns})`;
+    document.getElementById('textCount').textContent    = `(${nt})`;
+
+    renderProductPanel();
+    renderSubjectPanel();
+    renderTextPanel();
+    renderCropPanel();
+    updateApprovedCount();
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  Panel 1: Products
+  // ══════════════════════════════════════════════════════════════
+  function renderProductPanel() {
+    const wrap = document.getElementById('productImageWrap');
+    const img  = document.getElementById('productSourceImg');
+    wrap.querySelectorAll('.bbox').forEach(b => b.remove());
+    img.src = state.imageUrl;
+
+    const np = state.products.length;
+    document.getElementById('noProducts').classList.toggle('hidden', np > 0);
+    document.getElementById('productGrid').classList.toggle('hidden', np === 0);
+
+    img.onload = () => {
+      state.products.forEach(p => createProductBox(p, wrap, img));
+      renderProductCards();
+    };
+    if (img.complete && img.naturalWidth) {
+      state.products.forEach(p => createProductBox(p, wrap, img));
+      renderProductCards();
+    }
+  }
+
+  function createProductBox(p, wrap, img) {
+    const scaleX = img.offsetWidth  / state.imgW;
+    const scaleY = img.offsetHeight / state.imgH;
+    const box = document.createElement('div');
+    box.className = 'bbox ' + p.state;
+    box.dataset.productId = p.id;
+    box.style.cssText = `left:${p.x1*scaleX}px;top:${p.y1*scaleY}px;width:${(p.x2-p.x1)*scaleX}px;height:${(p.y2-p.y1)*scaleY}px;`;
+    const lbl = document.createElement('div');
+    lbl.className = 'bbox-label';
+    const judgeWinner = state.judge?.products?.winnerIds?.includes(p.id);
+    lbl.textContent = `${p.id}·${Math.round(p.confidence*100)}%${judgeWinner?' ★':''}`;
+    box.appendChild(lbl);
+    box.addEventListener('click', () => toggleProduct(p.id));
+    wrap.appendChild(box);
+  }
+
+  function renderProductCards() {
+    const grid = document.getElementById('productGrid');
+    grid.innerHTML = '';
+    state.products.forEach((p, i) => {
+      const judgeWinner = state.judge?.products?.winnerIds?.includes(p.id);
+      const card = document.createElement('div');
+      card.className = 'det-card ' + p.state;
+      card.dataset.productId = p.id;
+      card.style.animationDelay = (i*40)+'ms';
+      card.classList.add('fade-up');
+
+      const canvas = document.createElement('canvas');
+      const cw = p.x2-p.x1, ch = p.y2-p.y1;
+      canvas.width=cw; canvas.height=ch;
+      const ctx = canvas.getContext('2d');
+      const img = new Image(); img.crossOrigin='anonymous';
+      img.onload = () => { ctx.drawImage(img, p.x1,p.y1,cw,ch, 0,0,cw,ch); card.querySelector('.crop-thumb').src=canvas.toDataURL('image/jpeg',0.9); };
+      img.src = state.imageUrl;
+
+      card.innerHTML = `
+        <div class="relative">
+          <img class="crop-thumb w-full h-24 object-cover bg-[#0d0d0d]" />
+          <span class="absolute top-2 right-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-black/60 text-white">${Math.round(p.confidence*100)}%</span>
+          ${judgeWinner ? '<span class="absolute top-2 left-2 judge-badge winner">★ Recommended</span>' : ''}
+        </div>
+        <div class="p-2.5">
+          <p class="text-white text-xs font-semibold mb-2">${p.id} <span class="text-[#555] font-normal">${p.className||''}</span></p>
+          <div class="flex gap-1.5">
+            <button class="approve-btn flex-1 text-[10px] py-1 rounded-lg border transition-colors
+              ${p.state==='approved'?'bg-emerald-900/60 border-emerald-600/50 text-emerald-300':'bg-transparent border-[#2e2e2e] text-[#555] hover:text-emerald-400'}">
+              ✓
+            </button>
+            <button class="reject-btn flex-1 text-[10px] py-1 rounded-lg border transition-colors
+              ${p.state==='rejected'?'bg-red-900/60 border-red-600/50 text-red-300':'bg-transparent border-[#2e2e2e] text-[#555] hover:text-red-400'}">
+              ✕
+            </button>
+          </div>
+        </div>
+      `;
+
+      card.querySelector('.approve-btn').addEventListener('click', () => setProductState(p.id, 'approved'));
+      card.querySelector('.reject-btn').addEventListener('click',  () => setProductState(p.id, 'rejected'));
+      grid.appendChild(card);
+    });
+  }
+
+  function toggleProduct(id) {
+    const p = state.products.find(x => x.id===id);
+    if (!p) return;
+    const next = p.state==='approved'?'rejected': p.state==='rejected'?'pending':'approved';
+    setProductState(id, next);
+  }
+
+  function setProductState(id, newState) {
+    const p = state.products.find(x => x.id===id);
+    if (!p) return;
+    p.state = newState;
+    // Update bbox
+    const box = document.querySelector(`.bbox[data-product-id="${id}"]`);
+    if (box) { box.className = 'bbox ' + newState; }
+    // Update card
+    const card = document.querySelector(`.det-card[data-product-id="${id}"]`);
+    if (card) { card.className = 'det-card ' + newState; }
+    updateApprovedCount();
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  Panel 2: Subjects
+  // ══════════════════════════════════════════════════════════════
+  function renderSubjectPanel() {
+    const wrap = document.getElementById('subjectImageWrap');
+    const img  = document.getElementById('subjectSourceImg');
+    wrap.querySelectorAll('.sbox').forEach(b => b.remove());
+    img.src = state.imageUrl;
+
+    const ns = state.subjects.length;
+    document.getElementById('noSubjects').classList.toggle('hidden', ns > 0);
+
+    const list = document.getElementById('subjectList');
+    list.innerHTML = '';
+    if (ns === 0) {
+      list.appendChild(document.getElementById('noSubjects'));
+      document.getElementById('noSubjects').classList.remove('hidden');
     }
 
-    ['dragover','dragenter'].forEach(e => dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.add('drag-over'); }));
-    ['dragleave','drop'].forEach(e => dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.remove('drag-over'); }));
-    dropZone.addEventListener('drop', ev => { const f = ev.dataTransfer.files[0]; if (f) { photoInput.files = ev.dataTransfer.files; showPreview(f); } });
-    photoInput.addEventListener('change', () => { if (photoInput.files[0]) showPreview(photoInput.files[0]); });
-
-    // ── Status helpers ────────────────────────────────────────────
-    function setUploadStatus(type, html) {
-      const el = document.getElementById('uploadStatus');
-      const styles = { info: 'bg-[#0d1a2e] border border-[#1a3a5c] text-[#60a5fa]', error: 'bg-[#1f0a0a] border border-[#4a1010] text-[#f87171]' };
-      el.className = 'mt-4 rounded-xl px-4 py-3 text-sm flex items-center gap-3 ' + styles[type];
-      el.innerHTML = html;
-      el.classList.remove('hidden');
+    img.onload = () => {
+      state.subjects.forEach(s => createSubjectBox(s, wrap, img));
+      renderSubjectCards(list);
+    };
+    if (img.complete && img.naturalWidth) {
+      state.subjects.forEach(s => createSubjectBox(s, wrap, img));
+      renderSubjectCards(list);
     }
-    function setProcessStatus(type, html) {
-      const el = document.getElementById('processStatus');
-      const styles = {
-        info:    'bg-[#0d1a2e] border border-[#1a3a5c] text-[#60a5fa]',
-        success: 'bg-[#0a1f12] border border-[#1a4728] text-[#34d399]',
-        error:   'bg-[#1f0a0a] border border-[#4a1010] text-[#f87171]',
-      };
-      el.className = 'mt-4 rounded-xl px-4 py-3 text-sm flex items-center gap-3 ' + styles[type];
-      el.innerHTML = html;
-      el.classList.remove('hidden');
-    }
-    const spin = '<svg class="w-4 h-4 spinner flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/></svg>';
+  }
 
-    // ── Detect form submit ────────────────────────────────────────
-    document.getElementById('detectForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const form = e.target;
-      setUploadStatus('info', spin + ' Uploading and running detection...');
-      document.getElementById('detectBtn').disabled = true;
+  function createSubjectBox(s, wrap, img) {
+    const w = img.offsetWidth, h = img.offsetHeight;
+    const box = document.createElement('div');
+    box.className = 'sbox ' + (s.role==='primary'?'primary':'secondary');
+    box.style.cssText = `left:${s.x1*w}px;top:${s.y1*h}px;width:${(s.x2-s.x1)*w}px;height:${(s.y2-s.y1)*h}px;`;
+    const lbl = document.createElement('div');
+    lbl.className = 'sbox-label';
+    lbl.textContent = s.id + (s.role==='primary'?' ★':'');
+    box.appendChild(lbl);
+    wrap.appendChild(box);
+  }
 
-      savedMetadata = {
-        truck_number:      form.truck_number.value,
-        price:             form.price.value,
-        delivery_location: form.delivery_location.value,
-        delivery_date:     form.delivery_date.value,
-        delivery_time:     form.delivery_time.value,
-      };
-
-      try {
-        const res  = await fetch('/api/detect', { method: 'POST', body: new FormData(form) });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Detection failed');
-
-        sourceImageUrl = data.imageUrl;
-        imgNaturalW    = data.width;
-        imgNaturalH    = data.height;
-        detections     = (data.detections || []).map((d, i) => ({ ...d, id: d.id || String(i), state: 'pending' }));
-
-        document.getElementById('uploadStatus').classList.add('hidden');
-        renderResults();
-      } catch (err) {
-        setUploadStatus('error', '✕ ' + err.message);
-      } finally {
-        document.getElementById('detectBtn').disabled = false;
-      }
+  function renderSubjectCards(list) {
+    const primaryId = state.judge?.subjects?.primaryId;
+    state.subjects.forEach(s => {
+      const isJudgePrimary = s.id === primaryId;
+      const div = document.createElement('div');
+      div.className = 'det-card p-3 ' + (isJudgePrimary ? 'winner' : '');
+      div.innerHTML = `
+        <div class="flex items-start justify-between gap-2">
+          <div>
+            <span class="text-[10px] font-bold uppercase tracking-wider ${s.role==='primary'?'text-indigo-400':'text-[#555]'}">${s.role}</span>
+            ${isJudgePrimary?'<span class="judge-badge winner ml-2">★ Primary</span>':''}
+            <p class="text-white text-xs mt-1">${s.description}</p>
+          </div>
+          <span class="text-[10px] text-[#444] font-mono whitespace-nowrap flex-shrink-0">${s.id}</span>
+        </div>
+        <p class="text-[10px] text-[#444] font-mono mt-1.5">
+          (${(s.x1*100).toFixed(0)}%,${(s.y1*100).toFixed(0)}%) → (${(s.x2*100).toFixed(0)}%,${(s.y2*100).toFixed(0)}%)
+        </p>
+      `;
+      list.appendChild(div);
     });
 
-    // ── Render results ────────────────────────────────────────────
-    function renderResults() {
-      document.getElementById('resultsSection').classList.remove('hidden');
-      document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (state.judge?.subjects?.reasoning) {
+      const r = document.createElement('div');
+      r.className = 'text-xs text-[#555] px-1 pt-1';
+      r.textContent = '⚖ ' + state.judge.subjects.reasoning;
+      list.appendChild(r);
+    }
+  }
 
-      const n = detections.length;
-      document.getElementById('detectionSummary').textContent =
-        n > 0 ? `${n} object${n !== 1 ? 's' : ''} detected — review and approve before processing`
-               : 'No objects detected in this image';
+  // ══════════════════════════════════════════════════════════════
+  //  Panel 3: Text Regions
+  // ══════════════════════════════════════════════════════════════
+  function renderTextPanel() {
+    const wrap = document.getElementById('textImageWrap');
+    const img  = document.getElementById('textSourceImg');
+    wrap.querySelectorAll('.tbox').forEach(b => b.remove());
+    img.src = state.imageUrl;
 
-      document.getElementById('noDetections').classList.toggle('hidden', n > 0);
-      document.getElementById('cropGrid').classList.toggle('hidden', n === 0);
+    const nt = state.text.length;
+    document.getElementById('noText').classList.toggle('hidden', nt > 0);
 
-      renderBoxes();
-      renderCrops();
-      updateApprovedCount();
+    const list = document.getElementById('textList');
+    list.innerHTML = '';
+    if (nt === 0) {
+      list.appendChild(document.getElementById('noText'));
+      document.getElementById('noText').classList.remove('hidden');
     }
 
-    // ── Bounding box overlays ─────────────────────────────────────
-    function renderBoxes() {
-      const container = document.getElementById('imageContainer');
-      const img       = document.getElementById('sourceImage');
-
-      // Clear old boxes
-      container.querySelectorAll('.bbox').forEach(b => b.remove());
-      img.src = sourceImageUrl;
-
-      img.onload = () => {
-        imgNaturalW = imgNaturalW || img.naturalWidth;
-        imgNaturalH = imgNaturalH || img.naturalHeight;
-        detections.forEach(d => createBox(d));
-      };
-      // If already loaded
-      if (img.complete && img.naturalWidth) {
-        imgNaturalW = imgNaturalW || img.naturalWidth;
-        imgNaturalH = imgNaturalH || img.naturalHeight;
-        detections.forEach(d => createBox(d));
-      }
+    img.onload = () => {
+      state.text.forEach(t => createTextBox(t, wrap, img));
+      renderTextCards(list);
+    };
+    if (img.complete && img.naturalWidth) {
+      state.text.forEach(t => createTextBox(t, wrap, img));
+      renderTextCards(list);
     }
 
-    function createBox(det) {
-      const container = document.getElementById('imageContainer');
-      const xPct = (det.x1 / imgNaturalW) * 100;
-      const yPct = (det.y1 / imgNaturalH) * 100;
-      const wPct = ((det.x2 - det.x1) / imgNaturalW) * 100;
-      const hPct = ((det.y2 - det.y1) / imgNaturalH) * 100;
-
-      const box = document.createElement('div');
-      box.className = 'bbox ' + det.state;
-      box.dataset.id = det.id;
-      box.style.cssText = `left:${xPct}%;top:${yPct}%;width:${wPct}%;height:${hPct}%;`;
-
-      const label = document.createElement('div');
-      label.className = 'bbox-label';
-      label.textContent = `#${det.id} · ${Math.round(det.confidence * 100)}%`;
-      box.appendChild(label);
-
-      box.addEventListener('click', () => toggleDetection(det.id));
-      container.appendChild(box);
+    // Judge text treatment
+    if (state.judge?.text) {
+      const j = state.judge.text;
+      const bar = document.getElementById('textTreatmentBar');
+      document.getElementById('textTreatmentText').textContent =
+        `Judge recommends: ${j.treatment.toUpperCase()} text${j.affectedIds?.length?` (${j.affectedIds.join(', ')})`:''} — ${j.reasoning}`;
+      bar.classList.remove('hidden');
     }
+  }
 
-    // ── Crop thumbnails ───────────────────────────────────────────
-    function renderCrops() {
-      const grid = document.getElementById('cropGrid');
-      grid.innerHTML = '';
-      detections.forEach((d, i) => {
-        const card = document.createElement('div');
-        card.className = 'crop-card ' + d.state;
-        card.dataset.id = d.id;
-        card.style.animationDelay = (i * 40) + 'ms';
-        card.classList.add('fade-up');
+  function createTextBox(t, wrap, img) {
+    const w = img.offsetWidth, h = img.offsetHeight;
+    const box = document.createElement('div');
+    box.className = 'tbox';
+    box.style.cssText = `left:${t.x1*w}px;top:${t.y1*h}px;width:${(t.x2-t.x1)*w}px;height:${(t.y2-t.y1)*h}px;`;
+    const lbl = document.createElement('div');
+    lbl.className = 'tbox-label';
+    lbl.textContent = t.content.length > 20 ? t.content.slice(0,20)+'…' : t.content;
+    box.appendChild(lbl);
+    wrap.appendChild(box);
+  }
 
-        // Generate crop thumbnail on canvas
-        const canvas = document.createElement('canvas');
-        const w = d.x2 - d.x1, h = d.y2 - d.y1;
-        canvas.width = w; canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => {
-          ctx.drawImage(img, d.x1, d.y1, w, h, 0, 0, w, h);
-          card.querySelector('.crop-img').src = canvas.toDataURL('image/jpeg', 0.9);
-        };
-        img.src = sourceImageUrl;
-
-        card.innerHTML = `
-          <div class="relative">
-            <img class="crop-img w-full h-28 object-cover bg-[#0d0d0d]" src="" alt="Crop ${d.id}" />
-            <span class="absolute top-2 right-2 text-[10px] font-bold px-2 py-0.5 rounded-full
-                         bg-black/60 text-white">${Math.round(d.confidence * 100)}%</span>
-          </div>
-          <div class="p-3">
-            <p class="text-white text-xs font-semibold mb-2">Object #${d.id}
-              ${d.label ? '<span class="text-[#555] font-normal ml-1">' + d.label + '</span>' : ''}
-            </p>
-            <div class="flex gap-2">
-              <button class="approve-btn flex-1 text-xs py-1.5 rounded-lg border transition-colors
-                             ${d.state === 'approved'
-                               ? 'bg-emerald-900/60 border-emerald-600/50 text-emerald-300'
-                               : 'bg-transparent border-[#2e2e2e] text-[#555] hover:border-emerald-600/50 hover:text-emerald-400'}">
-                ✓ Approve
-              </button>
-              <button class="reject-btn flex-1 text-xs py-1.5 rounded-lg border transition-colors
-                             ${d.state === 'rejected'
-                               ? 'bg-red-900/60 border-red-600/50 text-red-300'
-                               : 'bg-transparent border-[#2e2e2e] text-[#555] hover:border-red-600/50 hover:text-red-400'}">
-                ✕ Reject
-              </button>
+  function renderTextCards(list) {
+    const affectedIds = state.judge?.text?.affectedIds || [];
+    state.text.forEach(t => {
+      const isAffected = affectedIds.includes(t.id);
+      const div = document.createElement('div');
+      div.className = 'det-card p-3';
+      div.innerHTML = `
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="text-[9px] font-bold uppercase tracking-wider text-pink-400 bg-pink-900/20 px-2 py-0.5 rounded">${t.type}</span>
+              ${isAffected?'<span class="judge-badge winner">★ Flagged</span>':''}
+              <span class="text-[10px] text-[#444] font-mono ml-auto">${Math.round(t.confidence*100)}%</span>
             </div>
+            <p class="text-white text-xs font-mono break-all">"${t.content}"</p>
           </div>
-        `;
+        </div>
+        <p class="text-[10px] text-[#444] font-mono mt-1.5">
+          (${(t.x1*100).toFixed(0)}%,${(t.y1*100).toFixed(0)}%) → (${(t.x2*100).toFixed(0)}%,${(t.y2*100).toFixed(0)}%)
+        </p>
+      `;
+      list.appendChild(div);
+    });
 
-        card.querySelector('.approve-btn').addEventListener('click', () => setDetectionState(d.id, 'approved'));
-        card.querySelector('.reject-btn').addEventListener('click',  () => setDetectionState(d.id, 'rejected'));
-        grid.appendChild(card);
+    if (state.judge?.text?.reasoning) {
+      const r = document.createElement('div');
+      r.className = 'text-xs text-[#555] px-1 pt-1';
+      r.textContent = '⚖ ' + state.judge.text.reasoning;
+      list.appendChild(r);
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  Panel 4: Smart Crops
+  // ══════════════════════════════════════════════════════════════
+  function selectRatioTab(ratio, btn) {
+    state.selectedRatio = ratio;
+    state.selectedCropId = null;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderCropPanel();
+  }
+
+  function renderCropPanel() {
+    const wrap = document.getElementById('cropImageWrap');
+    const img  = document.getElementById('cropSourceImg');
+    wrap.querySelectorAll('.crop-frame').forEach(f => f.remove());
+    img.src = state.imageUrl;
+
+    const candidates = state.crops[state.selectedRatio] || [];
+    const judgeKey   = 'crop_' + state.selectedRatio.replace(':','_');
+    const winnerId   = state.judge?.[judgeKey]?.winnerId;
+    if (!state.selectedCropId) state.selectedCropId = winnerId || candidates[0]?.id;
+
+    img.onload = () => {
+      candidates.forEach(c => createCropFrame(c, wrap, img, winnerId));
+      renderCropCards(candidates, winnerId);
+    };
+    if (img.complete && img.naturalWidth) {
+      candidates.forEach(c => createCropFrame(c, wrap, img, winnerId));
+      renderCropCards(candidates, winnerId);
+    }
+  }
+
+  function createCropFrame(c, wrap, img, winnerId) {
+    const scaleX = img.offsetWidth  / state.imgW;
+    const scaleY = img.offsetHeight / state.imgH;
+    const frame = document.createElement('div');
+    const isSelected = c.id === state.selectedCropId;
+    const isWinner   = c.id === winnerId;
+    frame.className = 'crop-frame' + (isSelected ? (isWinner?' winner':' ') : ' dim');
+    frame.dataset.cropId = c.id;
+    frame.style.cssText = `left:${c.x1*scaleX}px;top:${c.y1*scaleY}px;width:${(c.x2-c.x1)*scaleX}px;height:${(c.y2-c.y1)*scaleY}px;`;
+    frame.addEventListener('click', () => { state.selectedCropId = c.id; renderCropPanel(); });
+    wrap.appendChild(frame);
+  }
+
+  function renderCropCards(candidates, winnerId) {
+    const grid = document.getElementById('cropCards');
+    grid.innerHTML = '';
+    const judgeKey = 'crop_' + state.selectedRatio.replace(':','_');
+    const reasoning = state.judge?.[judgeKey]?.reasoning;
+
+    candidates.forEach(c => {
+      const isSelected = c.id === state.selectedCropId;
+      const isWinner   = c.id === winnerId;
+      const card = document.createElement('div');
+      card.className = 'crop-card' + (isSelected?' selected':'');
+
+      // Generate canvas crop thumbnail
+      const canvas = document.createElement('canvas');
+      const cw = c.x2-c.x1, ch = c.y2-c.y1;
+      canvas.width=cw; canvas.height=ch;
+      const ctx = canvas.getContext('2d');
+      const img = new Image(); img.crossOrigin='anonymous';
+      img.onload = () => { ctx.drawImage(img, c.x1,c.y1,cw,ch, 0,0,cw,ch); card.querySelector('.crop-thumb').src=canvas.toDataURL('image/jpeg',0.9); };
+      img.src = state.imageUrl;
+
+      card.innerHTML = `
+        <div class="relative">
+          <img class="crop-thumb w-full h-24 object-cover bg-[#0d0d0d]" />
+          ${isWinner?'<span class="absolute top-1 left-1 judge-badge winner">★</span>':''}
+        </div>
+        <div class="p-2">
+          <p class="text-white text-[10px] font-semibold">${c.label}</p>
+          <p class="text-[#555] text-[9px] font-mono mt-0.5">score ${c.score}</p>
+        </div>
+      `;
+
+      card.addEventListener('click', () => { state.selectedCropId = c.id; renderCropPanel(); });
+      grid.appendChild(card);
+    });
+
+    const reasoningEl = document.getElementById('cropReasoning');
+    if (reasoning) {
+      reasoningEl.textContent = '⚖ ' + reasoning;
+      reasoningEl.classList.remove('hidden');
+    } else {
+      reasoningEl.classList.add('hidden');
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  Approve / Reject all + count
+  // ══════════════════════════════════════════════════════════════
+  document.getElementById('approveAllBtn').addEventListener('click', () => {
+    state.products.forEach(p => setProductState(p.id, 'approved'));
+  });
+  document.getElementById('rejectAllBtn').addEventListener('click', () => {
+    state.products.forEach(p => setProductState(p.id, 'rejected'));
+  });
+
+  function updateApprovedCount() {
+    const n = state.products.filter(p => p.state==='approved').length;
+    document.getElementById('approvedCount').textContent = n;
+    document.getElementById('processBtn').disabled = n===0;
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  Process approved
+  // ══════════════════════════════════════════════════════════════
+  document.getElementById('processBtn').addEventListener('click', async () => {
+    const approved = state.products.filter(p => p.state==='approved');
+    if (!approved.length) return;
+
+    setStatus('processStatus', 'info', SPIN + ` Queuing ${approved.length} crop(s) for identification...`);
+    document.getElementById('processBtn').disabled = true;
+
+    try {
+      const res  = await fetch('/api/detect/process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageUrl: state.imageUrl,
+          approvedBoxes: approved.map(p => ({ id: p.id, x1: p.x1, y1: p.y1, x2: p.x2, y2: p.y2, confidence: p.confidence })),
+          metadata: state.metadata
+        })
       });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Processing failed');
+      setStatus('processStatus', 'success',
+        `✓ Job queued (${data.jobId}). Products will appear in <a href="index.html" class="underline hover:text-white">Inventory</a> once processed.`
+      );
+    } catch (err) {
+      setStatus('processStatus', 'error', '✕ ' + err.message);
+      document.getElementById('processBtn').disabled = false;
     }
-
-    // ── State management ──────────────────────────────────────────
-    function toggleDetection(id) {
-      const det = detections.find(d => d.id === id);
-      if (!det) return;
-      const next = det.state === 'approved' ? 'rejected' : det.state === 'rejected' ? 'pending' : 'approved';
-      setDetectionState(id, next);
-    }
-
-    function setDetectionState(id, state) {
-      const det = detections.find(d => d.id === id);
-      if (!det) return;
-      det.state = state;
-
-      // Update bounding box
-      const box = document.querySelector(`.bbox[data-id="${id}"]`);
-      if (box) box.className = 'bbox ' + state;
-
-      // Update crop card
-      const card = document.querySelector(`.crop-card[data-id="${id}"]`);
-      if (card) {
-        card.className = 'crop-card ' + state;
-        const approveBtn = card.querySelector('.approve-btn');
-        const rejectBtn  = card.querySelector('.reject-btn');
-        approveBtn.className = approveBtn.className.replace(/bg-emerald[^\s]*/g, '').replace(/border-emerald[^\s]*/g, '').replace(/text-emerald[^\s]*/g, '').trim();
-        rejectBtn.className  = rejectBtn.className.replace(/bg-red[^\s]*/g, '').replace(/border-red[^\s]*/g, '').replace(/text-red[^\s]*/g, '').trim();
-        if (state === 'approved') {
-          approveBtn.className += ' bg-emerald-900/60 border-emerald-600/50 text-emerald-300';
-        } else if (state === 'rejected') {
-          rejectBtn.className += ' bg-red-900/60 border-red-600/50 text-red-300';
-        }
-      }
-
-      updateApprovedCount();
-    }
-
-    function updateApprovedCount() {
-      const n = detections.filter(d => d.state === 'approved').length;
-      document.getElementById('approvedCount').textContent = n;
-      document.getElementById('processBtn').disabled = n === 0;
-    }
-
-    // ── Approve/Reject all ────────────────────────────────────────
-    document.getElementById('approveAllBtn').addEventListener('click', () => {
-      detections.forEach(d => setDetectionState(d.id, 'approved'));
-    });
-    document.getElementById('rejectAllBtn').addEventListener('click', () => {
-      detections.forEach(d => setDetectionState(d.id, 'rejected'));
-    });
-
-    // ── Process approved ──────────────────────────────────────────
-    document.getElementById('processBtn').addEventListener('click', async () => {
-      const approved = detections.filter(d => d.state === 'approved');
-      if (!approved.length) return;
-
-      setProcessStatus('info', spin + ` Queuing ${approved.length} crop(s) for identification...`);
-      document.getElementById('processBtn').disabled = true;
-
-      try {
-        const res  = await fetch('/api/detect/process', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            imageUrl: sourceImageUrl,
-            approvedBoxes: approved.map(d => ({ id: d.id, x1: d.x1, y1: d.y1, x2: d.x2, y2: d.y2, confidence: d.confidence })),
-            metadata: savedMetadata
-          })
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Processing failed');
-
-        setProcessStatus('success',
-          `✓ Job queued (${data.jobId}). Products will appear in <a href="index.html" class="underline hover:text-white">Inventory</a> once processed.`
-        );
-      } catch (err) {
-        setProcessStatus('error', '✕ ' + err.message);
-        document.getElementById('processBtn').disabled = false;
-      }
-    });
+  });
   </script>
 </body>
 </html>

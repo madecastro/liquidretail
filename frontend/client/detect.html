@@ -127,6 +127,43 @@
     .judge-badge.winner { background: #064e3b; color: #34d399; border: 1px solid #065f46; }
     .judge-badge.normal { background: #1c1c1e; color: #555; border: 1px solid #2a2a2a; }
 
+    /* ── Timestamp chip ── */
+    .time-chip {
+      font-size: 9px; font-weight: 600; padding: 1px 6px; border-radius: 4px;
+      background: #1a2e1a; color: #86efac; border: 1px solid #1a4728; font-family: 'Courier New', monospace;
+    }
+
+    /* ── Entity chip ── */
+    .entity-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: #1c1c1e; border: 1px solid #2e2e2e; border-radius: 999px;
+      padding: 4px 10px; font-size: 11px; color: #f0f0f0;
+      margin: 3px; cursor: pointer; transition: background 0.12s, border-color 0.12s;
+    }
+    .entity-chip:hover { background: #262626; border-color: #3a3a3a; }
+    .entity-chip .etype {
+      font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
+      padding: 1px 5px; border-radius: 3px; background: #333; color: #aaa;
+    }
+    .entity-chip[data-type="product"] .etype { background: #4a1d24; color: #fda4af; }
+    .entity-chip[data-type="brand"]   .etype { background: #1e3a5c; color: #93c5fd; }
+    .entity-chip[data-type="model"]   .etype { background: #3b2a5c; color: #c4b5fd; }
+    .entity-chip[data-type="part_number"] .etype { background: #4a3d0a; color: #fde68a; }
+    .entity-chip[data-type="quantity"] .etype { background: #1a4728; color: #86efac; }
+
+    /* ── Transcript segment ── */
+    .segment-row {
+      display: flex; gap: 10px; padding: 6px 4px; border-left: 2px solid transparent;
+      cursor: pointer; transition: background 0.12s, border-color 0.12s;
+    }
+    .segment-row:hover { background: #141414; border-left-color: #C8102E; }
+    .segment-row .seg-time {
+      font-family: 'Courier New', monospace; font-size: 10px; color: #555;
+      flex-shrink: 0; width: 58px; padding-top: 2px;
+    }
+    .segment-row .seg-text { font-size: 12px; color: #ccc; line-height: 1.5; }
+    .segment-row.active { background: #1a0e0e; border-left-color: #f87171; }
+
     @keyframes spin    { to { transform: rotate(360deg); } }
     @keyframes pulse   { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
     @keyframes fadeUp  { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
@@ -322,6 +359,40 @@
         </div>
       </div>
 
+      <!-- ╔══ Video-only: Audio Transcript ══╗ -->
+      <div id="transcriptPanel" class="section-card hidden">
+        <div class="flex items-center justify-between mb-4">
+          <p class="panel-label flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 inline-block"></span>
+            Audio Transcript
+          </p>
+          <p id="transcriptMeta" class="text-[10px] text-[#444]"></p>
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-5 gap-5">
+          <!-- Video player + entity chips -->
+          <div class="xl:col-span-3 space-y-4">
+            <div class="bg-[#0d0d0d] rounded-xl overflow-hidden">
+              <video id="transcriptVideo" controls class="w-full rounded-xl" preload="metadata"></video>
+            </div>
+            <div>
+              <p class="text-[10px] font-bold uppercase tracking-wider text-[#555] mb-2">Named Entities <span id="entityCount" class="text-[#444]">(0)</span></p>
+              <div id="entityChips" class="flex flex-wrap">
+                <p id="noEntities" class="text-[#444] text-sm p-2 hidden">No entities detected</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Segment list -->
+          <div class="xl:col-span-2">
+            <p class="text-[10px] font-bold uppercase tracking-wider text-[#555] mb-2">Segments</p>
+            <div id="segmentList" class="max-h-[420px] overflow-y-auto pr-1 space-y-0.5">
+              <p id="noSegments" class="text-[#444] text-sm p-2 hidden">No transcript available</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- ╔══ Panel 4: Smart Crops ══╗ -->
       <div class="section-card">
         <p class="panel-label flex items-center gap-2">
@@ -382,12 +453,14 @@
   //  State
   // ══════════════════════════════════════════════════════════════
   let state = {
-    imageUrl: '', imgW: 0, imgH: 0,
-    products: [],   // { id, x1,y1,x2,y2, confidence, className, state:'pending'|'approved'|'rejected' }
-    subjects: [],   // { id, role, description, x1,y1,x2,y2 }  (normalized)
-    text: [],       // { id, content, type, x1,y1,x2,y2, confidence } (normalized)
-    crops: {},      // { '5:4': [...], '1:1': [...], '4:5': [...] }
+    type: 'image',  // 'image' | 'video'
+    imageUrl: '', videoUrl: '', imgW: 0, imgH: 0,
+    products: [],
+    subjects: [],
+    text: [],
+    crops: {},
     judge: null,
+    transcript: null,  // { text, duration, segments:[{id,start,end,text}], entities:[{id,text,type,startSec,endSec}] }
     selectedRatio: '5:4',
     selectedCropId: null,
     metadata: {}
@@ -464,14 +537,17 @@
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Detection failed');
 
-      state.imageUrl  = data.imageUrl;
-      state.imgW      = data.width  || 1024;
-      state.imgH      = data.height || 768;
+      state.type      = data.type     || 'image';
+      state.imageUrl  = data.imageUrl || '';
+      state.videoUrl  = data.videoUrl || '';
+      state.imgW      = data.width    || 1024;
+      state.imgH      = data.height   || 768;
       state.products  = (data.products || []).map(p => ({ ...p, state: 'pending' }));
       state.subjects  = data.subjects || [];
       state.text      = data.text     || [];
       state.crops     = data.crops    || {};
       state.judge     = data.judge    || null;
+      state.transcript= data.transcript || null;
       state.selectedRatio  = '5:4';
       state.selectedCropId = null;
 
@@ -495,8 +571,10 @@
     const np = state.products.length;
     const ns = state.subjects.length;
     const nt = state.text.length;
-    document.getElementById('detectionSummary').textContent =
-      `${np} product${np!==1?'s':''} · ${ns} subject${ns!==1?'s':''} · ${nt} text region${nt!==1?'s':''}`;
+    const ne = state.transcript?.entities?.length || 0;
+    const summary = `${np} product${np!==1?'s':''} · ${ns} subject${ns!==1?'s':''} · ${nt} text region${nt!==1?'s':''}` +
+                    (state.type === 'video' ? ` · ${ne} entit${ne!==1?'ies':'y'}` : '');
+    document.getElementById('detectionSummary').textContent = summary;
 
     document.getElementById('productCount').textContent = `(${np})`;
     document.getElementById('subjectCount').textContent = `(${ns})`;
@@ -505,6 +583,7 @@
     renderProductPanel();
     renderSubjectPanel();
     renderTextPanel();
+    renderTranscriptPanel();
     renderCropPanel();
     updateApprovedCount();
   }
@@ -516,7 +595,7 @@
     const wrap = document.getElementById('productImageWrap');
     const img  = document.getElementById('productSourceImg');
     wrap.querySelectorAll('.bbox').forEach(b => b.remove());
-    img.src = state.imageUrl;
+    img.src = state.imageUrl || '';
 
     const np = state.products.length;
     document.getElementById('noProducts').classList.toggle('hidden', np > 0);
@@ -574,7 +653,10 @@
           ${judgeWinner ? '<span class="absolute top-2 left-2 judge-badge winner">★ Recommended</span>' : ''}
         </div>
         <div class="p-2.5">
-          <p class="text-white text-xs font-semibold mb-2">${p.id} <span class="text-[#555] font-normal">${p.className||''}</span></p>
+          <div class="flex items-center justify-between gap-2 mb-2">
+            <p class="text-white text-xs font-semibold">${p.id} <span class="text-[#555] font-normal">${p.className||''}</span></p>
+            ${p.firstSeenSec != null ? `<span class="time-chip">${fmtTime(p.firstSeenSec)}</span>` : ''}
+          </div>
           <div class="flex gap-1.5">
             <button class="approve-btn flex-1 text-[10px] py-1 rounded-lg border transition-colors
               ${p.state==='approved'?'bg-emerald-900/60 border-emerald-600/50 text-emerald-300':'bg-transparent border-[#2e2e2e] text-[#555] hover:text-emerald-400'}">
@@ -592,6 +674,107 @@
       card.querySelector('.reject-btn').addEventListener('click',  () => setProductState(p.id, 'rejected'));
       grid.appendChild(card);
     });
+  }
+
+  function fmtTime(sec) {
+    if (sec == null) return '';
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m}:${s.toString().padStart(2,'0')}`;
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  Transcript Panel (video only)
+  // ══════════════════════════════════════════════════════════════
+  function renderTranscriptPanel() {
+    const panel = document.getElementById('transcriptPanel');
+    if (state.type !== 'video' || !state.videoUrl) {
+      panel.classList.add('hidden');
+      return;
+    }
+    panel.classList.remove('hidden');
+
+    const vid = document.getElementById('transcriptVideo');
+    vid.src = state.videoUrl;
+
+    const t = state.transcript;
+    const meta = document.getElementById('transcriptMeta');
+
+    if (!t) {
+      meta.textContent = 'Transcription skipped (video > 25MB or Whisper error)';
+      document.getElementById('entityChips').innerHTML = '';
+      document.getElementById('noEntities').classList.remove('hidden');
+      document.getElementById('entityChips').appendChild(document.getElementById('noEntities'));
+      document.getElementById('segmentList').innerHTML = '';
+      document.getElementById('noSegments').classList.remove('hidden');
+      document.getElementById('segmentList').appendChild(document.getElementById('noSegments'));
+      return;
+    }
+
+    meta.textContent = `${t.segments.length} segments · ${t.duration.toFixed(1)}s audio`;
+
+    // Entity chips
+    const chipsWrap = document.getElementById('entityChips');
+    chipsWrap.innerHTML = '';
+    document.getElementById('entityCount').textContent = `(${t.entities.length})`;
+    if (t.entities.length === 0) {
+      chipsWrap.innerHTML = '<p class="text-[#444] text-sm p-2">No named entities detected</p>';
+    } else {
+      t.entities.forEach(e => {
+        const chip = document.createElement('div');
+        chip.className = 'entity-chip';
+        chip.dataset.type = e.type;
+        chip.innerHTML = `
+          <span class="etype">${e.type.replace('_',' ')}</span>
+          <span>${escapeHtml(e.text)}</span>
+          <span class="time-chip">${fmtTime(e.startSec)}</span>
+        `;
+        chip.addEventListener('click', () => seekVideo(e.startSec));
+        chipsWrap.appendChild(chip);
+      });
+    }
+
+    // Segments
+    const segList = document.getElementById('segmentList');
+    segList.innerHTML = '';
+    if (t.segments.length === 0) {
+      segList.innerHTML = '<p class="text-[#444] text-sm p-2">No transcript segments</p>';
+    } else {
+      t.segments.forEach(s => {
+        const row = document.createElement('div');
+        row.className = 'segment-row';
+        row.dataset.segmentId = s.id;
+        row.dataset.start = s.start;
+        row.dataset.end   = s.end;
+        row.innerHTML = `
+          <div class="seg-time">${fmtTime(s.start)}</div>
+          <div class="seg-text">${escapeHtml(s.text)}</div>
+        `;
+        row.addEventListener('click', () => seekVideo(s.start));
+        segList.appendChild(row);
+      });
+    }
+
+    // Highlight active segment as video plays
+    vid.ontimeupdate = () => {
+      const t0 = vid.currentTime;
+      document.querySelectorAll('.segment-row').forEach(r => {
+        const start = parseFloat(r.dataset.start);
+        const end   = parseFloat(r.dataset.end);
+        r.classList.toggle('active', t0 >= start && t0 < end);
+      });
+    };
+  }
+
+  function seekVideo(sec) {
+    const vid = document.getElementById('transcriptVideo');
+    if (!vid) return;
+    vid.currentTime = Math.max(0, sec);
+    vid.play().catch(() => {});
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
 
   function toggleProduct(id) {

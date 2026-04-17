@@ -515,14 +515,29 @@
   }
 
   // ══════════════════════════════════════════════════════════════
-  //  Form submit
+  //  Stage labels for progress display
+  // ══════════════════════════════════════════════════════════════
+  const STAGE_LABELS = {
+    'queued':        'Queued — waiting for worker',
+    'yolo':          'Detecting products (YOLO)',
+    'yolo-video':    'Scanning video frames (YOLO @ 2 fps)',
+    'transcribe':    'Transcribing audio (Whisper)',
+    'ner':           'Extracting named entities',
+    'subjects-text': 'Analyzing subjects & text (GPT-4.1)',
+    'smart-crops':   'Generating smart crops',
+    'judge':         'Judging best results (GPT-4.1)',
+    'done':          'Done'
+  };
+
+  // ══════════════════════════════════════════════════════════════
+  //  Form submit — queue job, poll until done
   // ══════════════════════════════════════════════════════════════
   document.getElementById('detectForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.target;
     const btn  = document.getElementById('detectBtn');
     btn.disabled = true;
-    setStatus('uploadStatus', 'info', SPIN + ' Uploading and running detection pipeline...');
+    setStatus('uploadStatus', 'info', SPIN + ' Uploading file...');
 
     state.metadata = {
       truck_number:      form.truck_number.value,
@@ -533,21 +548,36 @@
     };
 
     try {
-      const res  = await fetch('/api/detect', { method: 'POST', body: new FormData(form) });
+      const fd = new FormData(form);
+      fd.append('metadata', JSON.stringify(state.metadata));
+      const res  = await fetch('/api/detect', { method: 'POST', body: fd });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Detection failed');
+      if (!res.ok) throw new Error(data.error || data.message || 'Failed to queue job');
 
-      state.type      = data.type     || 'image';
-      state.imageUrl  = data.imageUrl || '';
-      state.videoUrl  = data.videoUrl || '';
-      state.imgW      = data.width    || 1024;
-      state.imgH      = data.height   || 768;
-      state.products  = (data.products || []).map(p => ({ ...p, state: 'pending' }));
-      state.subjects  = data.subjects || [];
-      state.text      = data.text     || [];
-      state.crops     = data.crops    || {};
-      state.judge     = data.judge    || null;
-      state.transcript= data.transcript || null;
+      const jobId = data.jobId;
+      setStatus('uploadStatus', 'info', SPIN + ' ' + STAGE_LABELS.queued);
+
+      const result = await pollJobStatus(jobId, (job) => {
+        const label = STAGE_LABELS[job.stage] || `Working (${job.stage || '...'})`;
+        setStatus('uploadStatus', 'info', SPIN + ' ' + label);
+      });
+
+      if (result.status === 'failed') {
+        throw new Error(`Pipeline failed at stage "${result.errorStage || 'unknown'}": ${result.error || 'unknown error'}`);
+      }
+
+      const d = result.result || {};
+      state.type      = d.type     || 'image';
+      state.imageUrl  = d.imageUrl || '';
+      state.videoUrl  = d.videoUrl || '';
+      state.imgW      = d.width    || 1024;
+      state.imgH      = d.height   || 768;
+      state.products  = (d.products || []).map(p => ({ ...p, state: 'pending' }));
+      state.subjects  = d.subjects || [];
+      state.text      = d.text     || [];
+      state.crops     = d.crops    || {};
+      state.judge     = d.judge    || null;
+      state.transcript= d.transcript || null;
       state.selectedRatio  = '5:4';
       state.selectedCropId = null;
 
@@ -559,6 +589,20 @@
       btn.disabled = false;
     }
   });
+
+  async function pollJobStatus(jobId, onTick) {
+    const startedAt = Date.now();
+    const MAX_WAIT_MS = 15 * 60 * 1000; // 15 min ceiling
+    while (true) {
+      if (Date.now() - startedAt > MAX_WAIT_MS) throw new Error('Timed out waiting for detection job');
+      const res = await fetch(`/api/detect/status/${jobId}`);
+      if (!res.ok) throw new Error('Failed to check job status');
+      const job = await res.json();
+      onTick(job);
+      if (job.status === 'completed' || job.status === 'failed') return job;
+      await new Promise(r => setTimeout(r, 2500));
+    }
+  }
 
   // ══════════════════════════════════════════════════════════════
   //  Render all panels

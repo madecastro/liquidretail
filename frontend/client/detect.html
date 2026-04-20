@@ -95,6 +95,18 @@
     .crop-frame.winner { border-color: #34d399; border-width: 2.5px; background: rgba(52,211,153,0.1); }
     .crop-frame.dim    { border-color: #2563eb33; opacity: 0.4; }
 
+    /* ── Safe envelope overlay (subject union across frames) ── */
+    .safe-envelope {
+      position: absolute; box-sizing: border-box; border-radius: 4px; pointer-events: none;
+      border: 2px dashed #fbbf24; background: rgba(251,191,36,0.04);
+    }
+    .safe-envelope-label {
+      position: absolute; top: -20px; left: -1px;
+      background: #fbbf24; color: #000;
+      font-size: 9px; font-weight: 700; padding: 1px 6px;
+      border-radius: 3px 3px 0 0; white-space: nowrap;
+    }
+
     /* ── Cards ── */
     .det-card {
       background: #161616; border: 1.5px solid #242424; border-radius: 12px; overflow: hidden;
@@ -472,6 +484,7 @@
     crops: {},
     judge: null,
     transcript: null,  // { text, duration, segments:[{id,start,end,text}], entities:[{id,text,type,startSec,endSec}] }
+    safeRect: null,    // { x1, y1, x2, y2 } pixel coords of subject envelope
     selectedRatio: '5:4',
     selectedCropId: null,
     metadata: {}
@@ -589,6 +602,7 @@
       state.crops     = d.crops    || {};
       state.judge     = d.judge    || null;
       state.transcript= d.transcript || null;
+      state.safeRect  = d.safeRect || null;
       state.selectedRatio  = '5:4';
       state.selectedCropId = null;
 
@@ -1019,7 +1033,7 @@
   function renderCropPanel() {
     const wrap = document.getElementById('cropImageWrap');
     const img  = document.getElementById('cropSourceImg');
-    wrap.querySelectorAll('.crop-frame').forEach(f => f.remove());
+    wrap.querySelectorAll('.crop-frame, .safe-envelope').forEach(f => f.remove());
     img.src = state.imageUrl;
 
     const candidates = state.crops[state.selectedRatio] || [];
@@ -1027,14 +1041,28 @@
     const winnerId   = state.judge?.[judgeKey]?.winnerId;
     if (!state.selectedCropId) state.selectedCropId = winnerId || candidates[0]?.id;
 
-    img.onload = () => {
+    const paint = () => {
+      if (state.safeRect) drawSafeEnvelope(wrap, img);
       candidates.forEach(c => createCropFrame(c, wrap, img, winnerId));
       renderCropCards(candidates, winnerId);
     };
-    if (img.complete && img.naturalWidth) {
-      candidates.forEach(c => createCropFrame(c, wrap, img, winnerId));
-      renderCropCards(candidates, winnerId);
-    }
+
+    img.onload = paint;
+    if (img.complete && img.naturalWidth) paint();
+  }
+
+  function drawSafeEnvelope(wrap, img) {
+    const { x1, y1, x2, y2 } = state.safeRect;
+    const sx = img.offsetWidth  / state.imgW;
+    const sy = img.offsetHeight / state.imgH;
+    const box = document.createElement('div');
+    box.className = 'safe-envelope';
+    box.style.cssText = `left:${x1*sx}px;top:${y1*sy}px;width:${(x2-x1)*sx}px;height:${(y2-y1)*sy}px;`;
+    const lbl = document.createElement('div');
+    lbl.className = 'safe-envelope-label';
+    lbl.textContent = state.type === 'video' ? 'Safe envelope (cross-frame)' : 'Safe envelope';
+    box.appendChild(lbl);
+    wrap.appendChild(box);
   }
 
   function createCropFrame(c, wrap, img, winnerId) {

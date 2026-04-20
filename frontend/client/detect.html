@@ -417,6 +417,17 @@
           <!-- Crop candidates -->
           <div>
             <div id="cropCards" class="grid grid-cols-3 gap-3"></div>
+
+            <!-- Video-only: inline preview of the selected crop as a live video -->
+            <div id="cropVideoPreview" class="hidden mt-3">
+              <div class="flex items-center justify-between mb-2">
+                <p class="text-[10px] font-bold uppercase tracking-wider text-[#555]">Cropped video preview</p>
+                <a id="cropDownloadLink" href="#" target="_blank" rel="noopener"
+                   class="text-[10px] text-[#60a5fa] hover:text-[#93c5fd]">Download ↗</a>
+              </div>
+              <video id="cropVideoEl" controls class="w-full rounded-lg bg-[#0d0d0d]" preload="metadata"></video>
+            </div>
+
             <!-- Judge reasoning -->
             <div id="cropReasoning" class="hidden mt-3 p-3 bg-[#161616] rounded-xl border border-[#2a2a2a] text-xs text-[#888] leading-relaxed"></div>
           </div>
@@ -1081,6 +1092,23 @@
       reasoningEl.classList.remove('hidden');
     } else {
       reasoningEl.classList.add('hidden');
+    }
+
+    // Video-only: show inline cropped-video preview for the selected candidate
+    const previewWrap = document.getElementById('cropVideoPreview');
+    const previewVid  = document.getElementById('cropVideoEl');
+    const downloadLink= document.getElementById('cropDownloadLink');
+    const selected    = candidates.find(c => c.id === state.selectedCropId);
+    if (state.type === 'video' && selected?.videoUrl) {
+      if (previewVid.src !== selected.videoUrl) {
+        previewVid.src = selected.videoUrl;
+      }
+      downloadLink.href = selected.videoUrl;
+      previewWrap.classList.remove('hidden');
+    } else {
+      previewVid.removeAttribute('src');
+      previewVid.load();
+      previewWrap.classList.add('hidden');
     }
   }
 

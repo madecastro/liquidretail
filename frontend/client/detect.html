@@ -413,10 +413,13 @@
         </p>
 
         <!-- Ratio tabs -->
-        <div class="flex items-center gap-1 mb-5">
-          <button class="tab-btn active" data-ratio="5:4" onclick="selectRatioTab('5:4', this)">5:4</button>
-          <button class="tab-btn"        data-ratio="1:1" onclick="selectRatioTab('1:1', this)">1:1</button>
-          <button class="tab-btn"        data-ratio="4:5" onclick="selectRatioTab('4:5', this)">4:5</button>
+        <div class="flex items-center gap-1 mb-5 flex-wrap">
+          <button class="tab-btn active" data-ratio="5:4"    onclick="selectRatioTab('5:4', this)">5:4</button>
+          <button class="tab-btn"        data-ratio="1:1"    onclick="selectRatioTab('1:1', this)">1:1</button>
+          <button class="tab-btn"        data-ratio="4:5"    onclick="selectRatioTab('4:5', this)">4:5</button>
+          <div class="w-px h-5 bg-[#2a2a2a] mx-1"></div>
+          <button class="tab-btn"        data-ratio="9:16"   onclick="selectRatioTab('9:16', this)">9:16</button>
+          <button class="tab-btn"        data-ratio="1.91:1" onclick="selectRatioTab('1.91:1', this)">1.91:1</button>
         </div>
 
         <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
@@ -482,9 +485,11 @@
     subjects: [],
     text: [],
     crops: {},
+    extendedCrops: {}, // { '9:16': [candidate, ...], '1.91:1': [...] }
+    extendedJudge: {}, // { '9:16': { winnerId, reasoning }, '1.91:1': {...} }
     judge: null,
-    transcript: null,  // { text, duration, segments:[{id,start,end,text}], entities:[{id,text,type,startSec,endSec}] }
-    safeRect: null,    // { x1, y1, x2, y2 } pixel coords of subject envelope
+    transcript: null,
+    safeRect: null,
     selectedRatio: '5:4',
     selectedCropId: null,
     metadata: {}
@@ -550,6 +555,8 @@
     'subjects-text': 'Analyzing subjects & text (GPT-4.1)',
     'smart-crops':   'Generating smart crops',
     'judge':         'Judging best results (GPT-4.1)',
+    'extended-crops':'Generating 9:16 & 1.91:1 candidates (OpenAI + Gemini)',
+    'judge-extended':'Judging extended-ratio candidates',
     'done':          'Done'
   };
 
@@ -603,6 +610,8 @@
       state.judge     = d.judge    || null;
       state.transcript= d.transcript || null;
       state.safeRect  = d.safeRect || null;
+      state.extendedCrops = d.extendedCrops || {};
+      state.extendedJudge = d.extendedJudge || {};
       state.selectedRatio  = '5:4';
       state.selectedCropId = null;
 
@@ -1031,15 +1040,19 @@
   }
 
   function renderCropPanel() {
+    const isExtendedRatio = ['9:16', '1.91:1'].includes(state.selectedRatio);
+    if (isExtendedRatio) return renderExtendedCropPanel();
+
     const wrap = document.getElementById('cropImageWrap');
     const img  = document.getElementById('cropSourceImg');
     wrap.querySelectorAll('.crop-frame, .safe-envelope').forEach(f => f.remove());
     img.src = state.imageUrl;
+    img.style.display = '';
 
     const candidates = state.crops[state.selectedRatio] || [];
     const judgeKey   = 'crop_' + state.selectedRatio.replace(':','_');
     const winnerId   = state.judge?.[judgeKey]?.winnerId;
-    if (!state.selectedCropId) state.selectedCropId = winnerId || candidates[0]?.id;
+    state.selectedCropId = winnerId || candidates[0]?.id || null;
 
     const paint = () => {
       if (state.safeRect) drawSafeEnvelope(wrap, img);
@@ -1049,6 +1062,83 @@
 
     img.onload = paint;
     if (img.complete && img.naturalWidth) paint();
+  }
+
+  // Extended ratios (9:16, 1.91:1): show the judge-winning candidate large on the
+  // left, and all candidates as thumbnails on the right. Click a thumbnail to switch.
+  function renderExtendedCropPanel() {
+    const wrap = document.getElementById('cropImageWrap');
+    const img  = document.getElementById('cropSourceImg');
+    wrap.querySelectorAll('.crop-frame, .safe-envelope').forEach(f => f.remove());
+
+    const candidates = state.extendedCrops[state.selectedRatio] || [];
+    const winnerId   = state.extendedJudge?.[state.selectedRatio]?.winnerId;
+    const reasoning  = state.extendedJudge?.[state.selectedRatio]?.reasoning;
+
+    if (!candidates.length) {
+      img.removeAttribute('src');
+      img.style.display = 'none';
+      document.getElementById('cropCards').innerHTML =
+        `<div class="col-span-3 text-center py-10 text-[#444] text-sm">
+           No ${state.selectedRatio} candidates generated yet.
+           <p class="text-[10px] text-[#333] mt-1">Check that GEMINI_API_KEY is set and OpenAI gpt-image-1 is enabled.</p>
+         </div>`;
+      document.getElementById('cropReasoning').classList.add('hidden');
+      document.getElementById('cropVideoPreview').classList.add('hidden');
+      return;
+    }
+
+    // Default selection: judge winner
+    if (!candidates.find(c => c.id === state.selectedCropId)) {
+      state.selectedCropId = winnerId || candidates[0].id;
+    }
+    const selected = candidates.find(c => c.id === state.selectedCropId) || candidates[0];
+
+    // Big preview on the left
+    img.src = selected.imageUrl;
+    img.style.display = '';
+
+    // Thumbnail grid on the right
+    const grid = document.getElementById('cropCards');
+    grid.className = 'grid grid-cols-2 gap-3';
+    grid.innerHTML = '';
+    candidates.forEach(c => {
+      const isSelected = c.id === state.selectedCropId;
+      const isWinner   = c.id === winnerId;
+      const card = document.createElement('div');
+      card.className = 'crop-card' + (isSelected ? ' selected' : '');
+      card.innerHTML = `
+        <div class="relative">
+          <img class="w-full h-28 object-cover bg-[#0d0d0d]" src="${c.imageUrl}" alt="${c.label}" />
+          ${isWinner ? '<span class="absolute top-1 left-1 judge-badge winner">★ Winner</span>' : ''}
+          <span class="absolute top-1 right-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-black/70 text-white">${escapeHtml(c.provider)}</span>
+        </div>
+        <div class="p-2">
+          <p class="text-white text-[10px] font-semibold">${escapeHtml(c.label)}</p>
+          <p class="text-[#555] text-[9px] mt-0.5">${c.variant}${c.videoUrl ? ' · video' : ''}</p>
+        </div>
+      `;
+      card.addEventListener('click', () => { state.selectedCropId = c.id; renderExtendedCropPanel(); });
+      grid.appendChild(card);
+    });
+
+    // Judge reasoning
+    const reasoningEl = document.getElementById('cropReasoning');
+    if (reasoning) { reasoningEl.textContent = '⚖ ' + reasoning; reasoningEl.classList.remove('hidden'); }
+    else           { reasoningEl.classList.add('hidden'); }
+
+    // Video preview if this candidate has a videoUrl
+    const previewWrap = document.getElementById('cropVideoPreview');
+    const previewVid  = document.getElementById('cropVideoEl');
+    const downloadLink= document.getElementById('cropDownloadLink');
+    if (selected.videoUrl) {
+      if (previewVid.src !== selected.videoUrl) previewVid.src = selected.videoUrl;
+      downloadLink.href = selected.videoUrl;
+      previewWrap.classList.remove('hidden');
+    } else {
+      previewVid.removeAttribute('src'); previewVid.load();
+      previewWrap.classList.add('hidden');
+    }
   }
 
   function drawSafeEnvelope(wrap, img) {

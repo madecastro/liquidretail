@@ -903,12 +903,10 @@
 
     if (!t) {
       meta.textContent = 'Transcription skipped (video > 25MB or Whisper error)';
-      document.getElementById('entityChips').innerHTML = '';
-      document.getElementById('noEntities').classList.remove('hidden');
-      document.getElementById('entityChips').appendChild(document.getElementById('noEntities'));
-      document.getElementById('segmentList').innerHTML = '';
-      document.getElementById('noSegments').classList.remove('hidden');
-      document.getElementById('segmentList').appendChild(document.getElementById('noSegments'));
+      document.getElementById('entityChips').innerHTML =
+        '<p class="text-[#444] text-sm p-2">No entities detected</p>';
+      document.getElementById('segmentList').innerHTML =
+        '<p class="text-[#444] text-sm p-2">No transcript available</p>';
       return;
     }
 
@@ -1050,13 +1048,10 @@
     img.src = state.imageUrl;
 
     const ns = state.subjects.length;
-    document.getElementById('noSubjects').classList.toggle('hidden', ns > 0);
-
     const list = document.getElementById('subjectList');
     list.innerHTML = '';
     if (ns === 0) {
-      list.appendChild(document.getElementById('noSubjects'));
-      document.getElementById('noSubjects').classList.remove('hidden');
+      list.innerHTML = '<p class="text-[#444] text-sm py-4 text-center">No subjects detected</p>';
     }
 
     img.onload = () => {
@@ -1121,13 +1116,10 @@
     img.src = state.imageUrl;
 
     const nt = state.text.length;
-    document.getElementById('noText').classList.toggle('hidden', nt > 0);
-
     const list = document.getElementById('textList');
     list.innerHTML = '';
     if (nt === 0) {
-      list.appendChild(document.getElementById('noText'));
-      document.getElementById('noText').classList.remove('hidden');
+      list.innerHTML = '<p class="text-[#444] text-sm py-4 text-center">No text detected</p>';
     }
 
     img.onload = () => {

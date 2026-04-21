@@ -123,8 +123,6 @@
     }
     .crop-card:hover   { border-color: #3a3a3a; transform: translateY(-1px); }
     .crop-card.selected { border-color: #34d399; border-width: 2px; box-shadow: 0 0 0 2px rgba(52,211,153,0.25); }
-    /* Make sure the whole card (incl. inner img/spans) forwards clicks to the card */
-    .crop-card * { pointer-events: none; }
 
     /* ── Tabs ── */
     .tab-btn {
@@ -408,9 +406,7 @@
             </div>
           </div>
           <!-- Subject list -->
-          <div id="subjectList" class="space-y-2 max-h-[420px] overflow-y-auto pr-1">
-            <p id="noSubjects" class="text-[#444] text-sm py-4 text-center hidden">No subjects detected</p>
-          </div>
+          <div id="subjectList" class="space-y-2 max-h-[420px] overflow-y-auto pr-1"></div>
         </div>
       </div>
 
@@ -428,9 +424,7 @@
             </div>
           </div>
           <!-- Text region list -->
-          <div id="textList" class="space-y-2 max-h-[420px] overflow-y-auto pr-1">
-            <p id="noText" class="text-[#444] text-sm py-4 text-center hidden">No text detected</p>
-          </div>
+          <div id="textList" class="space-y-2 max-h-[420px] overflow-y-auto pr-1"></div>
         </div>
         <!-- Judge text treatment -->
         <div id="textTreatmentBar" class="hidden mt-4 p-3 bg-[#161616] rounded-xl border border-[#2a2a2a] text-xs text-[#aaa] flex items-center gap-2">
@@ -458,18 +452,14 @@
             </div>
             <div>
               <p class="text-[10px] font-bold uppercase tracking-wider text-[#555] mb-2">Named Entities <span id="entityCount" class="text-[#444]">(0)</span></p>
-              <div id="entityChips" class="flex flex-wrap">
-                <p id="noEntities" class="text-[#444] text-sm p-2 hidden">No entities detected</p>
-              </div>
+              <div id="entityChips" class="flex flex-wrap"></div>
             </div>
           </div>
 
           <!-- Segment list -->
           <div class="xl:col-span-2">
             <p class="text-[10px] font-bold uppercase tracking-wider text-[#555] mb-2">Segments</p>
-            <div id="segmentList" class="max-h-[420px] overflow-y-auto pr-1 space-y-0.5">
-              <p id="noSegments" class="text-[#444] text-sm p-2 hidden">No transcript available</p>
-            </div>
+            <div id="segmentList" class="max-h-[420px] overflow-y-auto pr-1 space-y-0.5"></div>
           </div>
         </div>
       </div>

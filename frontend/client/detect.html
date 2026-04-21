@@ -1271,14 +1271,17 @@
     const grid = document.getElementById('cropCards');
     grid.className = 'grid grid-cols-2 gap-3';
     grid.innerHTML = '';
+    // CSS aspect-ratio string matching the current extended ratio (e.g. "9 / 16" or "191 / 100")
+    const [ratioNum, ratioDen] = state.selectedRatio === '1.91:1' ? [191, 100]
+                               : state.selectedRatio.split(':').map(Number);
     candidates.forEach(c => {
       const isSelected = c.id === state.selectedCropId;
       const isWinner   = c.id === winnerId;
       const card = document.createElement('div');
       card.className = 'crop-card' + (isSelected ? ' selected' : '');
       card.innerHTML = `
-        <div class="relative">
-          <img class="w-full h-28 object-cover bg-[#0d0d0d]" src="${c.imageUrl}" alt="${c.label}" />
+        <div class="relative bg-[#0d0d0d]" style="aspect-ratio: ${ratioNum} / ${ratioDen};">
+          <img class="w-full h-full object-contain" src="${c.imageUrl}" alt="${c.label}" />
           ${isWinner ? '<span class="absolute top-1 left-1 judge-badge winner">★ Winner</span>' : ''}
           <span class="absolute top-1 right-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-black/70 text-white">${escapeHtml(c.provider)}</span>
         </div>
@@ -1336,6 +1339,12 @@
   }
 
   function createCropFrame(c, wrap, img, winnerId) {
+    // Warn (once) if backend dimensions disagree with what the browser actually renders —
+    // this is the classic EXIF-rotation desync and makes every crop frame the wrong shape.
+    if (!createCropFrame._warned && img.naturalWidth && (img.naturalWidth !== state.imgW || img.naturalHeight !== state.imgH)) {
+      console.warn(`[crop] dimension mismatch — state=${state.imgW}x${state.imgH} natural=${img.naturalWidth}x${img.naturalHeight}. Frames may be wrong.`);
+      createCropFrame._warned = true;
+    }
     const scaleX = img.offsetWidth  / state.imgW;
     const scaleY = img.offsetHeight / state.imgH;
     const frame = document.createElement('div');
@@ -1370,8 +1379,8 @@
       img.src = state.imageUrl;
 
       card.innerHTML = `
-        <div class="relative">
-          <img class="crop-thumb w-full h-24 object-cover bg-[#0d0d0d]" />
+        <div class="relative bg-[#0d0d0d]" style="aspect-ratio: ${cw} / ${ch};">
+          <img class="crop-thumb w-full h-full object-contain" />
           ${isWinner?'<span class="absolute top-1 left-1 judge-badge winner">★</span>':''}
         </div>
         <div class="p-2">

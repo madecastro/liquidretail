@@ -118,10 +118,13 @@
 
     .crop-card {
       background: #161616; border: 1.5px solid #242424; border-radius: 12px; overflow: hidden;
-      cursor: pointer; transition: border-color 0.15s, transform 0.1s;
+      cursor: pointer; transition: border-color 0.15s, transform 0.1s, box-shadow 0.15s;
+      position: relative;
     }
     .crop-card:hover   { border-color: #3a3a3a; transform: translateY(-1px); }
-    .crop-card.selected { border-color: #34d399; }
+    .crop-card.selected { border-color: #34d399; border-width: 2px; box-shadow: 0 0 0 2px rgba(52,211,153,0.25); }
+    /* Make sure the whole card (incl. inner img/spans) forwards clicks to the card */
+    .crop-card * { pointer-events: none; }
 
     /* ── Tabs ── */
     .tab-btn {

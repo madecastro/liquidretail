@@ -1214,7 +1214,11 @@
     const candidates = state.crops[state.selectedRatio] || [];
     const judgeKey   = 'crop_' + state.selectedRatio.replace(':','_');
     const winnerId   = state.judge?.[judgeKey]?.winnerId;
-    state.selectedCropId = winnerId || candidates[0]?.id || null;
+    // Preserve the user's click. Only reset when the current selection isn't
+    // in this ratio's candidate list (e.g. after switching tabs from 9:16).
+    if (!candidates.some(c => c.id === state.selectedCropId)) {
+      state.selectedCropId = winnerId || candidates[0]?.id || null;
+    }
 
     const paint = () => {
       if (state.safeRect) drawSafeEnvelope(wrap, img);

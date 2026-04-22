@@ -1276,65 +1276,84 @@
       else byKey.other.push(c);
     }
 
-    const chipHtml = (c) => {
-      if (!c) return `<div class="crop-card p-4 flex items-center justify-center" style="aspect-ratio: ${ratioNum} / ${ratioDen}; opacity: 0.45;">
-                        <span class="text-[10px] text-[#555]">— not generated —</span>
-                      </div>`;
+    // Diagnostic log — if this shows 4 identical URLs, the issue is backend;
+    // if it shows 4 distinct URLs, the issue is pure rendering.
+    console.log(`[extended ${state.selectedRatio}] candidates:`,
+      candidates.map(c => ({ id: c.id, tail: (c.imageUrl || '').slice(-40) })));
+
+    const buildChip = (c) => {
+      if (!c) {
+        const empty = document.createElement('div');
+        empty.className = 'crop-card p-4 flex items-center justify-center';
+        empty.style.cssText = `aspect-ratio: ${ratioNum} / ${ratioDen}; opacity: 0.45;`;
+        empty.innerHTML = '<span class="text-[10px] text-[#555]">— not generated —</span>';
+        return empty;
+      }
       const isSel = c.id === state.selectedCropId;
       const isWin = c.id === winnerId;
-      return `<div class="crop-card ${isSel ? 'selected' : ''}" data-cid="${escapeHtml(c.id)}">
-        <div class="relative bg-[#0d0d0d]" style="aspect-ratio: ${ratioNum} / ${ratioDen};">
-          <img class="w-full h-full object-contain" src="${c.imageUrl}" alt="${escapeHtml(c.label)}" />
-          ${isWin ? '<span class="absolute top-1 left-1 judge-badge winner">★</span>' : ''}
-          <span class="absolute top-1 right-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-black/70 text-white">${escapeHtml(c.provider)}</span>
-        </div>
-        <div class="p-2">
-          <p class="text-white text-[10px] font-semibold">${escapeHtml(c.label)}</p>
-          <p class="text-[#555] text-[9px] mt-0.5">${escapeHtml(c.variant)}${c.videoUrl ? ' · video' : ''}</p>
-        </div>
-      </div>`;
+      const card = document.createElement('div');
+      card.className = 'crop-card' + (isSel ? ' selected' : '');
+      card.dataset.cid = c.id;
+
+      const inner = document.createElement('div');
+      inner.className = 'relative bg-[#0d0d0d]';
+      inner.style.cssText = `aspect-ratio: ${ratioNum} / ${ratioDen};`;
+
+      const imgEl = document.createElement('img');
+      imgEl.className = 'w-full h-full object-contain';
+      imgEl.src = c.imageUrl;
+      imgEl.alt = c.label || '';
+      imgEl.loading = 'eager';
+      imgEl.decoding = 'async';
+      inner.appendChild(imgEl);
+
+      if (isWin) {
+        const badge = document.createElement('span');
+        badge.className = 'absolute top-1 left-1 judge-badge winner';
+        badge.textContent = '★';
+        inner.appendChild(badge);
+      }
+      const provTag = document.createElement('span');
+      provTag.className = 'absolute top-1 right-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-black/70 text-white';
+      provTag.textContent = c.provider;
+      inner.appendChild(provTag);
+
+      const meta = document.createElement('div');
+      meta.className = 'p-2';
+      meta.innerHTML =
+        `<p class="text-white text-[10px] font-semibold">${escapeHtml(c.label)}</p>` +
+        `<p class="text-[#555] text-[9px] mt-0.5">${escapeHtml(c.variant)}${c.videoUrl ? ' · video' : ''}</p>`;
+
+      card.appendChild(inner);
+      card.appendChild(meta);
+      card.addEventListener('click', () => {
+        state.selectedCropId = c.id;
+        renderExtendedCropPanel();
+      });
+      return card;
+    };
+
+    const section = (title, subtitle, chipsArr) => {
+      const s = document.createElement('div');
+      const header = document.createElement('p');
+      header.className = 'text-[10px] font-bold uppercase tracking-wider text-[#666] mb-2';
+      header.innerHTML = `${escapeHtml(title)} <span class="text-[#555] font-normal normal-case ml-1">— ${escapeHtml(subtitle)}</span>`;
+      s.appendChild(header);
+      const row = document.createElement('div');
+      row.className = 'grid grid-cols-2 gap-3';
+      for (const c of chipsArr) row.appendChild(buildChip(c));
+      s.appendChild(row);
+      return s;
     };
 
     const grid = document.getElementById('cropCards');
     grid.className = 'space-y-4';
-    grid.innerHTML = `
-      <div>
-        <p class="text-[10px] font-bold uppercase tracking-wider text-[#666] mb-2">
-          Extension <span class="text-[#555] font-normal normal-case ml-1">— outpaint the existing scene</span>
-        </p>
-        <div class="grid grid-cols-2 gap-3">
-          ${chipHtml(byKey.ext_openai)}
-          ${chipHtml(byKey.ext_gemini)}
-        </div>
-      </div>
-      <div>
-        <p class="text-[10px] font-bold uppercase tracking-wider text-[#666] mb-2">
-          Generation <span class="text-[#555] font-normal normal-case ml-1">— regenerate background around subject</span>
-        </p>
-        <div class="grid grid-cols-2 gap-3">
-          ${chipHtml(byKey.gen_openai)}
-          ${chipHtml(byKey.gen_gemini)}
-        </div>
-      </div>
-      ${byKey.other.length ? `
-        <div>
-          <p class="text-[10px] font-bold uppercase tracking-wider text-[#666] mb-2">
-            Other <span class="text-[#555] font-normal normal-case ml-1">— non-AI variants</span>
-          </p>
-          <div class="grid grid-cols-2 gap-3">
-            ${byKey.other.map(chipHtml).join('')}
-          </div>
-        </div>
-      ` : ''}
-    `;
-
-    // Wire click handlers by id after innerHTML replace
-    grid.querySelectorAll('.crop-card[data-cid]').forEach(card => {
-      card.addEventListener('click', () => {
-        state.selectedCropId = card.getAttribute('data-cid');
-        renderExtendedCropPanel();
-      });
-    });
+    grid.innerHTML = '';
+    grid.appendChild(section('Extension',  'outpaint the existing scene',        [byKey.ext_openai, byKey.ext_gemini]));
+    grid.appendChild(section('Generation', 'regenerate background around subject', [byKey.gen_openai, byKey.gen_gemini]));
+    if (byKey.other.length) {
+      grid.appendChild(section('Other', 'non-AI variants', byKey.other));
+    }
 
     // Judge reasoning + per-provider failures
     const reasoningEl = document.getElementById('cropReasoning');

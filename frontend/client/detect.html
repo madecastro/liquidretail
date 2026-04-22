@@ -482,10 +482,13 @@
         </div>
 
         <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
-          <!-- Source image with crop frame -->
-          <div class="bg-[#0d0d0d] rounded-xl overflow-hidden flex items-center justify-center">
-            <div class="img-wrap w-full" id="cropImageWrap">
-              <img id="cropSourceImg" src="" alt="" class="w-full rounded-xl" crossorigin="anonymous" />
+          <!-- Source image with crop frame (base ratios) OR selected candidate preview (extended ratios) -->
+          <div>
+            <p id="cropPreviewLabel" class="text-[10px] text-[#777] mb-2 hidden"></p>
+            <div class="bg-[#0d0d0d] rounded-xl overflow-hidden flex items-center justify-center">
+              <div class="img-wrap w-full" id="cropImageWrap">
+                <img id="cropSourceImg" src="" alt="" class="w-full rounded-xl" crossorigin="anonymous" />
+              </div>
             </div>
           </div>
           <!-- Crop candidates -->
@@ -1195,6 +1198,7 @@
     wrap.querySelectorAll('.crop-frame, .safe-envelope').forEach(f => f.remove());
     img.src = state.imageUrl;
     img.style.display = '';
+    document.getElementById('cropPreviewLabel').classList.add('hidden');
 
     const candidates = state.crops[state.selectedRatio] || [];
     const judgeKey   = 'crop_' + state.selectedRatio.replace(':','_');
@@ -1215,8 +1219,11 @@
     if (img.complete && img.naturalWidth) paint();
   }
 
-  // Extended ratios (9:16, 1.91:1): show the judge-winning candidate large on the
-  // left, and all candidates as thumbnails on the right. Click a thumbnail to switch.
+  // Extended ratios (9:16, 1.91:1): show the currently-selected candidate large on
+  // the left (starts as the judge winner; click a chip to switch), and all
+  // candidates as thumbnails on the right, organized by variant (extension vs
+  // generation) × provider (OpenAI vs Gemini). Cloudinary blurred-pad falls into
+  // its own "Other" group for video jobs.
   function renderExtendedCropPanel() {
     const wrap = document.getElementById('cropImageWrap');
     const img  = document.getElementById('cropSourceImg');
@@ -1225,12 +1232,14 @@
     const candidates = state.extendedCrops[state.selectedRatio] || [];
     const winnerId   = state.extendedJudge?.[state.selectedRatio]?.winnerId;
     const reasoning  = state.extendedJudge?.[state.selectedRatio]?.reasoning;
+    const labelEl    = document.getElementById('cropPreviewLabel');
 
     if (!candidates.length) {
       img.removeAttribute('src');
       img.style.display = 'none';
+      labelEl.classList.add('hidden');
       document.getElementById('cropCards').innerHTML =
-        `<div class="col-span-3 text-center py-10 text-[#444] text-sm">
+        `<div class="text-center py-10 text-[#444] text-sm">
            No ${state.selectedRatio} candidates generated yet.
            <p class="text-[10px] text-[#333] mt-1">Check that GEMINI_API_KEY is set and OpenAI gpt-image-1 is enabled.</p>
          </div>`;
@@ -1239,48 +1248,97 @@
       return;
     }
 
-    // Default selection: judge winner
+    // Default selection: judge winner; preserve user's click across re-renders.
     if (!candidates.find(c => c.id === state.selectedCropId)) {
       state.selectedCropId = winnerId || candidates[0].id;
     }
     const selected = candidates.find(c => c.id === state.selectedCropId) || candidates[0];
+    const isSelectedWinner = selected.id === winnerId;
 
-    // Big preview on the left
+    // Big preview on the left + label identifying which candidate it is
     img.src = selected.imageUrl;
     img.style.display = '';
+    labelEl.innerHTML = `<span class="text-[#aaa]">Selected:</span> ${escapeHtml(selected.label)} · <span class="text-[#555]">${escapeHtml(selected.variant)}</span>` +
+                       (isSelectedWinner ? ' <span class="judge-badge winner ml-1">★ Judge Winner</span>' : '');
+    labelEl.classList.remove('hidden');
 
-    // Thumbnail grid on the right
-    const grid = document.getElementById('cropCards');
-    grid.className = 'grid grid-cols-2 gap-3';
-    grid.innerHTML = '';
-    // CSS aspect-ratio string matching the current extended ratio (e.g. "9 / 16" or "191 / 100")
+    // CSS aspect-ratio string matching the current extended ratio
     const [ratioNum, ratioDen] = state.selectedRatio === '1.91:1' ? [191, 100]
                                : state.selectedRatio.split(':').map(Number);
-    candidates.forEach(c => {
-      const isSelected = c.id === state.selectedCropId;
-      const isWinner   = c.id === winnerId;
-      const card = document.createElement('div');
-      card.className = 'crop-card' + (isSelected ? ' selected' : '');
-      card.innerHTML = `
+
+    // Group candidates: extension × provider, generation × provider, other
+    const byKey = { ext_openai: null, ext_gemini: null, gen_openai: null, gen_gemini: null, other: [] };
+    for (const c of candidates) {
+      if (c.variant === 'extension' && c.provider === 'openai')  byKey.ext_openai = c;
+      else if (c.variant === 'extension' && c.provider === 'gemini') byKey.ext_gemini = c;
+      else if (c.variant === 'generation' && c.provider === 'openai') byKey.gen_openai = c;
+      else if (c.variant === 'generation' && c.provider === 'gemini') byKey.gen_gemini = c;
+      else byKey.other.push(c);
+    }
+
+    const chipHtml = (c) => {
+      if (!c) return `<div class="crop-card p-4 flex items-center justify-center" style="aspect-ratio: ${ratioNum} / ${ratioDen}; opacity: 0.45;">
+                        <span class="text-[10px] text-[#555]">— not generated —</span>
+                      </div>`;
+      const isSel = c.id === state.selectedCropId;
+      const isWin = c.id === winnerId;
+      return `<div class="crop-card ${isSel ? 'selected' : ''}" data-cid="${escapeHtml(c.id)}">
         <div class="relative bg-[#0d0d0d]" style="aspect-ratio: ${ratioNum} / ${ratioDen};">
-          <img class="w-full h-full object-contain" src="${c.imageUrl}" alt="${c.label}" />
-          ${isWinner ? '<span class="absolute top-1 left-1 judge-badge winner">★ Winner</span>' : ''}
+          <img class="w-full h-full object-contain" src="${c.imageUrl}" alt="${escapeHtml(c.label)}" />
+          ${isWin ? '<span class="absolute top-1 left-1 judge-badge winner">★</span>' : ''}
           <span class="absolute top-1 right-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-black/70 text-white">${escapeHtml(c.provider)}</span>
         </div>
         <div class="p-2">
           <p class="text-white text-[10px] font-semibold">${escapeHtml(c.label)}</p>
-          <p class="text-[#555] text-[9px] mt-0.5">${c.variant}${c.videoUrl ? ' · video' : ''}</p>
+          <p class="text-[#555] text-[9px] mt-0.5">${escapeHtml(c.variant)}${c.videoUrl ? ' · video' : ''}</p>
         </div>
-      `;
-      card.addEventListener('click', () => { state.selectedCropId = c.id; renderExtendedCropPanel(); });
-      grid.appendChild(card);
+      </div>`;
+    };
+
+    const grid = document.getElementById('cropCards');
+    grid.className = 'space-y-4';
+    grid.innerHTML = `
+      <div>
+        <p class="text-[10px] font-bold uppercase tracking-wider text-[#666] mb-2">
+          Extension <span class="text-[#555] font-normal normal-case ml-1">— outpaint the existing scene</span>
+        </p>
+        <div class="grid grid-cols-2 gap-3">
+          ${chipHtml(byKey.ext_openai)}
+          ${chipHtml(byKey.ext_gemini)}
+        </div>
+      </div>
+      <div>
+        <p class="text-[10px] font-bold uppercase tracking-wider text-[#666] mb-2">
+          Generation <span class="text-[#555] font-normal normal-case ml-1">— regenerate background around subject</span>
+        </p>
+        <div class="grid grid-cols-2 gap-3">
+          ${chipHtml(byKey.gen_openai)}
+          ${chipHtml(byKey.gen_gemini)}
+        </div>
+      </div>
+      ${byKey.other.length ? `
+        <div>
+          <p class="text-[10px] font-bold uppercase tracking-wider text-[#666] mb-2">
+            Other <span class="text-[#555] font-normal normal-case ml-1">— non-AI variants</span>
+          </p>
+          <div class="grid grid-cols-2 gap-3">
+            ${byKey.other.map(chipHtml).join('')}
+          </div>
+        </div>
+      ` : ''}
+    `;
+
+    // Wire click handlers by id after innerHTML replace
+    grid.querySelectorAll('.crop-card[data-cid]').forEach(card => {
+      card.addEventListener('click', () => {
+        state.selectedCropId = card.getAttribute('data-cid');
+        renderExtendedCropPanel();
+      });
     });
 
-    // Judge reasoning
+    // Judge reasoning + per-provider failures
     const reasoningEl = document.getElementById('cropReasoning');
     let reasoningHtml = reasoning ? '⚖ ' + escapeHtml(reasoning) : '';
-
-    // Show per-provider failures for this ratio so the user knows why fewer candidates
     const errorsForRatio = state.extendedErrors?.[state.selectedRatio] || [];
     if (errorsForRatio.length) {
       const failHtml = errorsForRatio.map(e =>
@@ -1288,7 +1346,6 @@
       ).join('');
       reasoningHtml = reasoningHtml + failHtml;
     }
-
     if (reasoningHtml) { reasoningEl.innerHTML = reasoningHtml; reasoningEl.classList.remove('hidden'); }
     else               { reasoningEl.classList.add('hidden'); }
 

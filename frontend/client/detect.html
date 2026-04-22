@@ -1739,11 +1739,12 @@
       provTag.textContent = c.provider;
       inner.appendChild(provTag);
 
-      // Judge score pill (bottom-right corner). Extended rubric has 6 dimensions so total is /60.
+      // Judge score pill (bottom-right corner). Extended rubric is 6 dimensions with
+      // weights 3/3/2/1/1/1 (label_logo + subject fidelity dominate) → max 110.
       if (judgeScore) {
         const pill = document.createElement('span');
         pill.className = 'judge-score' + (isRejected ? ' rejected' : '');
-        pill.textContent = `${judgeScore.total}/60`;
+        pill.textContent = `${judgeScore.total}/110`;
         // Hover tooltip with dimension breakdown (label_logo_fidelity listed first because it drives rejection)
         const dims = judgeScore.dimensions || {};
         const ordered = ['label_logo_fidelity', 'subject_fidelity', 'artifact_freedom', 'lighting_consistency', 'background_cohesion', 'aspect_compliance'];

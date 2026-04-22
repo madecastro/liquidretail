@@ -140,6 +140,24 @@
     .judge-badge.winner { background: #064e3b; color: #34d399; border: 1px solid #065f46; }
     .judge-badge.normal { background: #1c1c1e; color: #555; border: 1px solid #2a2a2a; }
 
+    /* Judge score pill shown per-candidate (right side of thumbnail) */
+    .judge-score {
+      position: absolute; bottom: 4px; right: 4px;
+      background: rgba(0,0,0,0.75); color: #fbbf24;
+      font-size: 10px; font-weight: 700; font-family: 'Courier New', monospace;
+      padding: 1px 6px; border-radius: 4px; letter-spacing: 0.02em;
+    }
+    .judge-score.rejected { color: #fca5a5; background: rgba(124, 45, 45, 0.85); }
+
+    /* Rejected candidate overlay */
+    .judge-reject-banner {
+      position: absolute; left: 0; right: 0; bottom: 0;
+      background: rgba(124, 45, 45, 0.85); color: #fecaca;
+      font-size: 9px; font-weight: 700; padding: 3px 6px; text-align: center;
+      letter-spacing: 0.03em; text-transform: uppercase;
+    }
+    .crop-card.rejected { opacity: 0.6; }
+
     /* ── Timestamp chip ── */
     .time-chip {
       font-size: 9px; font-weight: 600; padding: 1px 6px; border-radius: 4px;
@@ -1289,6 +1307,7 @@
       console.log(`   ${c.id}  (${c.provider}/${c.variant})  url=${c.imageUrl || '(missing)'}`);
     }
 
+    const scoresByRatio = state.extendedJudge?.[state.selectedRatio]?.scores || {};
     const buildChip = (c) => {
       if (!c) {
         const empty = document.createElement('div');
@@ -1299,8 +1318,10 @@
       }
       const isSel = c.id === state.selectedCropId;
       const isWin = c.id === winnerId;
+      const judgeScore = scoresByRatio[c.id];
+      const isRejected = !!judgeScore?.rejected;
       const card = document.createElement('div');
-      card.className = 'crop-card' + (isSel ? ' selected' : '');
+      card.className = 'crop-card' + (isSel ? ' selected' : '') + (isRejected ? ' rejected' : '');
       card.dataset.cid = c.id;
 
       // Padding-bottom aspect-ratio trick — bulletproof across all browsers and
@@ -1330,6 +1351,25 @@
       provTag.className = 'absolute top-1 right-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-black/70 text-white';
       provTag.textContent = c.provider;
       inner.appendChild(provTag);
+
+      // Judge score pill (bottom-right corner)
+      if (judgeScore) {
+        const pill = document.createElement('span');
+        pill.className = 'judge-score' + (isRejected ? ' rejected' : '');
+        pill.textContent = `${judgeScore.total}/50`;
+        // Hover tooltip with dimension breakdown
+        const dimStr = Object.entries(judgeScore.dimensions || {})
+          .map(([k, v]) => `${k}: ${v}`).join('\n');
+        pill.title = dimStr || 'no dimension scores';
+        inner.appendChild(pill);
+      }
+      // Rejected banner across bottom
+      if (isRejected) {
+        const banner = document.createElement('div');
+        banner.className = 'judge-reject-banner';
+        banner.textContent = 'Rejected: ' + judgeScore.rejected;
+        inner.appendChild(banner);
+      }
 
       const meta = document.createElement('div');
       meta.className = 'p-2';
@@ -1432,13 +1472,17 @@
     const grid = document.getElementById('cropCards');
     grid.innerHTML = '';
     const judgeKey = 'crop_' + state.selectedRatio.replace(':','_');
-    const reasoning = state.judge?.[judgeKey]?.reasoning;
+    const judgeForRatio = state.judge?.[judgeKey] || {};
+    const reasoning = judgeForRatio.reasoning;
+    const scoresByCandidate = judgeForRatio.scores || {};
 
     candidates.forEach(c => {
       const isSelected = c.id === state.selectedCropId;
       const isWinner   = c.id === winnerId;
+      const judgeScore = scoresByCandidate[c.id];
+      const isRejected = !!judgeScore?.rejected;
       const card = document.createElement('div');
-      card.className = 'crop-card' + (isSelected?' selected':'');
+      card.className = 'crop-card' + (isSelected ? ' selected' : '') + (isRejected ? ' rejected' : '');
 
       // Generate canvas crop thumbnail
       const canvas = document.createElement('canvas');
@@ -1449,14 +1493,20 @@
       img.onload = () => { ctx.drawImage(img, c.x1,c.y1,cw,ch, 0,0,cw,ch); card.querySelector('.crop-thumb').src=canvas.toDataURL('image/jpeg',0.9); };
       img.src = state.imageUrl;
 
+      const judgeBits = judgeScore ? `
+        <span class="judge-score${isRejected ? ' rejected' : ''}" title="${escapeHtml(Object.entries(judgeScore.dimensions || {}).map(([k,v]) => `${k}: ${v}`).join(' | '))}">${judgeScore.total}/50</span>
+        ${isRejected ? `<div class="judge-reject-banner">Rejected: ${escapeHtml(judgeScore.rejected)}</div>` : ''}
+      ` : '';
+
       card.innerHTML = `
         <div class="relative bg-[#0d0d0d]" style="aspect-ratio: ${cw} / ${ch};">
           <img class="crop-thumb w-full h-full object-contain" />
           ${isWinner?'<span class="absolute top-1 left-1 judge-badge winner">★</span>':''}
+          ${judgeBits}
         </div>
         <div class="p-2">
-          <p class="text-white text-[10px] font-semibold">${c.label}</p>
-          <p class="text-[#555] text-[9px] font-mono mt-0.5">score ${c.score}</p>
+          <p class="text-white text-[10px] font-semibold">${escapeHtml(c.label)}</p>
+          <p class="text-[#555] text-[9px] font-mono mt-0.5">algo ${c.score}${judgeScore ? ` · judge ${judgeScore.total}/50` : ''}</p>
         </div>
       `;
 

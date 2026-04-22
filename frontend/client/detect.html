@@ -1228,6 +1228,10 @@
     const wrap = document.getElementById('cropImageWrap');
     const img  = document.getElementById('cropSourceImg');
     wrap.querySelectorAll('.crop-frame, .safe-envelope').forEach(f => f.remove());
+    // CRITICAL: clear any onload handler left over from renderCropPanel (base ratios).
+    // Its paint() callback calls renderCropCards → grid.innerHTML = '', which would
+    // wipe the chips we're about to render as soon as the new img.src finishes loading.
+    img.onload = null;
 
     const candidates = state.extendedCrops[state.selectedRatio] || [];
     const winnerId   = state.extendedJudge?.[state.selectedRatio]?.winnerId;

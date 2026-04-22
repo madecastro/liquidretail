@@ -1299,12 +1299,15 @@
       card.className = 'crop-card' + (isSel ? ' selected' : '');
       card.dataset.cid = c.id;
 
+      // Use flex centering + max-w/max-h instead of object-contain + h-full.
+      // The latter pattern relies on h-full resolving against an aspect-ratio
+      // parent, which some Chromium builds briefly mishandle on re-render.
       const inner = document.createElement('div');
-      inner.className = 'relative bg-[#0d0d0d]';
-      inner.style.cssText = `aspect-ratio: ${ratioNum} / ${ratioDen};`;
+      inner.className = 'relative bg-[#0d0d0d] overflow-hidden flex items-center justify-center';
+      inner.style.cssText = `aspect-ratio: ${ratioNum} / ${ratioDen}; width: 100%;`;
 
       const imgEl = document.createElement('img');
-      imgEl.className = 'w-full h-full object-contain';
+      imgEl.className = 'max-w-full max-h-full block';
       imgEl.src = c.imageUrl;
       imgEl.alt = c.label || '';
       imgEl.loading = 'eager';

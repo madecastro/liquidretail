@@ -1352,14 +1352,19 @@
       provTag.textContent = c.provider;
       inner.appendChild(provTag);
 
-      // Judge score pill (bottom-right corner)
+      // Judge score pill (bottom-right corner). Extended rubric has 6 dimensions so total is /60.
       if (judgeScore) {
         const pill = document.createElement('span');
         pill.className = 'judge-score' + (isRejected ? ' rejected' : '');
-        pill.textContent = `${judgeScore.total}/50`;
-        // Hover tooltip with dimension breakdown
-        const dimStr = Object.entries(judgeScore.dimensions || {})
-          .map(([k, v]) => `${k}: ${v}`).join('\n');
+        pill.textContent = `${judgeScore.total}/60`;
+        // Hover tooltip with dimension breakdown (label_logo_fidelity listed first because it drives rejection)
+        const dims = judgeScore.dimensions || {};
+        const ordered = ['label_logo_fidelity', 'subject_fidelity', 'artifact_freedom', 'lighting_consistency', 'background_cohesion', 'aspect_compliance'];
+        const dimStr = ordered
+          .filter(k => k in dims)
+          .map(k => `${k}: ${dims[k]}`)
+          .concat(Object.entries(dims).filter(([k]) => !ordered.includes(k)).map(([k, v]) => `${k}: ${v}`))
+          .join('\n');
         pill.title = dimStr || 'no dimension scores';
         inner.appendChild(pill);
       }

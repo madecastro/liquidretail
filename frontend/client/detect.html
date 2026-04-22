@@ -1278,8 +1278,12 @@
 
     // Diagnostic log — if this shows 4 identical URLs, the issue is backend;
     // if it shows 4 distinct URLs, the issue is pure rendering.
-    console.log(`[extended ${state.selectedRatio}] candidates:`,
-      candidates.map(c => ({ id: c.id, tail: (c.imageUrl || '').slice(-40) })));
+    console.log(
+      `[extended ${state.selectedRatio}] count=${candidates.length} winner=${winnerId || '(none)'} selected=${state.selectedCropId || '(none)'}`
+    );
+    for (const c of candidates) {
+      console.log(`   ${c.id}  (${c.provider}/${c.variant})  url=${c.imageUrl || '(missing)'}`);
+    }
 
     const buildChip = (c) => {
       if (!c) {

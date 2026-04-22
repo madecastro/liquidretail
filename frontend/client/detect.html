@@ -298,6 +298,52 @@
     .certainty-bar-fill.low     { background: #f87171; }
     .certainty-bar-fill.unknown { background: #555; }
 
+    /* ── Product details section ── */
+    .details-block { margin-top: 16px; }
+    .details-section-label {
+      font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+      color: #666; margin-bottom: 8px;
+    }
+    .seller-row {
+      display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center;
+      padding: 8px 10px; border-bottom: 1px solid #1a1a1a;
+      font-size: 12px;
+    }
+    .seller-row:last-child { border-bottom: none; }
+    .seller-row a { color: #60a5fa; }
+    .seller-row a:hover { color: #93c5fd; }
+    .seller-row .price-cell { color: #34d399; font-family: 'Courier New', monospace; font-weight: 600; }
+    .seller-row .shipping-cell { color: #555; font-size: 10px; }
+
+    .stars {
+      display: inline-flex; align-items: center; gap: 2px;
+      color: #fbbf24; font-size: 13px; line-height: 1;
+    }
+    .stars .empty { color: #3a3a3a; }
+
+    .review-card {
+      background: #161616; border: 1px solid #242424; border-radius: 10px; padding: 12px;
+    }
+    .review-card .header {
+      display: flex; justify-content: space-between; align-items: center; gap: 8px;
+      margin-bottom: 6px;
+    }
+    .review-card .author { font-size: 11px; color: #aaa; font-weight: 600; }
+    .review-card .date   { font-size: 10px; color: #555; }
+    .review-card .title  { font-size: 12px; color: #f0f0f0; font-weight: 600; margin-bottom: 4px; }
+    .review-card .text   { font-size: 11px; color: #bbb; line-height: 1.5; }
+
+    .rating-bar {
+      display: grid; grid-template-columns: 24px 1fr 32px; gap: 8px; align-items: center;
+      font-size: 10px; color: #888; margin-bottom: 2px;
+    }
+    .rating-bar .bar { height: 4px; background: #1c1c1e; border-radius: 2px; overflow: hidden; }
+    .rating-bar .fill { height: 100%; background: #fbbf24; }
+
+    .specs-table { font-size: 11px; color: #aaa; }
+    .specs-table dt { color: #666; margin-top: 6px; font-weight: 600; }
+    .specs-table dd { color: #ccc; margin-left: 12px; }
+
     @keyframes spin    { to { transform: rotate(360deg); } }
     @keyframes pulse   { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
     @keyframes fadeUp  { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
@@ -945,12 +991,131 @@
             <div class="certainty-bar flex-1 max-w-[200px]">
               <div class="certainty-bar-fill ${labelClass}" style="width: ${pct}%;"></div>
             </div>
+            ${id.details?.rating ? renderRatingSummary(id.details) : ''}
+            ${id.details?.price?.display ? `<span class="text-[#34d399] text-sm font-mono font-bold ml-auto">${escapeHtml(id.details.price.display)}</span>` : ''}
           </div>
           ${id.reasoning ? `<div class="id-reasoning">${escapeHtml(id.reasoning)}</div>` : ''}
           ${ctaHtml}
         </div>
       </div>
     `;
+
+    // Details section (price comparison + reviews + specs)
+    if (id.details) {
+      wrap.appendChild(buildDetailsSection(id.details));
+    }
+
+    return wrap;
+  }
+
+  function renderRatingSummary(details) {
+    const stars = renderStars(details.rating);
+    return `<span class="stars">${stars}</span>
+            <span class="text-[11px] text-[#aaa]">${details.rating.toFixed(1)}</span>
+            ${details.reviewCount ? `<span class="text-[10px] text-[#555]">(${Number(details.reviewCount).toLocaleString()} reviews)</span>` : ''}`;
+  }
+
+  function renderStars(rating) {
+    const full = Math.round(rating);
+    let html = '';
+    for (let i = 1; i <= 5; i++) {
+      html += `<span class="${i <= full ? '' : 'empty'}">★</span>`;
+    }
+    return html;
+  }
+
+  function buildDetailsSection(d) {
+    const wrap = document.createElement('div');
+    wrap.className = 'details-block grid grid-cols-1 xl:grid-cols-2 gap-6';
+
+    // Left column: Description + Sellers + Specs
+    const left = document.createElement('div');
+    left.className = 'space-y-4';
+
+    if (d.description) {
+      left.insertAdjacentHTML('beforeend', `
+        <div>
+          <p class="details-section-label">Description</p>
+          <p class="text-[12px] text-[#ccc] leading-relaxed">${escapeHtml(d.description)}</p>
+        </div>
+      `);
+    }
+
+    if (d.sellers?.length) {
+      const rows = d.sellers.map(s => `
+        <div class="seller-row">
+          <a href="${escapeHtml(s.link)}" target="_blank" rel="noopener noreferrer">${escapeHtml(s.name || 'retailer')}</a>
+          <span class="price-cell">${escapeHtml(s.price || '—')}</span>
+          <span class="shipping-cell">${escapeHtml(s.shipping || '')}</span>
+        </div>
+      `).join('');
+      left.insertAdjacentHTML('beforeend', `
+        <div>
+          <p class="details-section-label">Price comparison · ${d.sellers.length} seller(s)</p>
+          <div class="bg-[#0d0d0d] border border-[#1f1f1f] rounded-lg">${rows}</div>
+        </div>
+      `);
+    }
+
+    if (d.specs && Object.keys(d.specs).length) {
+      const dl = Object.entries(d.specs).slice(0, 12).map(([k, v]) =>
+        `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(Array.isArray(v) ? v.join(', ') : String(v))}</dd>`
+      ).join('');
+      left.insertAdjacentHTML('beforeend', `
+        <div>
+          <p class="details-section-label">Specifications</p>
+          <dl class="specs-table">${dl}</dl>
+        </div>
+      `);
+    }
+
+    // Right column: Rating distribution + Reviews
+    const right = document.createElement('div');
+    right.className = 'space-y-4';
+
+    if (d.ratingDistribution?.length) {
+      const total = d.ratingDistribution.reduce((a, r) => a + (r.count || 0), 0) || 1;
+      const bars = [5, 4, 3, 2, 1].map(stars => {
+        const entry = d.ratingDistribution.find(r => r.stars === stars) || { count: 0 };
+        const pct = Math.round((entry.count / total) * 100);
+        return `<div class="rating-bar">
+          <span>${stars}★</span>
+          <div class="bar"><div class="fill" style="width:${pct}%"></div></div>
+          <span>${Number(entry.count).toLocaleString()}</span>
+        </div>`;
+      }).join('');
+      right.insertAdjacentHTML('beforeend', `
+        <div>
+          <p class="details-section-label">Rating distribution</p>
+          <div>${bars}</div>
+        </div>
+      `);
+    }
+
+    if (d.reviews?.length) {
+      const cards = d.reviews.slice(0, 5).map(r => `
+        <div class="review-card">
+          <div class="header">
+            <div class="flex items-center gap-2">
+              ${r.rating ? `<span class="stars text-[11px]">${renderStars(r.rating)}</span>` : ''}
+              <span class="author">${escapeHtml(r.author || 'Anonymous')}</span>
+            </div>
+            <span class="date">${escapeHtml(r.date || '')}</span>
+          </div>
+          ${r.title ? `<div class="title">${escapeHtml(r.title)}</div>` : ''}
+          ${r.text ? `<div class="text">${escapeHtml(r.text)}</div>` : ''}
+        </div>
+      `).join('');
+      right.insertAdjacentHTML('beforeend', `
+        <div>
+          <p class="details-section-label">Top Google reviews</p>
+          <div class="space-y-2">${cards}</div>
+        </div>
+      `);
+    }
+
+    wrap.appendChild(left);
+    wrap.appendChild(right);
     return wrap;
   }
 

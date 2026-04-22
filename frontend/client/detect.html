@@ -252,6 +252,52 @@
     .provider-fail .label { color: #f87171; font-weight: 600; min-width: 110px; }
     .provider-fail .msg   { color: #aaa; font-family: 'Courier New', monospace; font-size: 10px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+    /* ── Product identification hero card ── */
+    .id-card {
+      display: flex; gap: 16px; padding: 16px;
+      background: linear-gradient(135deg, #0f1a24 0%, #141414 100%);
+      border: 1px solid #1e3a5c; border-radius: 14px;
+    }
+    .id-thumb {
+      width: 120px; height: 120px; flex-shrink: 0;
+      border-radius: 10px; overflow: hidden;
+      background: #0a0a0a; display: flex; align-items: center; justify-content: center;
+    }
+    .id-thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .id-thumb.placeholder { font-size: 10px; color: #444; }
+    .id-body { flex: 1; min-width: 0; }
+    .id-brand { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #60a5fa; }
+    .id-name  { font-size: 18px; font-weight: 700; color: #f0f0f0; margin-top: 2px; line-height: 1.2; }
+    .id-variant { font-size: 12px; color: #888; margin-top: 2px; }
+    .id-reasoning { font-size: 11px; color: #aaa; margin-top: 10px; line-height: 1.5; }
+    .id-cta {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #1e3a5c; color: #93c5fd; font-size: 11px; font-weight: 600;
+      padding: 6px 12px; border-radius: 8px; margin-top: 10px;
+      transition: background 0.15s;
+    }
+    .id-cta:hover { background: #274a73; }
+    /* Certainty pill */
+    .certainty-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 999px;
+      text-transform: uppercase; letter-spacing: 0.08em;
+    }
+    .certainty-pill.high    { background: #052e1a; color: #34d399; border: 1px solid #0a5c36; }
+    .certainty-pill.medium  { background: #2e1f05; color: #fbbf24; border: 1px solid #5c3e0a; }
+    .certainty-pill.low     { background: #2e0a0a; color: #f87171; border: 1px solid #5c1a1a; }
+    .certainty-pill.unknown { background: #1c1c1e; color: #666; border: 1px solid #2a2a2a; }
+    .certainty-bar {
+      height: 4px; background: #1c1c1e; border-radius: 2px; overflow: hidden; margin-top: 8px;
+    }
+    .certainty-bar-fill {
+      height: 100%; transition: width 0.3s;
+    }
+    .certainty-bar-fill.high    { background: #34d399; }
+    .certainty-bar-fill.medium  { background: #fbbf24; }
+    .certainty-bar-fill.low     { background: #f87171; }
+    .certainty-bar-fill.unknown { background: #555; }
+
     @keyframes spin    { to { transform: rotate(360deg); } }
     @keyframes pulse   { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
     @keyframes fadeUp  { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
@@ -803,10 +849,23 @@
     const content = document.getElementById('productMatchesContent');
     content.innerHTML = '';
 
+    // Hero identification card — the synthesis answer
+    if (pm.identification) {
+      content.appendChild(buildIdentificationCard(pm.identification));
+    }
+
     const providerLabels = {
       'gemini-search': { title: 'From Web Search', subtitle: 'Gemini + Google Search — text-based match on brand and product details' },
       'google-lens':   { title: 'Visually Similar', subtitle: 'Google Lens via SerpAPI — image-based visual match' }
     };
+
+    // Header for the evidence section (only if we have providers to show)
+    if (Object.keys(pm.providers || {}).length) {
+      const evidenceHeader = document.createElement('p');
+      evidenceHeader.className = 'text-[11px] font-bold uppercase tracking-wider text-[#666] mt-6 mb-3';
+      evidenceHeader.textContent = 'Evidence sources';
+      content.appendChild(evidenceHeader);
+    }
 
     for (const [name, data] of Object.entries(pm.providers || {})) {
       const section = document.createElement('div');
@@ -848,6 +907,51 @@
       skipEl.textContent = `Skipped (no API key): ${pm.skipped.join(', ')}`;
       content.appendChild(skipEl);
     }
+  }
+
+  function buildIdentificationCard(id) {
+    const wrap = document.createElement('div');
+    wrap.className = 'mb-4';
+
+    const labelClass = ['high', 'medium', 'low', 'unknown'].includes(id.certaintyLabel) ? id.certaintyLabel : 'unknown';
+    const pct = Math.round((id.certainty || 0) * 100);
+
+    const thumbHtml = id.primaryThumbnail
+      ? `<div class="id-thumb"><img src="${escapeHtml(id.primaryThumbnail)}" alt="${escapeHtml(id.productName || 'identified product')}" /></div>`
+      : `<div class="id-thumb placeholder">no thumbnail</div>`;
+
+    const ctaHtml = id.primaryUrl
+      ? `<a href="${escapeHtml(id.primaryUrl)}" target="_blank" rel="noopener noreferrer" class="id-cta">
+           View on ${escapeHtml(id.primaryRetailer || 'retailer')}
+           <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+             <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+           </svg>
+         </a>`
+      : '';
+
+    const nameHtml = id.productName
+      ? `<div class="id-name">${escapeHtml(id.productName)}</div>`
+      : `<div class="id-name text-[#666]">Unable to identify specific product</div>`;
+
+    wrap.innerHTML = `
+      <div class="id-card">
+        ${thumbHtml}
+        <div class="id-body">
+          ${id.brand ? `<div class="id-brand">${escapeHtml(id.brand)}</div>` : ''}
+          ${nameHtml}
+          ${id.variant ? `<div class="id-variant">${escapeHtml(id.variant)}</div>` : ''}
+          <div class="flex items-center gap-3 mt-3">
+            <span class="certainty-pill ${labelClass}">${escapeHtml(id.certaintyLabel || 'unknown')} · ${pct}%</span>
+            <div class="certainty-bar flex-1 max-w-[200px]">
+              <div class="certainty-bar-fill ${labelClass}" style="width: ${pct}%;"></div>
+            </div>
+          </div>
+          ${id.reasoning ? `<div class="id-reasoning">${escapeHtml(id.reasoning)}</div>` : ''}
+          ${ctaHtml}
+        </div>
+      </div>
+    `;
+    return wrap;
   }
 
   function buildMatchCard(m) {

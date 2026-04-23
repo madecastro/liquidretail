@@ -1092,24 +1092,24 @@
       `);
     }
 
-    if (d.reviews?.length) {
-      const cards = d.reviews.slice(0, 5).map(r => `
-        <div class="review-card">
-          <div class="header">
-            <div class="flex items-center gap-2">
-              ${r.rating ? `<span class="stars text-[11px]">${renderStars(r.rating)}</span>` : ''}
-              <span class="author">${escapeHtml(r.author || 'Anonymous')}</span>
-            </div>
-            <span class="date">${escapeHtml(r.date || '')}</span>
-          </div>
-          ${r.title ? `<div class="title">${escapeHtml(r.title)}</div>` : ''}
-          ${r.text ? `<div class="text">${escapeHtml(r.text)}</div>` : ''}
-        </div>
+    // Review summary: AI-written narrative sourced from Gemini grounded search.
+    // Replaces the old per-review cards that were backed by the retired Google
+    // Product API (SerpAPI now returns 400 on that engine).
+    if (d.reviewSummary?.summary) {
+      const rs = d.reviewSummary;
+      const sourceChips = (rs.sources || []).slice(0, 8).map(s => `
+        <a href="${escapeHtml(s.url)}" target="_blank" rel="noopener noreferrer"
+           class="inline-block text-[10px] text-[#888] hover:text-[#ccc] bg-[#161616] border border-[#2a2a2a] rounded-full px-2 py-0.5 mr-1 mb-1">
+          ${escapeHtml(s.domain || s.title || 'source')}
+        </a>
       `).join('');
       right.insertAdjacentHTML('beforeend', `
         <div>
-          <p class="details-section-label">Top Google reviews</p>
-          <div class="space-y-2">${cards}</div>
+          <p class="details-section-label">Review summary
+            <span class="text-[9px] text-[#555] font-normal normal-case ml-1">· AI-synthesized from web reviews</span>
+          </p>
+          <p class="text-[12px] text-[#ccc] leading-relaxed whitespace-pre-line">${escapeHtml(rs.summary)}</p>
+          ${sourceChips ? `<div class="mt-2">${sourceChips}</div>` : ''}
         </div>
       `);
     }

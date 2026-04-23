@@ -747,6 +747,8 @@
     extendedErrors: {},// { '9:16': [{label,provider,variant,error}], '1.91:1': [...] }
     extendedJudge: {}, // { '9:16': { winnerId, reasoning }, '1.91:1': {...} }
     overlayZones: {},  // { '<ratio>': { '<variantKey>': { candidateId, imageUrl, analysis } } }
+    background: null,  // { description, setting, palette[], lighting, style, notes }
+    primarySubjectDesc: null,
     heroFrameSec: null, heroReason: null, videoDurationSec: null,
     stageTimings: {},  // { yolo: 1234, judge: 3210, ... } in ms
     judge: null,
@@ -877,6 +879,8 @@
       state.extendedJudge = d.extendedJudge || {};
       state.productMatches = d.productMatches || null;
       state.overlayZones  = d.overlayZones || {};
+      state.background    = d.background || null;
+      state.primarySubjectDesc = d.primarySubjectDesc || null;
       state.heroFrameSec  = d.heroFrameSec ?? null;
       state.heroReason    = d.heroReason || null;
       state.videoDurationSec = d.videoDurationSec ?? null;
@@ -1500,6 +1504,14 @@
             <p class="text-white text-xs font-semibold">${p.id} <span class="text-[#555] font-normal">${p.className||''}</span></p>
             ${p.firstSeenSec != null ? `<span class="time-chip">${fmtTime(p.firstSeenSec)}</span>` : ''}
           </div>
+          ${p.identification ? `
+            <div class="mb-2 p-1.5 rounded-md bg-[#0d0d0d] border border-[#1f1f1f]">
+              <p class="text-[10px] text-white font-medium leading-snug">${escapeHtml(p.identification.label || '')}</p>
+              ${p.identification.brand ? `<p class="text-[9px] text-sky-400 mt-0.5">${escapeHtml(p.identification.brand)}</p>` : ''}
+              ${p.identification.description ? `<p class="text-[9px] text-[#888] mt-1 leading-snug">${escapeHtml(p.identification.description)}</p>` : ''}
+              <p class="text-[9px] text-[#444] mt-1">${escapeHtml(p.identification.category || '')}${typeof p.identification.confidence === 'number' ? ` · id ${(p.identification.confidence*100).toFixed(0)}%` : ''}</p>
+            </div>
+          ` : ''}
           <div class="flex gap-1.5">
             <button class="approve-btn flex-1 text-[10px] py-1 rounded-lg border transition-colors
               ${p.state==='approved'?'bg-emerald-900/60 border-emerald-600/50 text-emerald-300':'bg-transparent border-[#2e2e2e] text-[#555] hover:text-emerald-400'}">
@@ -1692,8 +1704,29 @@
     const ns = state.subjects.length;
     const list = document.getElementById('subjectList');
     list.innerHTML = '';
+
+    // Background analysis card — drawn first inside the subject list so the
+    // scene context surfaces alongside the per-subject details. Backed by
+    // state.background populated by detectSubjectsAndText.
+    const bg = state.background;
+    if (bg && (bg.description || bg.setting || bg.lighting || bg.style || bg.notes || bg.palette?.length)) {
+      const palette = (bg.palette || []).slice(0, 5)
+        .map(c => `<span class="inline-block w-3 h-3 rounded-sm align-middle mr-1" style="background:${escapeHtml(c)}; border:1px solid #2a2a2a;"></span><span class="text-[9px] text-[#666] font-mono mr-2 align-middle">${escapeHtml(c)}</span>`)
+        .join('');
+      const meta = [bg.setting, bg.lighting, bg.style].filter(Boolean).map(escapeHtml).join(' · ');
+      list.insertAdjacentHTML('beforeend', `
+        <div class="mb-3 p-3 bg-[#0d0d0d] rounded-xl border border-[#1f1f1f]">
+          <p class="details-section-label" style="margin-bottom:6px">Background scene</p>
+          ${bg.description ? `<p class="text-[12px] text-[#ccc] leading-relaxed">${escapeHtml(bg.description)}</p>` : ''}
+          ${meta ? `<p class="text-[10px] text-[#888] mt-1">${meta}</p>` : ''}
+          ${palette ? `<div class="mt-2">${palette}</div>` : ''}
+          ${bg.notes ? `<p class="text-[10px] text-[#666] mt-2 italic leading-snug">${escapeHtml(bg.notes)}</p>` : ''}
+        </div>
+      `);
+    }
+
     if (ns === 0) {
-      list.innerHTML = '<p class="text-[#444] text-sm py-4 text-center">No subjects detected</p>';
+      list.insertAdjacentHTML('beforeend', '<p class="text-[#444] text-sm py-4 text-center">No subjects detected</p>');
     }
 
     img.onload = () => {

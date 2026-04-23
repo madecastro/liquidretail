@@ -482,6 +482,10 @@
               <input type="text" name="brand" placeholder="e.g. U Beauty, AllSaints, Nike" class="field-input" required />
             </div>
             <div class="col-span-2">
+              <label class="field-label">Brand URL <span class="text-[#555] font-normal normal-case">(optional — seeds brand catalog)</span></label>
+              <input type="url" name="brandUrl" placeholder="https://example.com" class="field-input" />
+            </div>
+            <div class="col-span-2">
               <label class="field-label">Category</label>
               <select name="category" class="field-input" required>
                 <option value="">Select a category…</option>
@@ -866,6 +870,7 @@
 
     state.metadata = {
       brand:    form.brand.value.trim(),
+      brandUrl: (form.brandUrl?.value || '').trim() || null,
       category: form.category.value,
       caption:  form.caption.value.trim(),
     };

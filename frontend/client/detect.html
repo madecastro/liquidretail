@@ -420,6 +420,88 @@
     .oz-legend { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 10px; font-size: 10px; color: #888; }
     .oz-legend-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
     .oz-meta { font-size: 10px; color: #555; margin-top: 6px; }
+
+    /* ── Creative Template Preview ── */
+    .tp-pickers { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 12px; }
+    .tp-picker-group { display: flex; flex-direction: column; gap: 6px; }
+    .tp-picker-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: #666; font-weight: 700; }
+    .tp-picker-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tp-chip {
+      font-size: 10px; font-weight: 600; padding: 4px 10px; border-radius: 999px;
+      background: #161616; border: 1px solid #2a2a2a; color: #888; cursor: pointer;
+      white-space: nowrap; transition: all 0.12s;
+    }
+    .tp-chip:hover { color: #ccc; border-color: #3a3a3a; }
+    .tp-chip.active { background: #1f2937; border-color: #3b82f6; color: #93c5fd; }
+    .tp-chip.disabled { opacity: 0.35; cursor: not-allowed; }
+    .tp-chip.disabled:hover { color: #888; border-color: #2a2a2a; }
+
+    .tp-stage-wrap { display: grid; grid-template-columns: minmax(0, 420px) 1fr; gap: 16px; }
+    @media (max-width: 900px) { .tp-stage-wrap { grid-template-columns: 1fr; } }
+    .tp-stage {
+      position: relative; width: 100%;
+      background: linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%);
+      border: 1px solid #262626; border-radius: 12px; overflow: hidden;
+    }
+    .tp-zone {
+      position: absolute; box-sizing: border-box; overflow: hidden;
+      font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    }
+    .tp-zone img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .tp-zone.kind-media img { border-radius: inherit; }
+    .tp-zone.kind-text,
+    .tp-zone.kind-quote_card {
+      background: rgba(255,255,255,0.96); color: #0a0a0a;
+      padding: 6px 8px; font-size: 10px; line-height: 1.25;
+      border-radius: 6px; display: flex; align-items: center;
+    }
+    .tp-zone.kind-cta {
+      background: #ef4444; color: white; display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 10px; border-radius: 999px; letter-spacing: 0.03em;
+    }
+    .tp-zone.kind-logo { display: flex; align-items: center; justify-content: flex-start; }
+    .tp-zone.kind-logo img { object-fit: contain; }
+    .tp-zone.kind-proof_bar {
+      background: rgba(0,0,0,0.75); color: #fff; padding: 4px 8px;
+      font-size: 9px; border-radius: 999px;
+      display: flex; align-items: center; gap: 8px; white-space: nowrap;
+    }
+    .tp-zone.kind-metrics_row {
+      display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px;
+      color: #fff; font-size: 9px;
+    }
+    .tp-metric { background: rgba(255,255,255,0.08); border-radius: 6px; padding: 4px; text-align: center; }
+    .tp-metric strong { display: block; font-size: 14px; font-weight: 800; color: #fff; line-height: 1; }
+    .tp-metric span { display: block; font-size: 8px; color: #aaa; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .tp-zone.kind-review_stack { display: flex; flex-direction: column; gap: 4px; }
+    .tp-review-bubble {
+      background: rgba(255,255,255,0.96); color: #0a0a0a; border-radius: 8px;
+      padding: 4px 6px; font-size: 8px; line-height: 1.2; flex: 0 0 auto;
+      overflow: hidden; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;
+    }
+    .tp-zone.kind-identity_row {
+      background: rgba(0,0,0,0.65); color: #fff; padding: 4px 8px;
+      font-size: 9px; border-radius: 999px; display: flex; align-items: center; gap: 6px; white-space: nowrap;
+    }
+    .tp-zone.kind-identity_row .tp-handle { color: #93c5fd; }
+    .tp-zone.kind-badge_row { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+    .tp-chip-mini { background: rgba(0,0,0,0.7); color: #fff; padding: 2px 7px; border-radius: 999px; font-size: 9px; white-space: nowrap; }
+
+    .tp-placeholder {
+      background: repeating-linear-gradient(45deg, rgba(255,255,255,0.04) 0 8px, transparent 8px 16px);
+      border: 1px dashed rgba(255,255,255,0.18); color: #666;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 9px; font-style: italic; border-radius: 6px;
+      width: 100%; height: 100%;
+    }
+    .tp-status {
+      background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 12px;
+      padding: 12px; font-size: 11px; color: #aaa; line-height: 1.5;
+    }
+    .tp-status .tp-ok { color: #34d399; font-weight: 600; }
+    .tp-status .tp-bad { color: #f87171; font-weight: 600; }
+    .tp-status code { font-family: 'Courier New', monospace; color: #e879f9; font-size: 10px; }
+    .tp-empty { color: #555; font-size: 11px; padding: 16px; text-align: center; font-style: italic; }
   </style>
 </head>
 <body class="min-h-screen">
@@ -484,6 +566,14 @@
             <div class="col-span-2">
               <label class="field-label">Brand URL <span class="text-[#555] font-normal normal-case">(optional — seeds brand catalog)</span></label>
               <input type="url" name="brandUrl" placeholder="https://example.com" class="field-input" />
+            </div>
+            <div>
+              <label class="field-label">Creator name <span class="text-[#555] font-normal normal-case">(optional)</span></label>
+              <input type="text" name="creatorName" placeholder="Saltwater Joe" class="field-input" />
+            </div>
+            <div>
+              <label class="field-label">Creator handle <span class="text-[#555] font-normal normal-case">(optional)</span></label>
+              <input type="text" name="creatorHandle" placeholder="@saltwater_joe" class="field-input" />
             </div>
             <div class="col-span-2">
               <label class="field-label">Category</label>
@@ -714,6 +804,31 @@
         <div id="productMatchesContent"></div>
       </div>
 
+      <!-- ╔══ Creative Template Preview ══╗ -->
+      <div id="templatePreviewPanel" class="section-card hidden">
+        <div class="flex items-center justify-between mb-3">
+          <p class="panel-label flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-fuchsia-400 inline-block"></span>
+            Creative Template Preview
+          </p>
+          <p id="templatePreviewMeta" class="text-[10px] text-[#444]"></p>
+        </div>
+        <div class="tp-pickers">
+          <div class="tp-picker-group">
+            <span class="tp-picker-label">Template</span>
+            <div id="tpTemplateChips" class="tp-picker-chips"></div>
+          </div>
+          <div class="tp-picker-group">
+            <span class="tp-picker-label">Aspect ratio</span>
+            <div id="tpRatioChips" class="tp-picker-chips"></div>
+          </div>
+        </div>
+        <div class="tp-stage-wrap">
+          <div id="tpStage" class="tp-stage"></div>
+          <div id="tpStatus" class="tp-status"></div>
+        </div>
+      </div>
+
       <!-- ╔══ Ad Layout Preview (overlay zones) ══╗ -->
       <div id="overlayZonesPanel" class="section-card hidden">
         <div class="flex items-center justify-between mb-3">
@@ -868,11 +983,15 @@
     btn.disabled = true;
     setStatus('uploadStatus', 'info', SPIN + ' Uploading file...');
 
+    const creatorHandleRaw = (form.creatorHandle?.value || '').trim();
     state.metadata = {
-      brand:    form.brand.value.trim(),
-      brandUrl: (form.brandUrl?.value || '').trim() || null,
-      category: form.category.value,
-      caption:  form.caption.value.trim(),
+      brand:         form.brand.value.trim(),
+      brandUrl:      (form.brandUrl?.value || '').trim() || null,
+      category:      form.category.value,
+      caption:       form.caption.value.trim(),
+      creatorName:   (form.creatorName?.value || '').trim() || null,
+      // Normalize handle — strip a leading @ if the user included it.
+      creatorHandle: creatorHandleRaw.replace(/^@+/, '') || null
     };
 
     try {
@@ -975,8 +1094,360 @@
     renderCropPanel();
     renderProductMatches();
     renderOverlayZonesPanel();
+    renderTemplatePreview();
     renderRightsToggle();
     updateApprovedCount();
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  Creative Template Preview
+  //  Low-fidelity in-app sanity check for the layout-input service.
+  //  - Calls /api/layout-input/candidates/:mediaId to find passing templates.
+  //  - On user pick, calls POST /api/layout-input?include=canvas to get
+  //    the assembled input + canvas spec.
+  //  - Renders each zone as an absolute-positioned div inside the canvas,
+  //    resolving slot paths against the input and drawing lightweight
+  //    representations (img for media, text for quotes, stat cards for
+  //    metrics_row, etc).
+  //  NOT a production renderer — just a "is the shape right" preview.
+  // ══════════════════════════════════════════════════════════════
+  const TP_STATE = {
+    template: null,
+    aspectRatio: '1:1',
+    candidates: [],         // [{ template_id, ok, missing, ... }]
+    supportedRatios: {},    // { template_id: [ratios] }
+    lastMediaId: null,
+    lastInput: null,
+    lastCanvas: null
+  };
+
+  async function renderTemplatePreview() {
+    const panel = document.getElementById('templatePreviewPanel');
+    if (!state.mediaId) { panel.classList.add('hidden'); return; }
+    panel.classList.remove('hidden');
+
+    // Reset chip selection on a new Media so we don't carry a stale template
+    // choice between runs.
+    if (TP_STATE.lastMediaId && TP_STATE.lastMediaId !== state.mediaId) {
+      TP_STATE.template = null;
+      TP_STATE.aspectRatio = '1:1';
+    }
+    TP_STATE.lastMediaId = state.mediaId;
+
+    // Load the template registry once per render call (cheap; data is tiny).
+    try {
+      const [tmplRes, candRes] = await Promise.all([
+        fetch('/api/layout-input/templates').then(r => r.json()),
+        fetch(`/api/layout-input/candidates/${state.mediaId}?aspect_ratio=${encodeURIComponent(TP_STATE.aspectRatio)}`).then(r => r.json())
+      ]);
+      const templates = tmplRes.templates || [];
+      TP_STATE.candidates = candRes.candidates || [];
+      TP_STATE.supportedRatios = {};
+      for (const t of templates) TP_STATE.supportedRatios[t.id] = t.supported_aspect_ratios || [];
+
+      // Pick a sensible default template — first passing one, else first listed.
+      if (!TP_STATE.template) {
+        const firstOk = TP_STATE.candidates.find(c => c.ok);
+        TP_STATE.template = firstOk?.template_id || templates[0]?.id || null;
+      }
+
+      renderTpPickers(templates);
+      await loadAndDrawPreview();
+    } catch (err) {
+      document.getElementById('tpStatus').innerHTML =
+        `<p class="tp-bad">Failed to load templates: ${escapeHtml(err.message)}</p>`;
+    }
+  }
+
+  function renderTpPickers(templates) {
+    const tplChips  = document.getElementById('tpTemplateChips');
+    const ratioChips = document.getElementById('tpRatioChips');
+    tplChips.innerHTML = '';
+    ratioChips.innerHTML = '';
+
+    const candMap = {};
+    for (const c of TP_STATE.candidates) candMap[c.template_id] = c;
+
+    for (const t of templates) {
+      const cand = candMap[t.id];
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'tp-chip' +
+        (t.id === TP_STATE.template ? ' active' : '') +
+        (cand && !cand.ok ? ' disabled' : '');
+      chip.textContent = t.ui_label || t.name || t.id;
+      if (cand && !cand.ok) chip.title = tpValidationSummary(cand);
+      chip.addEventListener('click', async () => {
+        if (t.id === TP_STATE.template) return;
+        TP_STATE.template = t.id;
+        // If current ratio isn't supported by the new template, fall back.
+        const supported = TP_STATE.supportedRatios[t.id] || [];
+        if (!supported.includes(TP_STATE.aspectRatio)) TP_STATE.aspectRatio = supported[0] || '1:1';
+        renderTpPickers(templates);
+        await loadAndDrawPreview();
+      });
+      tplChips.appendChild(chip);
+    }
+
+    const supported = TP_STATE.supportedRatios[TP_STATE.template] || [];
+    for (const r of ['1:1','4:5','9:16','16:9','1.91:1']) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      const isSupported = supported.includes(r);
+      chip.className = 'tp-chip' +
+        (r === TP_STATE.aspectRatio ? ' active' : '') +
+        (!isSupported ? ' disabled' : '');
+      chip.textContent = r;
+      if (isSupported) {
+        chip.addEventListener('click', async () => {
+          if (r === TP_STATE.aspectRatio) return;
+          TP_STATE.aspectRatio = r;
+          renderTpPickers(templates);
+          // Refresh candidates for the new ratio since validation is
+          // ratio-aware (e.g. which templates even support 16:9).
+          try {
+            const res = await fetch(`/api/layout-input/candidates/${state.mediaId}?aspect_ratio=${encodeURIComponent(r)}`).then(r => r.json());
+            TP_STATE.candidates = res.candidates || [];
+          } catch (_) {}
+          await loadAndDrawPreview();
+        });
+      }
+      ratioChips.appendChild(chip);
+    }
+  }
+
+  async function loadAndDrawPreview() {
+    const stage = document.getElementById('tpStage');
+    const status = document.getElementById('tpStatus');
+    stage.innerHTML = '<div class="tp-empty">Loading…</div>';
+    status.innerHTML = '';
+
+    if (!TP_STATE.template || !TP_STATE.aspectRatio) {
+      stage.innerHTML = '<div class="tp-empty">Pick a template to preview.</div>';
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/layout-input?include=canvas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mediaId:     state.mediaId,
+          template:    TP_STATE.template,
+          aspect_ratio: TP_STATE.aspectRatio,
+          options:     { allow_invalid: true }
+        })
+      });
+      const data = await res.json();
+      if (!res.ok && !data.input) {
+        stage.innerHTML = '';
+        status.innerHTML = `<p class="tp-bad">Request failed:</p><p>${escapeHtml(data.error || 'unknown')}</p>`;
+        return;
+      }
+
+      TP_STATE.lastInput  = data.input;
+      TP_STATE.lastCanvas = data.canvas;
+
+      if (!data.canvas) {
+        stage.innerHTML = '<div class="tp-empty">No canvas spec for this combo.</div>';
+      } else {
+        drawTpCanvas(stage, data.input, data.canvas);
+      }
+      renderTpStatus(status, data.validation, data.input);
+      document.getElementById('templatePreviewMeta').textContent =
+        `${TP_STATE.template} · ${TP_STATE.aspectRatio} · ${data.validation?.ok ? 'valid' : 'invalid'}`;
+    } catch (err) {
+      stage.innerHTML = '';
+      status.innerHTML = `<p class="tp-bad">${escapeHtml(err.message)}</p>`;
+    }
+  }
+
+  function drawTpCanvas(stage, input, canvas) {
+    const w = canvas.canvas.width, h = canvas.canvas.height;
+    stage.innerHTML = '';
+    stage.style.aspectRatio = `${w} / ${h}`;
+
+    // Background treatment — solid/gradient is enough for a preview.
+    const bgStyle = canvas.canvas.background?.style;
+    stage.style.background = bgStyle === 'solid'
+      ? '#111'
+      : 'linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%)';
+
+    for (const zone of (canvas.zones || [])) {
+      const el = document.createElement('div');
+      el.className = `tp-zone kind-${zone.kind}`;
+      el.style.left   = `${(zone.rect.x / w * 100).toFixed(2)}%`;
+      el.style.top    = `${(zone.rect.y / h * 100).toFixed(2)}%`;
+      el.style.width  = `${(zone.rect.w / w * 100).toFixed(2)}%`;
+      el.style.height = `${(zone.rect.h / h * 100).toFixed(2)}%`;
+      if (typeof zone.radius === 'number') el.style.borderRadius = `${Math.min(zone.radius, 18)}px`;
+
+      el.innerHTML = resolveZoneContent(zone, input);
+      stage.appendChild(el);
+    }
+  }
+
+  // Resolve a zone's content based on its kind + slot(s).
+  function resolveZoneContent(zone, input) {
+    switch (zone.kind) {
+      case 'media': {
+        const media = tpGet(input, zone.slot);
+        const src = media?.image || media?.video_poster || null;
+        if (src) return `<img src="${escapeHtml(src)}" alt="${escapeHtml(zone.slot || '')}" />`;
+        return `<div class="tp-placeholder">${escapeHtml(zone.slot || 'media')}</div>`;
+      }
+      case 'text':
+      case 'quote_card': {
+        const val = tpGet(input, zone.slot);
+        let txt = '';
+        if (typeof val === 'string')      txt = val;
+        else if (val?.text)               txt = val.text;
+        else if (Array.isArray(val))      txt = val.filter(Boolean).join(' · ');
+        else if (val?.name || val?.price) txt = [val.name, val.price].filter(Boolean).join(' · ');
+        if (!txt) return `<div class="tp-placeholder">${escapeHtml(zone.slot || zone.kind)}</div>`;
+        const author = val?.author_name
+          ? `<div style="font-size:8px;color:#555;margin-top:3px;">— ${escapeHtml(val.author_name)}</div>`
+          : '';
+        return `<div style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:${zone.max_lines||4};-webkit-box-orient:vertical;">${escapeHtml(txt)}</div>${author}`;
+      }
+      case 'cta': {
+        return escapeHtml(input.cta?.text || input.defaults?.cta_text || 'Shop');
+      }
+      case 'logo': {
+        const logo = tpGet(input, zone.slot);
+        if (logo) return `<img src="${escapeHtml(String(logo))}" alt="logo" />`;
+        return `<div class="tp-placeholder">${escapeHtml(input.brand?.name || 'logo')}</div>`;
+      }
+      case 'proof_bar': {
+        const parts = tpMultiGet(input, zone.slot);
+        const bits = [];
+        const rating = tpGet(input, 'social_proof.rating_value');
+        const reviews = tpGet(input, 'social_proof.review_count');
+        const trustedBy = tpGet(input, 'trust.trusted_by_text') || tpGet(input, 'social_proof.trusted_by_text');
+        if (typeof rating === 'number') bits.push(`${rating.toFixed(1)}★`);
+        if (typeof reviews === 'number') bits.push(`${reviews.toLocaleString()} reviews`);
+        if (trustedBy)                   bits.push(trustedBy);
+        if (!bits.length && parts.length) bits.push(parts.map(p => typeof p === 'object' ? JSON.stringify(p).slice(0, 20) : String(p)).join(' · '));
+        if (!bits.length) return `<div class="tp-placeholder">proof bar</div>`;
+        return bits.map(b => `<span>${escapeHtml(String(b))}</span>`).join('');
+      }
+      case 'metrics_row': {
+        const metrics = tpGet(input, 'performance.metrics') || [];
+        const cap = Math.min(zone.max_items || metrics.length, metrics.length);
+        if (!cap) return `<div class="tp-placeholder">metrics</div>`;
+        return metrics.slice(0, cap).map(m =>
+          `<div class="tp-metric"><strong>${escapeHtml(String(m.value || ''))}</strong><span>${escapeHtml(String(m.label || ''))}</span></div>`
+        ).join('');
+      }
+      case 'review_stack': {
+        let quotes = tpGet(input, 'social_proof.secondary_quotes') || [];
+        if (!quotes.length) {
+          const primary = tpGet(input, 'social_proof.primary_quote');
+          quotes = primary ? [primary] : [];
+        }
+        const cap = zone.max_items || 3;
+        if (!quotes.length) return `<div class="tp-placeholder">reviews</div>`;
+        return quotes.slice(0, cap).map(q =>
+          `<div class="tp-review-bubble">${escapeHtml(String(q?.text || q || ''))}</div>`
+        ).join('');
+      }
+      case 'identity_row': {
+        const name = tpGet(input, 'creator.name') || tpGet(input, 'ugc.creator_name');
+        const handle = tpGet(input, 'creator.handle') || tpGet(input, 'ugc.creator_handle');
+        if (!name && !handle) return `<div class="tp-placeholder">identity</div>`;
+        return `${name ? escapeHtml(name) : ''}${handle ? ` <span class="tp-handle">@${escapeHtml(handle)}</span>` : ''}`;
+      }
+      case 'badge_row': {
+        const chips = [];
+        const likes    = tpGet(input, 'ugc.likes');
+        const comments = tpGet(input, 'ugc.comments');
+        const badges   = tpGet(input, 'social_proof.proof_badges') || tpGet(input, 'product.badges') || [];
+        if (typeof likes === 'number')    chips.push(`♥ ${likes.toLocaleString()}`);
+        if (typeof comments === 'number') chips.push(`💬 ${comments.toLocaleString()}`);
+        for (const b of (Array.isArray(badges) ? badges : []).slice(0, 2)) chips.push(b);
+        if (!chips.length) return `<div class="tp-placeholder">badges</div>`;
+        return chips.map(c => `<span class="tp-chip-mini">${escapeHtml(String(c))}</span>`).join('');
+      }
+      case 'background':
+        return '';
+      default:
+        return `<div class="tp-placeholder">${escapeHtml(zone.kind)}</div>`;
+    }
+  }
+
+  // Path resolution matching the backend's template-registry getPath:
+  // supports dotted keys, numeric indices, and bracketed indices.
+  function tpGet(obj, path) {
+    if (!obj || !path || typeof path !== 'string') return undefined;
+    const parts = path.split('.');
+    let cur = obj;
+    for (const part of parts) {
+      if (cur == null) return undefined;
+      const bracket = part.match(/^([^\[]+)\[(\d+)\]$/);
+      if (bracket) {
+        cur = cur[bracket[1]];
+        if (Array.isArray(cur)) cur = cur[Number(bracket[2])];
+        else return undefined;
+        continue;
+      }
+      if (/^\d+$/.test(part) && Array.isArray(cur)) { cur = cur[Number(part)]; continue; }
+      cur = cur[part];
+    }
+    return cur;
+  }
+
+  // When a zone.slot is an ARRAY of paths, resolve each and return the
+  // non-empty values. Used by proof_bar zones with multiple data sources.
+  function tpMultiGet(input, slot) {
+    if (!slot) return [];
+    if (Array.isArray(slot)) return slot.map(s => tpGet(input, s)).filter(v => v != null && v !== '');
+    const v = tpGet(input, slot);
+    return v == null || v === '' ? [] : [v];
+  }
+
+  function renderTpStatus(statusEl, validation, input) {
+    const parts = [];
+    if (!validation) { statusEl.innerHTML = ''; return; }
+    if (validation.ok) {
+      parts.push(`<p><span class="tp-ok">✓ Valid</span> — this Media satisfies <code>${escapeHtml(validation.template_id)}</code> at this ratio.</p>`);
+    } else {
+      parts.push(`<p><span class="tp-bad">✗ Invalid</span> — missing required content:</p>`);
+      if (validation.missing?.length) {
+        parts.push(`<p style="margin-top:6px;">Required:<br>${validation.missing.map(p => `<code>${escapeHtml(p)}</code>`).join(', ')}</p>`);
+      }
+      if (validation.anyOfFailures?.length) {
+        parts.push(`<p style="margin-top:6px;">Need at least one from each group:</p>`);
+        for (const group of validation.anyOfFailures) {
+          parts.push(`<p style="margin-left:8px;">• ${group.map(p => `<code>${escapeHtml(p)}</code>`).join(' or ')}</p>`);
+        }
+      }
+      if (validation.minCountFailures && Object.keys(validation.minCountFailures).length) {
+        for (const [p, info] of Object.entries(validation.minCountFailures)) {
+          parts.push(`<p style="margin-top:6px;"><code>${escapeHtml(p)}</code> needs ≥ ${info.needed} (have ${info.have}).</p>`);
+        }
+      }
+      parts.push(`<p style="margin-top:8px;color:#555;font-size:10px;">Preview uses fallbacks so you can still see the geometry. Fix the missing data (caption, review summary, etc.) or pick a different template.</p>`);
+    }
+
+    // Small summary of what we DID resolve (for debugging).
+    const resolved = [];
+    if (input?.brand?.name)          resolved.push(`brand: ${input.brand.name}`);
+    if (input?.product?.name)        resolved.push(`product: ${input.product.name}`);
+    if (input?.creator?.handle)      resolved.push(`@${input.creator.handle}`);
+    if (input?.social_proof?.primary_quote?.text) resolved.push(`quote: "${input.social_proof.primary_quote.text.slice(0, 40)}…"`);
+    if (resolved.length) {
+      parts.push(`<p style="margin-top:10px;padding-top:8px;border-top:1px solid #222;color:#666;">Resolved: ${resolved.map(r => escapeHtml(r)).join(' · ')}</p>`);
+    }
+    statusEl.innerHTML = parts.join('');
+  }
+
+  function tpValidationSummary(cand) {
+    if (cand.ok) return 'supported';
+    const bits = [];
+    if (cand.missing?.length) bits.push(`missing: ${cand.missing.join(', ')}`);
+    if (cand.anyOfFailures?.length) bits.push(`${cand.anyOfFailures.length} any-of group(s) unsatisfied`);
+    if (cand.minCountFailures && Object.keys(cand.minCountFailures).length) bits.push(`min counts: ${Object.keys(cand.minCountFailures).join(', ')}`);
+    return bits.join(' · ') || 'unsupported';
   }
 
   // ══════════════════════════════════════════════════════════════

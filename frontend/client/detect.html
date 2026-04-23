@@ -356,50 +356,68 @@
     ::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 3px; }
 
     /* ── Overlay Zones (ad-layout preview) ── */
-    .oz-card { background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 14px; padding: 12px; }
-    .oz-stage { position: relative; width: 100%; background: #000; border-radius: 10px; overflow: hidden; }
+    .oz-card   { background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 14px; padding: 12px; }
+    .oz-stage  { position: relative; width: 100%; background: #000; border-radius: 10px; overflow: hidden; }
     .oz-stage img { width: 100%; height: 100%; object-fit: contain; display: block; }
-    .oz-layer { position: absolute; inset: 0; pointer-events: none; }
-    .oz-zone {
-      position: absolute;
-      border: 1.5px solid; border-radius: 4px;
-      font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
-      color: #fff;
-      display: flex; align-items: flex-start; justify-content: flex-start;
-      padding: 2px 4px;
-      backdrop-filter: blur(1px);
-    }
-    .oz-zone::after {
-      content: ''; position: absolute; inset: 0; background: currentColor; opacity: 0.12; border-radius: 3px;
-    }
-    .oz-zone > span { position: relative; z-index: 1; background: rgba(0,0,0,0.65); padding: 1px 4px; border-radius: 3px; }
-    .oz-zone.role-logo          { border-color: #22d3ee; color: #22d3ee; }
-    .oz-zone.role-headline      { border-color: #facc15; color: #facc15; }
-    .oz-zone.role-product_detail{ border-color: #e879f9; color: #e879f9; }
-    .oz-zone.role-comments      { border-color: #34d399; color: #34d399; }
-    .oz-zone.role-social_stats  { border-color: #fb923c; color: #fb923c; }
-    .oz-zone.role-cta           { border-color: #f87171; color: #f87171; }
-    .oz-forbidden {
-      position: absolute;
-      border: 1.5px dashed #ef4444;
-      background: repeating-linear-gradient(45deg, rgba(239,68,68,0.15) 0 6px, transparent 6px 12px);
-      border-radius: 3px;
-    }
+    .oz-layer  { position: absolute; inset: 0; pointer-events: none; }
     .oz-heatmap { position: absolute; inset: 0; display: grid; pointer-events: none; }
-    .oz-heatcell { background: rgba(239,68,68,0); }
-    .oz-controls { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+
+    /* Active (masked-out) restriction — drawn with a dim red overlay + dashed
+       outline. Covers part of the image to signal "don't overlay here." */
+    .oz-restriction {
+      position: absolute; border-radius: 3px;
+      border: 1.25px dashed rgba(239, 68, 68, 0.75);
+      background: rgba(239, 68, 68, 0.22);
+      backdrop-filter: brightness(0.55);
+      transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+    }
+    .oz-restriction.class-product {
+      border-color: rgba(239, 68, 68, 1);
+      background: rgba(239, 68, 68, 0.35);
+    }
+    .oz-restriction.class-face            { border-color: rgba(251, 146, 60, 0.9); background: rgba(251, 146, 60, 0.22); }
+    .oz-restriction.class-secondary_subject { border-color: rgba(250, 204, 21, 0.9); background: rgba(250, 204, 21, 0.20); }
+    .oz-restriction.class-text            { border-color: rgba(167, 139, 250, 0.9); background: rgba(167, 139, 250, 0.20); }
+    .oz-restriction.class-object          { border-color: rgba(148, 163, 184, 0.85); background: rgba(148, 163, 184, 0.18); }
+
+    /* Inactive restriction — below the conservation threshold; shown faintly
+       so operators can see what they're trading off when they slide. */
+    .oz-restriction.inactive {
+      opacity: 0.28;
+      background: transparent;
+      backdrop-filter: none;
+      border-style: dotted;
+    }
+
+    .oz-restriction-label {
+      position: absolute; top: 2px; left: 2px;
+      font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+      color: #fff; background: rgba(0,0,0,0.7); padding: 1px 4px; border-radius: 3px;
+      pointer-events: none;
+    }
+
+    .oz-controls { display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap; align-items: center; }
     .oz-toggle {
       font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
       padding: 4px 10px; border-radius: 999px;
       background: #161616; border: 1px solid #2a2a2a; color: #888;
       cursor: pointer; transition: all 0.15s;
     }
-    .oz-toggle:hover { color: #ccc; border-color: #3a3a3a; }
-    .oz-toggle.active { background: #1f2937; border-color: #3b82f6; color: #93c5fd; }
-    .oz-legend {
-      display: flex; flex-wrap: wrap; gap: 8px 14px;
-      margin-top: 10px; font-size: 10px; color: #888;
+    .oz-toggle:hover          { color: #ccc; border-color: #3a3a3a; }
+    .oz-toggle.active         { background: #1f2937; border-color: #3b82f6; color: #93c5fd; }
+
+    .oz-slider-group { flex: 1 1 180px; min-width: 160px; }
+    .oz-slider-label {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.06em;
+      margin-bottom: 4px;
     }
+    .oz-slider-value { color: #93c5fd; font-family: 'Courier New', monospace; font-weight: 700; }
+    .oz-slider {
+      width: 100%; accent-color: #3b82f6; height: 2px; cursor: pointer;
+    }
+
+    .oz-legend { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 10px; font-size: 10px; color: #888; }
     .oz-legend-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
     .oz-meta { font-size: 10px; color: #555; margin-top: 6px; }
   </style>
@@ -695,14 +713,16 @@
           </p>
           <p id="overlayZonesMeta" class="text-[10px] text-[#444]"></p>
         </div>
+        <p class="text-[11px] text-[#888] mb-2 leading-relaxed">
+          Masked areas are restrictions — overlays must avoid them. Clear areas are safe. Slide the
+          <span class="text-[#93c5fd] font-semibold">Conservation</span> control on each card from low (only the product is protected) to high (all secondary subjects + text + objects protected).
+        </p>
         <div class="oz-legend mb-3">
-          <span><span class="oz-legend-dot" style="background:#22d3ee"></span>logo</span>
-          <span><span class="oz-legend-dot" style="background:#facc15"></span>headline</span>
-          <span><span class="oz-legend-dot" style="background:#e879f9"></span>product detail</span>
-          <span><span class="oz-legend-dot" style="background:#34d399"></span>comments</span>
-          <span><span class="oz-legend-dot" style="background:#fb923c"></span>social stats</span>
-          <span><span class="oz-legend-dot" style="background:#f87171"></span>CTA</span>
-          <span><span class="oz-legend-dot" style="background:repeating-linear-gradient(45deg,#ef4444 0 2px,transparent 2px 4px)"></span>forbidden</span>
+          <span><span class="oz-legend-dot" style="background:#ef4444"></span>product (hard rule)</span>
+          <span><span class="oz-legend-dot" style="background:#fb923c"></span>face</span>
+          <span><span class="oz-legend-dot" style="background:#facc15"></span>secondary subject</span>
+          <span><span class="oz-legend-dot" style="background:#a78bfa"></span>text</span>
+          <span><span class="oz-legend-dot" style="background:#94a3b8"></span>object / other</span>
         </div>
         <div id="overlayZonesContent" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
       </div>
@@ -974,11 +994,25 @@
     panel.classList.remove('hidden');
 
     const withAnalysis = entries.filter(e => e.analysis).length;
-    meta.textContent = `${withAnalysis}/${entries.length} images analyzed · ${entries.reduce((a, e) => a + (e.analysis?.zones?.length || 0), 0)} zones total`;
+    const totalRestrictions = entries.reduce((a, e) => a + (e.analysis?.restrictions?.length || 0), 0);
+    meta.textContent = `${withAnalysis}/${entries.length} images analyzed · ${totalRestrictions} restriction(s) detected`;
 
     content.innerHTML = '';
     for (const e of entries) content.appendChild(buildOverlayZoneCard(e));
   }
+
+  // Default conservation on card open — 0.5 means "exclude anything with
+  // strictness ≥ 0.5", so product (1.0) + face (0.9) + secondary_subject (0.6-0.8)
+  // are active; text (0.4-0.6) and objects (0.2-0.3) are not.
+  const OZ_DEFAULT_CONSERVATION = 0.5;
+  const OZ_CLASS_LABELS = {
+    product:           'product',
+    face:              'face',
+    secondary_subject: 'sec. subject',
+    text:              'text',
+    object:            'object',
+    other:             'other'
+  };
 
   function buildOverlayZoneCard(entry) {
     const card = document.createElement('div');
@@ -993,8 +1027,6 @@
 
     const stage = document.createElement('div');
     stage.className = 'oz-stage';
-    // Inline aspect-ratio from the ratio label so the stage reserves height
-    // before the image loads.
     const [arNum, arDen] = entry.ratio === '1.91:1' ? [191, 100] : entry.ratio.split(':').map(Number);
     stage.style.aspectRatio = `${arNum} / ${arDen}`;
 
@@ -1019,14 +1051,39 @@
       return card;
     }
 
-    // Keep a reference to the current toggle state on the DOM node so we can
-    // redraw cheaply without re-reading UI state.
-    const show = { zones: true, forbidden: true, heatmap: false };
+    // Per-card UI state. Keeping it on a local closure so the slider and
+    // toggles stay cheap — no global state, no re-fetch on every drag.
+    const show = {
+      conservation: OZ_DEFAULT_CONSERVATION,
+      showInactive: true,   // dim overlay on below-threshold rects so the trade-off is visible
+      heatmap:      false
+    };
     const repaint = () => paintOverlayLayer(layer, analysis, show);
 
-    // Controls row
+    // ── Conservation slider ──
     const controls = document.createElement('div');
     controls.className = 'oz-controls';
+
+    const sliderGroup = document.createElement('div');
+    sliderGroup.className = 'oz-slider-group';
+    const sliderLabel = document.createElement('div');
+    sliderLabel.className = 'oz-slider-label';
+    sliderLabel.innerHTML =
+      `<span>Conservation</span><span class="oz-slider-value">${Math.round(show.conservation * 100)}%</span>`;
+    const slider = document.createElement('input');
+    slider.type = 'range'; slider.min = '0'; slider.max = '100';
+    slider.value = String(Math.round(show.conservation * 100));
+    slider.className = 'oz-slider';
+    slider.addEventListener('input', () => {
+      show.conservation = Number(slider.value) / 100;
+      sliderLabel.querySelector('.oz-slider-value').textContent = `${slider.value}%`;
+      repaint();
+    });
+    sliderGroup.appendChild(sliderLabel);
+    sliderGroup.appendChild(slider);
+    controls.appendChild(sliderGroup);
+
+    // ── Toggles ──
     const mkToggle = (label, key) => {
       const btn = document.createElement('button');
       btn.type = 'button';
@@ -1039,19 +1096,21 @@
       });
       return btn;
     };
-    controls.appendChild(mkToggle('Zones', 'zones'));
-    controls.appendChild(mkToggle('Forbidden', 'forbidden'));
+    controls.appendChild(mkToggle('Show inactive', 'showInactive'));
     controls.appendChild(mkToggle('Heatmap', 'heatmap'));
     card.appendChild(controls);
 
+    // ── Meta line ──
     const metaLine = document.createElement('p');
     metaLine.className = 'oz-meta';
-    metaLine.textContent =
-      `${analysis.zones.length} zone(s) · ${analysis.forbiddenRects.length} forbidden · density ${analysis.densityGrid?.cols || 0}×${analysis.densityGrid?.rows || 0}`;
+    metaLine.id = `oz-meta-${entry.ratio}-${entry.variantKey}`;  // unique for repaint updates
     card.appendChild(metaLine);
 
-    // Draw once the stage has real pixel dimensions (needed because zones use
-    // percent coords and we want precise px rects).
+    // Stash refs on the layer so paintOverlayLayer can update the meta line
+    // without a DOM query each repaint.
+    layer._metaLine = metaLine;
+    layer._total = (analysis.restrictions || []).length;
+
     if (img.complete && img.naturalWidth) repaint();
     else img.addEventListener('load', repaint, { once: true });
 
@@ -1061,7 +1120,7 @@
   function paintOverlayLayer(layer, analysis, show) {
     layer.innerHTML = '';
 
-    // Heatmap first so it sits beneath rects.
+    // Heatmap (always under rects).
     if (show.heatmap && analysis.densityGrid?.cells?.length) {
       const grid = analysis.densityGrid;
       const heat = document.createElement('div');
@@ -1072,36 +1131,45 @@
         for (let c = 0; c < grid.cols; c++) {
           const v = grid.cells[r]?.[c] ?? 0;
           const cell = document.createElement('div');
-          cell.className = 'oz-heatcell';
-          // Red = busy (unsafe), transparent = calm (safe)
-          cell.style.background = `rgba(239,68,68,${(v * 0.55).toFixed(2)})`;
+          cell.style.background = `rgba(239,68,68,${(v * 0.35).toFixed(2)})`;
           heat.appendChild(cell);
         }
       }
       layer.appendChild(heat);
     }
 
-    if (show.forbidden) {
-      for (const f of (analysis.forbiddenRects || [])) {
-        const box = document.createElement('div');
-        box.className = 'oz-forbidden';
-        positionByPct(box, f.rectPct);
-        box.title = f.reason || 'forbidden';
-        layer.appendChild(box);
-      }
+    // Conservation S in [0,1] → active threshold T = 1 - S. A restriction is
+    // active when its strictness ≥ T. At S=0 only strictness=1 (the product)
+    // is active; at S=1 everything is active.
+    const S = show.conservation;
+    const T = 1 - S;
+
+    let activeCount = 0;
+    const restrictions = analysis.restrictions || [];
+    for (const r of restrictions) {
+      const isActive = r.strictness >= T;
+      if (!isActive && !show.showInactive) continue;
+      if (isActive) activeCount++;
+
+      const box = document.createElement('div');
+      const cls = r.classification || 'other';
+      box.className = `oz-restriction class-${cls}${isActive ? '' : ' inactive'}`;
+      positionByPct(box, r.rectPct);
+      box.title =
+        `${cls} · strictness ${(r.strictness ?? 0).toFixed(2)} · ${isActive ? 'ACTIVE' : 'inactive'}` +
+        (r.reason ? `\n${r.reason}` : '');
+
+      const label = document.createElement('span');
+      label.className = 'oz-restriction-label';
+      label.textContent = `${OZ_CLASS_LABELS[cls] || cls} ${Math.round(r.strictness * 100)}`;
+      box.appendChild(label);
+      layer.appendChild(box);
     }
 
-    if (show.zones) {
-      for (const z of (analysis.zones || [])) {
-        const box = document.createElement('div');
-        box.className = `oz-zone role-${z.role}`;
-        positionByPct(box, z.rectPct);
-        box.title = `${z.role} · score ${(z.score ?? 0).toFixed(2)} · bg ${z.contrastBg || '—'}\n${z.reason || ''}`;
-        const lbl = document.createElement('span');
-        lbl.textContent = z.role.replace('_', ' ');
-        box.appendChild(lbl);
-        layer.appendChild(box);
-      }
+    if (layer._metaLine) {
+      const total = layer._total || 0;
+      layer._metaLine.textContent =
+        `${activeCount}/${total} restriction(s) active at ${Math.round(S * 100)}% conservation · density ${analysis.densityGrid?.cols || 0}×${analysis.densityGrid?.rows || 0}`;
     }
   }
 

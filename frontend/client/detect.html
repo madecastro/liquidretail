@@ -532,7 +532,13 @@
           <p id="detectionSummary" class="text-[#555] text-xs mt-0.5"></p>
           <div id="heroCaption" class="hero-caption hidden"></div>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap justify-end">
+          <!-- Rights toggle. Flips media.rights.approved via PATCH; the layout
+               generator reads this to decide whether UGC fields ship on the
+               creative input. -->
+          <button id="rightsToggleBtn" class="text-xs px-3 py-1.5 rounded-lg border transition-colors whitespace-nowrap">
+            <span id="rightsToggleLabel">Rights: …</span>
+          </button>
           <button id="timingsBtn" class="text-xs px-3 py-1.5 rounded-lg bg-[#161616] border border-[#2a2a2a] text-[#888] hover:text-white transition-colors" onclick="toggleTimings()">⏱ Timings</button>
           <button id="approveAllBtn" class="text-xs px-3 py-1.5 rounded-lg bg-emerald-900/40 border border-emerald-700/30 text-emerald-400 hover:bg-emerald-900/70 transition-colors">Approve All</button>
           <button id="rejectAllBtn"  class="text-xs px-3 py-1.5 rounded-lg bg-red-900/40 border border-red-700/30 text-red-400 hover:bg-red-900/70 transition-colors">Reject All</button>
@@ -769,6 +775,8 @@
     overlayZones: {},  // v3: { '<ratio>': [ { provider, variant, candidateId, imageUrl, analysis } ] }
     background: null,  // { description, setting, palette[], lighting, style, notes }
     primarySubjectDesc: null,
+    rights: { approved: false },
+    mediaId: null,
     heroFrameSec: null, heroReason: null, videoDurationSec: null,
     stageTimings: {},  // { yolo: 1234, judge: 3210, ... } in ms
     judge: null,
@@ -901,6 +909,8 @@
       state.overlayZones  = d.overlayZones || {};
       state.background    = d.background || null;
       state.primarySubjectDesc = d.primarySubjectDesc || null;
+      state.rights        = d.rights || { approved: false };
+      state.mediaId       = result.mediaId || null;
       state.heroFrameSec  = d.heroFrameSec ?? null;
       state.heroReason    = d.heroReason || null;
       state.videoDurationSec = d.videoDurationSec ?? null;
@@ -960,8 +970,58 @@
     renderCropPanel();
     renderProductMatches();
     renderOverlayZonesPanel();
+    renderRightsToggle();
     updateApprovedCount();
   }
+
+  // ══════════════════════════════════════════════════════════════
+  //  Rights toggle — flips media.rights.approved via PATCH. The layout
+  //  generator reads this to decide whether UGC fields ship on the
+  //  creative input. Will move to a dedicated approvals screen later.
+  // ══════════════════════════════════════════════════════════════
+  function renderRightsToggle() {
+    const btn = document.getElementById('rightsToggleBtn');
+    const label = document.getElementById('rightsToggleLabel');
+    if (!btn || !label) return;
+    const approved = !!state.rights?.approved;
+    label.textContent = approved ? '✓ Rights approved' : 'Rights: pending';
+    btn.className =
+      'text-xs px-3 py-1.5 rounded-lg border transition-colors whitespace-nowrap ' +
+      (approved
+        ? 'bg-emerald-900/40 border-emerald-700/50 text-emerald-300 hover:bg-emerald-900/70'
+        : 'bg-[#161616] border-[#2a2a2a] text-[#888] hover:text-white');
+    btn.disabled = !state.mediaId;
+    btn.title = state.mediaId
+      ? (approved ? 'Click to revoke rights' : 'Click to approve rights for layout generation')
+      : 'Rights can only be set once a Media doc exists for this job';
+  }
+
+  // One-time wire-up; the click handler looks at current state so we don't
+  // need to rebind on every render.
+  (function wireRightsToggle() {
+    const btn = document.getElementById('rightsToggleBtn');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+      if (!state.mediaId || btn.disabled) return;
+      const next = !state.rights?.approved;
+      btn.disabled = true;
+      try {
+        const res = await fetch(`/api/media/${state.mediaId}/rights`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ approved: next })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Rights update failed');
+        state.rights = data.rights;
+      } catch (err) {
+        alert('Rights update failed: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        renderRightsToggle();
+      }
+    });
+  })();
 
   // ══════════════════════════════════════════════════════════════
   //  Ad Layout Preview — overlay zones per winning crop image

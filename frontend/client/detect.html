@@ -766,7 +766,7 @@
     extendedCrops: {}, // { '9:16': [candidate, ...], '1.91:1': [...] }
     extendedErrors: {},// { '9:16': [{label,provider,variant,error}], '1.91:1': [...] }
     extendedJudge: {}, // { '9:16': { winnerId, reasoning }, '1.91:1': {...} }
-    overlayZones: {},  // { '<ratio>': { '<variantKey>': { candidateId, imageUrl, analysis } } }
+    overlayZones: {},  // v3: { '<ratio>': [ { provider, variant, candidateId, imageUrl, analysis } ] }
     background: null,  // { description, setting, palette[], lighting, style, notes }
     primarySubjectDesc: null,
     heroFrameSec: null, heroReason: null, videoDurationSec: null,
@@ -970,11 +970,14 @@
   //  preview of the artifact the downstream ad-layout generator
   //  consumes (state.overlayZones stays machine-readable).
   // ══════════════════════════════════════════════════════════════
-  const OZ_VARIANT_LABELS = {
-    base:              'Base (judge winner)',
-    gemini_extension:  'Gemini extension',
-    gemini_generation: 'Gemini generation'
-  };
+  // Variant display label derived from (provider, variant) — artifact v3 no
+  // longer bakes "gemini_extension" into a dict key. "base" means a
+  // source-image crop chosen by the judge; other values pair with a provider.
+  function ozVariantLabel(entry) {
+    if (entry.variant === 'base') return 'Base (judge winner)';
+    const prov = entry.provider ? entry.provider.charAt(0).toUpperCase() + entry.provider.slice(1) : '';
+    return `${prov} ${entry.variant}`.trim();
+  }
 
   function renderOverlayZonesPanel() {
     const panel = document.getElementById('overlayZonesPanel');
@@ -982,12 +985,11 @@
     const meta = document.getElementById('overlayZonesMeta');
     const oz = state.overlayZones || {};
 
-    // Flatten ratio → variant → entry into a list so we can count/render.
+    // v3 shape: { '<ratio>': [ { provider, variant, candidateId, imageUrl, analysis } ] }
     const entries = [];
     for (const ratio of Object.keys(oz)) {
-      for (const variantKey of Object.keys(oz[ratio])) {
-        entries.push({ ratio, variantKey, ...oz[ratio][variantKey] });
-      }
+      const list = Array.isArray(oz[ratio]) ? oz[ratio] : [];
+      for (const v of list) entries.push({ ratio, ...v });
     }
 
     if (!entries.length) { panel.classList.add('hidden'); return; }
@@ -1021,7 +1023,7 @@
     const header = document.createElement('div');
     header.className = 'flex items-center justify-between mb-2';
     header.innerHTML =
-      `<p class="text-[11px] font-semibold text-white">${escapeHtml(entry.ratio)} <span class="text-[#666] font-normal ml-1">${escapeHtml(OZ_VARIANT_LABELS[entry.variantKey] || entry.variantKey)}</span></p>` +
+      `<p class="text-[11px] font-semibold text-white">${escapeHtml(entry.ratio)} <span class="text-[#666] font-normal ml-1">${escapeHtml(ozVariantLabel(entry))}</span></p>` +
       `<p class="text-[9px] text-[#555]">${escapeHtml(entry.candidateId || '')}</p>`;
     card.appendChild(header);
 
@@ -1032,7 +1034,7 @@
 
     const img = document.createElement('img');
     img.src = entry.imageUrl;
-    img.alt = `${entry.ratio} ${entry.variantKey}`;
+    img.alt = `${entry.ratio} ${entry.variant}`;
     img.loading = 'lazy';
     stage.appendChild(img);
 
@@ -1103,7 +1105,7 @@
     // ── Meta line ──
     const metaLine = document.createElement('p');
     metaLine.className = 'oz-meta';
-    metaLine.id = `oz-meta-${entry.ratio}-${entry.variantKey}`;  // unique for repaint updates
+    metaLine.id = `oz-meta-${entry.ratio}-${entry.provider || 'none'}-${entry.variant}`;  // unique per repaint
     card.appendChild(metaLine);
 
     // Stash refs on the layer so paintOverlayLayer can update the meta line

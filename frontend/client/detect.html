@@ -1788,6 +1788,9 @@
       } else {
         renderTpStatus(status, data.validation, data.input);
       }
+      // Load brand webfont (if any) so composition actually uses it
+      // instead of silently falling back to system-ui.
+      ensureWebfontLoaded(data.input?.brand?.font_family);
       document.getElementById('templatePreviewMeta').textContent =
         `${TP_STATE.template} · ${TP_STATE.aspectRatio} · ${data.validation?.ok ? 'valid' : 'invalid'}`;
     } catch (err) {
@@ -1837,7 +1840,7 @@
     // without busting the narrow chip zones.
     requestAnimationFrame(() => {
       const r = stage.getBoundingClientRect();
-      if (r.width > 0) stage.style.fontSize = `${Math.max(8, r.width / 30)}px`;
+      if (r.width > 0) stage.style.fontSize = `${Math.max(10, r.width / 22)}px`;
     });
 
     for (const zone of (canvas.zones || [])) {
@@ -1899,12 +1902,93 @@
   // using standard relative-luminance.
   function tpReadableOn(hex) {
     if (!isHex(hex)) return '#ffffff';
+    const L = tpRelLum(hex);
+    return L > 0.55 ? '#0a0a0a' : '#ffffff';
+  }
+
+  // WCAG relative luminance (0..1) for a hex color.
+  function tpRelLum(hex) {
+    if (!isHex(hex)) return 0.5;
     const n = parseInt(hex.slice(1), 16);
     const r = ((n >> 16) & 0xff) / 255;
     const g = ((n >>  8) & 0xff) / 255;
     const b = (n & 0xff)         / 255;
-    const L = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    return L > 0.55 ? '#0a0a0a' : '#ffffff';
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
+
+  // Pick headline text color + any scrim-opacity boost needed for contrast.
+  // Tries brand.accent_color, then brand.primary_color; falls back to
+  // white/black derived from scrim type. Returns { color, scrimBoost }.
+  function pickHeadlineColor(brand, scrim) {
+    const scrimDark = scrim?.type === 'gradient-dark';
+    const needLight = scrimDark;
+    const want = needLight
+      ? (L) => L > 0.55   // bright color on dark scrim
+      : (L) => L < 0.45;  // dark color on light scrim
+
+    const candidates = [brand?.accent_color, brand?.primary_color]
+      .filter(isHex);
+
+    for (const c of candidates) {
+      if (want(tpRelLum(c))) return { color: c, scrimBoost: 0 };
+    }
+    // No brand color had the right luminance. Pick the least-bad one and
+    // boost the scrim so it provides enough contrast on its own.
+    const best = candidates.length ? candidates[0] : null;
+    if (best) {
+      const L = tpRelLum(best);
+      const gap = Math.abs(L - (needLight ? 1 : 0));
+      if (gap > 0.35) return { color: best, scrimBoost: 0.15 };
+    }
+    return { color: needLight ? '#FFFFFF' : '#0A0A0A', scrimBoost: 0 };
+  }
+
+  // Load a Google-Fonts webfont for the brand's face so the preview
+  // actually uses it. Google's CSS2 endpoint returns 404 silently when
+  // the font isn't hosted there, so a non-Google brand font falls back
+  // to system-ui with no error — and a Google-hosted one lights up.
+  // Loaded once per family via a stable element id.
+  function ensureWebfontLoaded(family) {
+    if (!family || typeof family !== 'string') return;
+    const clean = family.trim();
+    if (!clean) return;
+    const id = 'tp-webfont-' + clean.replace(/[^a-z0-9]/gi, '');
+    if (document.getElementById(id)) return;
+    const link = document.createElement('link');
+    link.id = id;
+    link.rel = 'stylesheet';
+    // Request 400 regular, 700 bold, 800 extrabold, 900 black + italics
+    // so every block (body, headline, italic quote, CTA) has a face.
+    link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(clean).replace(/%20/g, '+')}:ital,wght@0,400;0,700;0,800;0,900;1,400;1,700&display=swap`;
+    document.head.appendChild(link);
+  }
+
+  // brand.tone[] → concrete text-transform + weight + letter-spacing hints
+  // for the headline. Default covers unknown tones. Keeps a single source
+  // of style truth so headline / logo fallback / future elements can all
+  // reuse it without re-deriving.
+  function toneToHeadlineStyle(tones, variant) {
+    const t = new Set((tones || []).map(x => String(x).toLowerCase()));
+    const stacked = variant && variant.startsWith('stacked');
+
+    // Tone-driven overrides; checked in priority order so the first match
+    // wins (bold beats premium beats playful etc.).
+    if (t.has('bold') || t.has('loud') || t.has('energetic') || t.has('confident')) {
+      return { transform: stacked ? 'none' : 'uppercase', weight: 900, letterSpacing: stacked ? '-0.01em' : '0.02em' };
+    }
+    if (t.has('premium') || t.has('luxury') || t.has('refined') || t.has('elegant')) {
+      return { transform: 'uppercase', weight: 700, letterSpacing: '0.14em' };
+    }
+    if (t.has('playful') || t.has('friendly') || t.has('warm') || t.has('casual')) {
+      return { transform: 'none', weight: 800, letterSpacing: '-0.01em' };
+    }
+    // Default: variant-aware — horizontal hero = all-caps punch; stacked
+    // = title-case (shorter lines already create hierarchy).
+    return {
+      transform: stacked ? 'none' : 'uppercase',
+      weight:    900,
+      letterSpacing: stacked ? '-0.01em' : '0.015em'
+    };
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -1960,7 +2044,7 @@
     // Set stage font-size proportional to width so element em units scale.
     requestAnimationFrame(() => {
       const r = stage.getBoundingClientRect();
-      if (r.width > 0) stage.style.fontSize = `${Math.max(8, r.width / 30)}px`;
+      if (r.width > 0) stage.style.fontSize = `${Math.max(10, r.width / 22)}px`;
     });
 
     // Draw each placed element
@@ -2148,24 +2232,43 @@
   }
 
   function renderOverlayHeadline(wrap, el, input) {
-    wrap.style.padding = '0.3em 0.5em';
-    wrap.style.display = 'flex'; wrap.style.alignItems = 'center';
+    const brand = input.brand || {};
+
+    // Ad-grade hero-copy sizing. horizontal 1-line = biggest impact;
+    // stacked variants shrink modestly since they already use more height.
     const baseScale = (el.fontScale || 1);
-    // 1-line horizontal gets the biggest base font; stacked variants shrink
-    // slightly because they already have more vertical real estate.
-    const baseEm = el.variant === 'horizontal' ? 1.25
-                 : el.variant === 'stacked-2'  ? 1.10
-                 : el.variant === 'stacked-3'  ? 0.95
-                 :                                1.15;
+    const baseEm = el.variant === 'horizontal' ? 1.75
+                 : el.variant === 'stacked-2'  ? 1.45
+                 : el.variant === 'stacked-3'  ? 1.20
+                 :                                1.55;
+
+    // Tone + variant → weight, transform, letter-spacing.
+    const style = toneToHeadlineStyle(brand.tone, el.variant);
+
+    // Brand-color text when luminance allows; otherwise adaptive white/
+    // black and a small scrim-opacity boost to recover contrast.
+    const { color, scrimBoost } = pickHeadlineColor(brand, el.scrim);
+    if (scrimBoost > 0 && el.scrim && el.scrim.type !== 'none') {
+      const boosted = Object.assign({}, el.scrim, {
+        opacity: Math.min(0.95, (el.scrim.opacity || 0) + scrimBoost)
+      });
+      wrap.style.background = scrimToCss(boosted);
+      wrap.style.borderRadius = '6px';
+    }
+
+    wrap.style.padding = '0.25em 0.5em';
+    wrap.style.display = 'flex'; wrap.style.alignItems = 'center';
     wrap.style.fontSize = `${(baseEm * baseScale).toFixed(3)}em`;
-    wrap.style.fontWeight = '900';
-    wrap.style.lineHeight = '1.08';
-    wrap.style.letterSpacing = '-0.01em';
-    wrap.style.textShadow = '0 1px 3px rgba(0,0,0,0.4)';
+    wrap.style.fontWeight = String(style.weight);
+    wrap.style.lineHeight = '1.02';
+    wrap.style.letterSpacing = style.letterSpacing;
+    wrap.style.textTransform = style.transform;
+    wrap.style.color = color;
+    // Bigger headlines deserve a heavier drop shadow for edge-legibility
+    // when the text sits on a complex area despite the scrim.
+    wrap.style.textShadow = '0 2px 6px rgba(0,0,0,0.45), 0 1px 2px rgba(0,0,0,0.35)';
+
     const maxLines = el.maxLines || 1;
-    // Multi-line clamp keeps very long headlines from overflowing even
-    // when the shape was chosen to "fit" N lines — content length is an
-    // estimate, not a contract.
     wrap.innerHTML =
       `<div class="tp-overlay-content" style="width:100%;` +
       (maxLines > 1 ? `display:-webkit-box;-webkit-line-clamp:${maxLines};-webkit-box-orient:vertical;overflow:hidden;` : '') +
@@ -2257,24 +2360,81 @@
   }
 
   function renderOverlayQuote(wrap, el, input) {
-    wrap.style.padding = '0.5em 0.75em 0.5em calc(0.75em + 4px)';
-    wrap.style.fontSize = '0.85em';
-    wrap.style.lineHeight = '1.3';
-    wrap.style.display = 'flex'; wrap.style.alignItems = 'center';
+    // Italic editorial testimonial block. The base renderPlacedElement
+    // already set el.scrim as the background if opacity > 0 — we keep it
+    // and boost modestly if the scrim was weak, so the quote always has
+    // a gradient substrate behind it rather than the old opaque white card.
+    if (el.scrim && el.scrim.type !== 'none') {
+      const op = Math.max(0.55, (el.scrim.opacity || 0) + 0.10);
+      const boosted = Object.assign({}, el.scrim, { opacity: Math.min(0.90, op) });
+      wrap.style.background = scrimToCss(boosted);
+    } else {
+      // No scrim from the backend (flat image). Apply a modest tint so
+      // italic body copy still reads.
+      wrap.style.background =
+        'radial-gradient(ellipse at center, rgba(0,0,0,0.55) 70%, rgba(0,0,0,0) 100%)';
+    }
     wrap.style.borderRadius = '8px';
-    wrap.style.background = 'rgba(255,255,255,0.96)';
-    wrap.style.color = '#0a0a0a';
+    wrap.style.padding = '0.6em 0.85em 0.55em calc(0.85em + 4px)';
     wrap.style.borderLeft = '4px solid var(--brand-accent, #ef4444)';
-    wrap.style.boxShadow = '0 2px 10px rgba(0,0,0,0.3)';
+    wrap.style.boxShadow = '0 2px 10px rgba(0,0,0,0.35)';
+    wrap.style.display = 'flex';
+    wrap.style.flexDirection = 'column';
+    wrap.style.justifyContent = 'center';
+    // Scrim is dark → white italic text; scrim light → dark text. (The
+    // base wrap.color was already set from el.textColor in renderPlacedElement;
+    // we re-read here so we cover the no-scrim branch above too.)
+    const scrimDark = !el.scrim || el.scrim.type === 'gradient-dark' || el.scrim.type === 'none';
+    wrap.style.color = scrimDark ? '#ffffff' : '#0a0a0a';
+    wrap.style.fontStyle = 'italic';
+    wrap.style.fontSize = '0.95em';
+    wrap.style.lineHeight = '1.28';
+    wrap.style.textShadow = scrimDark
+      ? '0 1px 3px rgba(0,0,0,0.55)'
+      : '0 1px 2px rgba(255,255,255,0.45)';
 
     const quote = input.social_proof?.primary_quote;
     const text = quote?.text || '';
     const author = quote?.author_name || '';
+    const rating = input.social_proof?.rating_value;
+    const reviewCount = input.social_proof?.review_count;
     const ml = el.maxLines || 4;
-    let html = `<div class="tp-overlay-content" style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:${ml};-webkit-box-orient:vertical;">` + escapeHtml(text);
-    if (author) html += `<div style="font-size:0.75em;color:#555;margin-top:0.25em;">— ${escapeHtml(author)}</div>`;
-    html += `</div>`;
-    wrap.innerHTML = html;
+    // Reserve 1 line budget for attribution + review line below the quote.
+    const quoteLines = Math.max(2, ml - 2);
+
+    const parts = [];
+    parts.push(
+      `<div style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:${quoteLines};-webkit-box-orient:vertical;">` +
+      `<span style="font-weight:700;opacity:0.9;">&ldquo;</span>` +
+      escapeHtml(text) +
+      `<span style="font-weight:700;opacity:0.9;">&rdquo;</span>` +
+      `</div>`
+    );
+    if (author) {
+      parts.push(
+        `<div style="font-style:normal;font-size:0.78em;opacity:0.85;margin-top:0.35em;font-weight:600;">— ${escapeHtml(author)}</div>`
+      );
+    }
+    // Rating + review count line, pulled from social_proof and stacked
+    // right below the attribution. Stars lead, then the numeric rating,
+    // then the review count in parens.
+    if (typeof rating === 'number' || typeof reviewCount === 'number') {
+      const pieces = [];
+      if (typeof rating === 'number') {
+        pieces.push(renderYellowStars(rating));
+        pieces.push(`<span style="font-weight:700;">${rating.toFixed(1)}</span>`);
+      }
+      if (typeof reviewCount === 'number') {
+        pieces.push(`<span style="opacity:0.8;font-weight:400;">(${reviewCount.toLocaleString()} reviews)</span>`);
+      }
+      parts.push(
+        `<div style="font-style:normal;font-size:0.78em;display:flex;align-items:center;gap:0.4em;flex-wrap:wrap;margin-top:0.2em;line-height:1;">` +
+        pieces.join('') +
+        `</div>`
+      );
+    }
+
+    wrap.innerHTML = `<div class="tp-overlay-content" style="width:100%;">${parts.join('')}</div>`;
   }
 
   // Auto-fit text to its container — shrinks font-size in 5% steps until

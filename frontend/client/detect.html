@@ -594,6 +594,45 @@
     .tp-debug-box.state-placed           .tp-debug-label { background: rgba(52,211,153,0.92); color: #0a0a0a; }
     .tp-debug-box.state-fallback-placed  .tp-debug-label { background: rgba(250,204,21,0.92); color: #0a0a0a; }
 
+    /* Canvas-zone debug boxes (canonical templates) — cyan-ish tint to
+       distinguish from overlay-mode placement boxes. */
+    .tp-debug-box.kind-canvas-zone       { border-color: #67e8f9; }
+    .tp-debug-box.kind-canvas-zone .tp-debug-label { background: rgba(103,232,249,0.92); color: #083344; }
+
+    /* Restriction/keep-out overlay (from OverlayZoneArtifact analysis).
+       Solid-ish colored tint so the keep-outs are visually distinct from
+       placement containers. pointer-events: none via parent layer. */
+    .tp-restriction-layer { position: absolute; inset: 0; pointer-events: none; z-index: 49; }
+    .tp-restriction-box {
+      position: absolute; box-sizing: border-box; border-radius: 4px;
+      border: 1.5px dashed;
+    }
+    .tp-restriction-label {
+      position: absolute; top: -16px; left: 0;
+      font-size: 8px; font-weight: 700; padding: 1px 6px;
+      color: #fff; border-radius: 999px; white-space: nowrap;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+    .tp-restriction-box.role-primary  { border-color: #f87171; background: rgba(248,113,113,0.10); }
+    .tp-restriction-box.role-face     { border-color: #fb923c; background: rgba(251,146,60,0.10); }
+    .tp-restriction-box.role-secondary{ border-color: #fde047; background: rgba(253,224,71,0.08); }
+    .tp-restriction-box.role-text     { border-color: #a78bfa; background: rgba(167,139,250,0.08); }
+    .tp-restriction-box.role-other    { border-color: #94a3b8; background: rgba(148,163,184,0.08); }
+    .tp-restriction-box.role-primary  .tp-restriction-label { background: rgba(248,113,113,0.92); }
+    .tp-restriction-box.role-face     .tp-restriction-label { background: rgba(251,146,60,0.92); color: #0a0a0a; }
+    .tp-restriction-box.role-secondary.tp-restriction-box .tp-restriction-label { background: rgba(253,224,71,0.92); color: #0a0a0a; }
+    .tp-restriction-box.role-text     .tp-restriction-label { background: rgba(167,139,250,0.92); }
+    .tp-restriction-box.role-other    .tp-restriction-label { background: rgba(148,163,184,0.92); color: #0a0a0a; }
+
+    .tp-analysis-chip {
+      position: absolute; top: 6px; left: 6px; z-index: 55;
+      font-size: 9px; font-weight: 700; padding: 2px 8px;
+      background: rgba(0,0,0,0.72); color: #fbbf24;
+      border-radius: 999px; letter-spacing: 0.04em;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+
     /* Decision trace on the right-side status panel (overlay mode only) */
     .tp-decision-section-head {
       font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
@@ -1022,10 +1061,11 @@
             <span class="tp-picker-label">Aspect ratio</span>
             <div id="tpRatioChips" class="tp-picker-chips"></div>
           </div>
-          <div class="tp-picker-group" id="tpDebugGroup" style="display:none;">
+          <div class="tp-picker-group" id="tpDebugGroup">
             <span class="tp-picker-label">Debug</span>
             <div class="tp-picker-chips">
               <button id="tpDebugBoxesChip" type="button" class="tp-chip">Show container boxes</button>
+              <button id="tpDebugRestrictionsChip" type="button" class="tp-chip">Show restrictions</button>
             </div>
           </div>
         </div>
@@ -1511,26 +1551,45 @@
     lastMediaId: null,
     lastInput: null,
     lastCanvas: null,
-    showDebugBoxes: true    // debug overlay default-on for overlay-mode templates
+    showDebugBoxes: true,   // container boxes — placed elements (overlay) or canvas zones (canonical)
+    showRestrictions: true  // restriction layer — subject/face/text keep-outs from overlay analysis
   };
 
-  // One-time wire-up of the debug-boxes chip.
-  (function wireTpDebugChip() {
-    const chip = document.getElementById('tpDebugBoxesChip');
-    if (!chip) return;
-    const sync = () => {
-      chip.classList.toggle('active', TP_STATE.showDebugBoxes);
-      chip.textContent = TP_STATE.showDebugBoxes ? 'Hide container boxes' : 'Show container boxes';
+  // Re-render the preview stage from cached TP_STATE. Called whenever a
+  // debug toggle changes so the user doesn't have to re-pick template/ratio.
+  function redrawTpStage() {
+    const stage = document.getElementById('tpStage');
+    if (!stage || !TP_STATE.lastInput) return;
+    if (TP_STATE.lastInput.placement) {
+      drawOverlayCanvas(stage, TP_STATE.lastInput);
+    } else if (TP_STATE.lastCanvas) {
+      drawTpCanvas(stage, TP_STATE.lastInput, TP_STATE.lastCanvas);
+    }
+  }
+
+  // One-time wire-up of debug chips. Both toggles rerender via the shared
+  // redrawTpStage path so they work in overlay AND canonical modes.
+  (function wireTpDebugChips() {
+    const boxes = document.getElementById('tpDebugBoxesChip');
+    const restr = document.getElementById('tpDebugRestrictionsChip');
+    const syncBoxes = () => {
+      if (!boxes) return;
+      boxes.classList.toggle('active', TP_STATE.showDebugBoxes);
+      boxes.textContent = TP_STATE.showDebugBoxes ? 'Hide container boxes' : 'Show container boxes';
     };
-    sync();
-    chip.addEventListener('click', () => {
+    const syncRestr = () => {
+      if (!restr) return;
+      restr.classList.toggle('active', TP_STATE.showRestrictions);
+      restr.textContent = TP_STATE.showRestrictions ? 'Hide restrictions' : 'Show restrictions';
+    };
+    syncBoxes(); syncRestr();
+    boxes?.addEventListener('click', () => {
       TP_STATE.showDebugBoxes = !TP_STATE.showDebugBoxes;
-      sync();
-      const stage = document.getElementById('tpStage');
-      if (stage && TP_STATE.lastInput?.placement) {
-        // Re-draw to toggle debug layer
-        drawOverlayCanvas(stage, TP_STATE.lastInput);
-      }
+      syncBoxes(); redrawTpStage();
+    });
+    restr?.addEventListener('click', () => {
+      TP_STATE.showRestrictions = !TP_STATE.showRestrictions;
+      syncRestr(); redrawTpStage();
     });
   })();
 
@@ -1666,7 +1725,6 @@
       // intensity. Render via the placement path instead of the
       // canonical canvas-zone path.
       const isOverlayMode = !!data.input?.placement;
-      document.getElementById('tpDebugGroup').style.display = isOverlayMode ? '' : 'none';
 
       if (isOverlayMode && data.input.placement.elements?.length) {
         drawOverlayCanvas(stage, data.input);
@@ -1748,6 +1806,35 @@
 
       el.innerHTML = resolveZoneContent(zone, input);
       stage.appendChild(el);
+    }
+
+    // Restriction layer for canonical templates. Canonical templates today
+    // don't carry a placement.analysis block — the restriction data only
+    // exists on OverlayZoneArtifact via the overlay-mode path. Future work
+    // (see backlog: "surface restriction analysis on canonical previews")
+    // will pipe it through. For now, nothing to draw here — the chip toggle
+    // stays a no-op on canonical.
+
+    // Canvas-zone debug layer — dashed rect per canvas zone with id+kind+slot
+    // label. Same container as overlay-mode debug boxes so the toggle behaves
+    // uniformly across templates.
+    if (TP_STATE.showDebugBoxes) {
+      const layer = document.createElement('div');
+      layer.className = 'tp-debug-layer';
+      for (const zone of (canvas.zones || [])) {
+        const box = document.createElement('div');
+        box.className = 'tp-debug-box kind-canvas-zone';
+        box.style.cssText =
+          `left:${(zone.rect.x / w * 100).toFixed(2)}%;top:${(zone.rect.y / h * 100).toFixed(2)}%;` +
+          `width:${(zone.rect.w / w * 100).toFixed(2)}%;height:${(zone.rect.h / h * 100).toFixed(2)}%;`;
+        const lbl = document.createElement('span');
+        lbl.className = 'tp-debug-label';
+        const slotBit = zone.slot ? ` · ${zone.slot.split('.').slice(-1)[0]}` : '';
+        lbl.textContent = `${zone.id || zone.kind}${slotBit}`;
+        box.appendChild(lbl);
+        layer.appendChild(box);
+      }
+      stage.appendChild(layer);
     }
   }
 
@@ -1856,6 +1943,20 @@
       stage.appendChild(warn);
     }
 
+    // Restriction layer — draws the keep-out rects (primary subject, faces,
+    // secondary subjects, text) beneath the container layer so the operator
+    // can see what the placement algorithm was avoiding. Also surfaces a
+    // "no analysis" chip when the image used isn't analyzed for this ratio.
+    if (TP_STATE.showRestrictions) {
+      drawRestrictionLayer(stage, placement.analysis);
+      if (placement.usingFallbackImage) {
+        const chip = document.createElement('div');
+        chip.className = 'tp-analysis-chip';
+        chip.textContent = 'no analysis for this ratio — placement is not subject-aware';
+        stage.appendChild(chip);
+      }
+    }
+
     // Debug box overlay — dashed rect + pill label over every placed element
     // so the operator can see exactly where the placement algorithm landed
     // each container vs. what the final content looks like.
@@ -1879,6 +1980,59 @@
       }
       stage.appendChild(layer);
     }
+  }
+
+  // Shared restriction renderer — used by both overlay-mode and canonical
+  // previews. Draws a colored dashed rect per restriction with a short
+  // classification label. primarySubjectRectPct (if present) gets drawn
+  // first as a red "primary" box even if no matching classification entry
+  // is in restrictions[].
+  function drawRestrictionLayer(stage, analysis) {
+    if (!analysis) return;
+    const layer = document.createElement('div');
+    layer.className = 'tp-restriction-layer';
+
+    const seen = new Set();
+    const addBox = (rect, cls, strictness, reason) => {
+      if (!rect) return;
+      const key = `${rect.x1},${rect.y1},${rect.x2},${rect.y2},${cls || ''}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      const role = restrictionRole(cls, strictness);
+      const box = document.createElement('div');
+      box.className = `tp-restriction-box role-${role}`;
+      box.style.cssText =
+        `left:${(rect.x1*100).toFixed(2)}%;top:${(rect.y1*100).toFixed(2)}%;` +
+        `width:${((rect.x2-rect.x1)*100).toFixed(2)}%;height:${((rect.y2-rect.y1)*100).toFixed(2)}%;`;
+      const lbl = document.createElement('span');
+      lbl.className = 'tp-restriction-label';
+      const strictnessBit = typeof strictness === 'number' ? ` ${strictness.toFixed(1)}` : '';
+      lbl.textContent = `${cls || role}${strictnessBit}`;
+      if (reason) lbl.title = reason;
+      box.appendChild(lbl);
+      layer.appendChild(box);
+    };
+
+    // Primary subject first (red) — it's the one the layout engine treats as
+    // a hard keep-out regardless of the rest of the list.
+    if (analysis.primarySubjectRectPct) {
+      addBox(analysis.primarySubjectRectPct, 'product', 1.0, 'primary subject (hard keep-out)');
+    }
+    for (const r of (analysis.restrictions || [])) {
+      addBox(r.rectPct, r.classification, r.strictness, r.reason);
+    }
+
+    if (layer.childElementCount > 0) stage.appendChild(layer);
+  }
+
+  // Map a restriction classification + strictness to a color role.
+  function restrictionRole(classification, strictness) {
+    if (classification === 'product')           return 'primary';
+    if (classification === 'face')              return 'face';
+    if (classification === 'secondary_subject') return 'secondary';
+    if (classification === 'text')              return 'text';
+    if (typeof strictness === 'number' && strictness >= 0.95) return 'primary';
+    return 'other';
   }
 
   function renderPlacedElement(el, input) {
@@ -2259,7 +2413,78 @@
     if (resolved.length) {
       parts.push(`<p style="margin-top:10px;padding-top:8px;border-top:1px solid #222;color:#666;">Resolved: ${resolved.map(r => escapeHtml(r)).join(' · ')}</p>`);
     }
+
+    // Zone-by-zone resolution trace. Mirrors the overlay-mode decision
+    // panel: for every canvas zone, did its slot(s) resolve to something?
+    const trace = buildCanonicalZoneTrace(TP_STATE.lastCanvas, input);
+    if (trace.length) {
+      parts.push(`<p class="tp-decision-section-head">Zone resolution trace</p>`);
+      for (const t of trace) {
+        const chipHtml = `<span class="tp-decision-chip state-${t.state}">${escapeHtml(t.state.replace('-', ' '))}</span>`;
+        const meta = [];
+        if (t.slotPaths.length) meta.push(`slot: ${t.slotPaths.join(' / ')}`);
+        if (t.previewValue) meta.push(`value: ${t.previewValue}`);
+        parts.push(`
+          <div class="tp-decision-row">
+            ${chipHtml}
+            <div class="tp-decision-body">
+              <span class="tp-dec-id">${escapeHtml(t.label)}</span>
+              <span style="font-size:9px;color:#555;margin-left:6px;">${escapeHtml(t.kind)}</span>
+              ${meta.length ? `<div class="tp-dec-meta">${escapeHtml(meta.join(' · '))}</div>` : ''}
+            </div>
+          </div>
+        `);
+      }
+    }
+
     statusEl.innerHTML = parts.join('');
+  }
+
+  // For canonical templates, walk canvas.zones[] and for each zone determine
+  // whether its slot(s) resolved against the input. Returns array of
+  // { state, label, kind, slotPaths, previewValue }.
+  function buildCanonicalZoneTrace(canvas, input) {
+    if (!canvas || !Array.isArray(canvas.zones)) return [];
+    const out = [];
+    for (const zone of canvas.zones) {
+      const paths = Array.isArray(zone.slot) ? zone.slot : (zone.slot ? [zone.slot] : []);
+      const values = paths.map(p => tpGet(input, p));
+      const resolved = values.some(v => v != null && v !== '' && !(Array.isArray(v) && v.length === 0));
+
+      // Kind-specific self-contained zones (cta, proof_bar, metrics_row)
+      // don't always carry a `slot` but still have resolvable content.
+      let state = resolved ? 'placed' : 'dropped';
+      let previewValue = null;
+      if (!paths.length) {
+        if (zone.kind === 'cta') {
+          const ctaText = input?.cta?.text || input?.defaults?.cta_text;
+          state = ctaText ? 'placed' : 'dropped';
+          previewValue = ctaText || null;
+        } else if (zone.kind === 'proof_bar') {
+          const hasProof = !!(input?.social_proof?.rating_value || input?.social_proof?.review_count || input?.trust?.trusted_by_text);
+          state = hasProof ? 'placed' : 'dropped';
+        } else if (zone.kind === 'metrics_row') {
+          state = (input?.performance?.metrics?.length) ? 'placed' : 'dropped';
+        } else {
+          state = 'placed';
+        }
+      } else if (resolved) {
+        const v = values.find(x => x != null && x !== '');
+        if (typeof v === 'string')      previewValue = v.slice(0, 60);
+        else if (typeof v === 'number') previewValue = String(v);
+        else if (v?.text)               previewValue = String(v.text).slice(0, 60);
+        else if (v?.name)               previewValue = String(v.name).slice(0, 60);
+        else if (v?.image)              previewValue = v.image.split('/').pop();
+      }
+      out.push({
+        state,
+        label: zone.id || zone.kind,
+        kind:  zone.kind,
+        slotPaths: paths,
+        previewValue
+      });
+    }
+    return out;
   }
 
   function tpValidationSummary(cand) {

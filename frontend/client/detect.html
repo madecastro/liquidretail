@@ -1576,7 +1576,13 @@
       TP_STATE.lastInput  = data.input;
       TP_STATE.lastCanvas = data.canvas;
 
-      if (!data.canvas) {
+      // Overlay-mode templates (testimonial_overlay) ship a `placement`
+      // block with pre-computed element rects + text colors + scrim
+      // intensity. Render via the placement path instead of the
+      // canonical canvas-zone path.
+      if (data.input?.placement?.elements?.length) {
+        drawOverlayCanvas(stage, data.input);
+      } else if (!data.canvas) {
         stage.innerHTML = '<div class="tp-empty">No canvas spec for this combo.</div>';
       } else {
         drawTpCanvas(stage, data.input, data.canvas);
@@ -1670,6 +1676,236 @@
     const b = (n & 0xff)         / 255;
     const L = 0.2126 * r + 0.7152 * g + 0.0722 * b;
     return L > 0.55 ? '#0a0a0a' : '#ffffff';
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  Overlay-mode rendering (testimonial_overlay etc.)
+  //  Backend's overlayPlacementService computed element rects + text
+  //  colors + scrim intensity. We just draw what we're told.
+  // ══════════════════════════════════════════════════════════════
+  function drawOverlayCanvas(stage, input) {
+    const placement = input.placement;
+    stage.innerHTML = '';
+
+    // Aspect-ratio container
+    const ar = input.aspect_ratio;
+    const [arNum, arDen] = ar === '1.91:1' ? [191, 100] : ar.split(':').map(Number);
+    stage.style.aspectRatio = `${arNum} / ${arDen}`;
+
+    // Brand tokens (same as canonical preview)
+    const brand = input.brand || {};
+    const primary = isHex(brand.primary_color) ? brand.primary_color : '#1f2937';
+    const accent  = isHex(brand.accent_color)  ? brand.accent_color  : '#ef4444';
+    const fontStack = brand.font_family
+      ? `"${brand.font_family}", system-ui, -apple-system, "Segoe UI", sans-serif`
+      : 'system-ui, -apple-system, "Segoe UI", sans-serif';
+    stage.style.setProperty('--brand-primary', primary);
+    stage.style.setProperty('--brand-accent',  accent);
+    stage.style.fontFamily = fontStack;
+
+    // Background. Overlay mode = full-bleed image. Inset mode = brand
+    // primary fill with the image inscribed inside imageRect.
+    if (placement.mode === 'inset' && placement.imageRect) {
+      stage.style.background = placement.backgroundColor || primary;
+      const ir = placement.imageRect;
+      const img = document.createElement('img');
+      img.src = placement.backgroundMedia.image;
+      img.style.cssText =
+        'position:absolute;' +
+        `left:${(ir.x1*100).toFixed(2)}%;top:${(ir.y1*100).toFixed(2)}%;` +
+        `width:${((ir.x2-ir.x1)*100).toFixed(2)}%;height:${((ir.y2-ir.y1)*100).toFixed(2)}%;` +
+        'object-fit:cover;display:block;';
+      img.loading = 'lazy';
+      stage.appendChild(img);
+    } else if (placement.backgroundMedia?.image) {
+      stage.style.background = primary;
+      const img = document.createElement('img');
+      img.src = placement.backgroundMedia.image;
+      img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;';
+      img.loading = 'lazy';
+      stage.appendChild(img);
+    } else {
+      stage.style.background = primary;
+    }
+
+    // Set stage font-size proportional to width so element em units scale.
+    requestAnimationFrame(() => {
+      const r = stage.getBoundingClientRect();
+      if (r.width > 0) stage.style.fontSize = `${Math.max(8, r.width / 30)}px`;
+    });
+
+    // Draw each placed element
+    for (const el of placement.elements) {
+      stage.appendChild(renderPlacedElement(el, input));
+    }
+
+    // Auto-fit text for elements that requested it (headline, product_meta).
+    // Two RAFs so the stage font-size set above has actually committed.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      for (const el of placement.elements) {
+        if (el.id === 'headline' || el.id === 'product_meta') {
+          const wrap = stage.querySelector(`[data-element-id="${el.id}"]`);
+          const content = wrap?.querySelector('.tp-overlay-content');
+          if (wrap && content) fitTextToBox(wrap, content);
+        }
+      }
+    }));
+
+    // Surface failures
+    if (placement.failedRequired?.length) {
+      const warn = document.createElement('div');
+      warn.style.cssText = 'position:absolute;top:6px;right:6px;background:rgba(239,68,68,0.9);color:#fff;font-size:9px;padding:2px 6px;border-radius:999px;';
+      warn.textContent = `failed: ${placement.failedRequired.join(',')}`;
+      stage.appendChild(warn);
+    }
+  }
+
+  function renderPlacedElement(el, input) {
+    const wrap = document.createElement('div');
+    wrap.dataset.elementId = el.id;
+    const r = el.rectPct;
+    wrap.style.cssText =
+      'position:absolute;box-sizing:border-box;overflow:hidden;' +
+      `left:${(r.x1*100).toFixed(2)}%;top:${(r.y1*100).toFixed(2)}%;` +
+      `width:${((r.x2-r.x1)*100).toFixed(2)}%;height:${((r.y2-r.y1)*100).toFixed(2)}%;` +
+      `color:${el.textColor || '#fff'};`;
+
+    // Adaptive scrim — applied as a background gradient
+    if (el.scrim && el.scrim.type !== 'none' && el.scrim.opacity > 0) {
+      wrap.style.background = scrimToCss(el.scrim);
+      wrap.style.borderRadius = '6px';
+    }
+
+    switch (el.id) {
+      case 'logo':         renderOverlayLogo(wrap, el, input); break;
+      case 'headline':     renderOverlayHeadline(wrap, el, input); break;
+      case 'product_meta': renderOverlayProductMeta(wrap, el, input); break;
+      case 'cta':          renderOverlayCta(wrap, el, input); break;
+      case 'quote':        renderOverlayQuote(wrap, el, input); break;
+      default:             wrap.innerHTML = `<div class="tp-overlay-content">${escapeHtml(el.id)}</div>`;
+    }
+    return wrap;
+  }
+
+  function scrimToCss(scrim) {
+    const op = Math.max(0, Math.min(1, scrim.opacity || 0));
+    const dark = scrim.type === 'gradient-dark';
+    const c1 = dark ? `rgba(0,0,0,${op.toFixed(3)})` : `rgba(255,255,255,${op.toFixed(3)})`;
+    const c0 = dark ? 'rgba(0,0,0,0)' : 'rgba(255,255,255,0)';
+    switch (scrim.direction) {
+      case 'top-fade':    return `linear-gradient(180deg, ${c1} 0%, ${c0} 100%)`;
+      case 'bottom-fade': return `linear-gradient(0deg, ${c1} 0%, ${c0} 100%)`;
+      default:            return `radial-gradient(ellipse at center, ${c1} 30%, ${c0} 100%)`;
+    }
+  }
+
+  function renderOverlayLogo(wrap, el, input) {
+    const logo = input.brand?.logo;
+    if (logo) {
+      const img = document.createElement('img');
+      img.src = logo;
+      img.style.cssText = 'width:100%;height:100%;object-fit:contain;object-position:left center;';
+      img.loading = 'lazy';
+      wrap.appendChild(img);
+    } else {
+      wrap.style.display = 'flex'; wrap.style.alignItems = 'center'; wrap.style.padding = '0.2em 0.4em';
+      wrap.innerHTML =
+        `<div class="tp-overlay-content" style="font-weight:900;font-size:1.1em;text-shadow:0 1px 3px rgba(0,0,0,0.4);">` +
+        escapeHtml(input.brand?.name || 'BRAND') +
+        `</div>`;
+    }
+  }
+
+  function renderOverlayHeadline(wrap, el, input) {
+    wrap.style.padding = '0.3em 0.5em';
+    wrap.style.display = 'flex'; wrap.style.alignItems = 'center';
+    const baseScale = (el.fontScale || 1);
+    wrap.style.fontSize = `${(1.25 * baseScale).toFixed(3)}em`;
+    wrap.style.fontWeight = '900';
+    wrap.style.lineHeight = '1.1';
+    wrap.style.letterSpacing = '-0.01em';
+    wrap.style.textShadow = '0 1px 3px rgba(0,0,0,0.4)';
+    wrap.innerHTML = `<div class="tp-overlay-content" style="width:100%;">${escapeHtml(input.copy?.headline || '')}</div>`;
+  }
+
+  function renderOverlayProductMeta(wrap, el, input) {
+    wrap.style.padding = '0.4em 0.6em';
+    wrap.style.display = 'flex'; wrap.style.flexDirection = 'column'; wrap.style.justifyContent = 'center';
+    wrap.style.fontSize = `${(0.95 * (el.fontScale || 1)).toFixed(3)}em`;
+    wrap.style.textShadow = '0 1px 3px rgba(0,0,0,0.4)';
+
+    const name = input.product?.name || '';
+    const price = input.product?.price;
+    const rating = input.social_proof?.rating_value;
+    const reviewCount = input.social_proof?.review_count;
+
+    const parts = [];
+    parts.push(`<div style="font-weight:800;line-height:1.15;margin-bottom:0.2em;">${escapeHtml(name)}${price != null ? ` <span style="opacity:0.85;font-weight:600;">· ${escapeHtml(String(price))}</span>` : ''}</div>`);
+    if (typeof rating === 'number') {
+      parts.push(`<div style="font-size:0.88em;display:flex;align-items:center;gap:0.4em;flex-wrap:wrap;">` +
+        renderYellowStars(rating) +
+        `<span style="font-weight:700;">${rating.toFixed(1)}</span>` +
+        (typeof reviewCount === 'number' ? `<span style="opacity:0.78;font-weight:400;">(${reviewCount.toLocaleString()} reviews)</span>` : '') +
+      `</div>`);
+    }
+    wrap.innerHTML = `<div class="tp-overlay-content" style="width:100%;">${parts.join('')}</div>`;
+  }
+
+  function renderYellowStars(rating) {
+    const r = Math.max(0, Math.min(5, Math.round(rating)));
+    const full = '★'.repeat(r);
+    const empty = '☆'.repeat(5 - r);
+    return `<span style="letter-spacing:0.05em;line-height:1;"><span style="color:#fbbf24;">${full}</span><span style="opacity:0.4;">${empty}</span></span>`;
+  }
+
+  function renderOverlayCta(wrap, el, input) {
+    // Override scrim — CTA always uses brand accent fill.
+    wrap.style.background = `var(--brand-accent, #ef4444)`;
+    wrap.style.color = '#fff';
+    wrap.style.borderRadius = '999px';
+    wrap.style.display = 'flex'; wrap.style.alignItems = 'center'; wrap.style.justifyContent = 'center';
+    wrap.style.fontWeight = '800';
+    wrap.style.fontSize = '1em';
+    wrap.style.letterSpacing = '0.04em';
+    wrap.style.boxShadow = '0 4px 14px rgba(0,0,0,0.4)';
+    wrap.innerHTML = `<div class="tp-overlay-content">${escapeHtml(input.cta?.text || 'Shop')}</div>`;
+  }
+
+  function renderOverlayQuote(wrap, el, input) {
+    wrap.style.padding = '0.5em 0.75em 0.5em calc(0.75em + 4px)';
+    wrap.style.fontSize = '0.85em';
+    wrap.style.lineHeight = '1.3';
+    wrap.style.display = 'flex'; wrap.style.alignItems = 'center';
+    wrap.style.borderRadius = '8px';
+    wrap.style.background = 'rgba(255,255,255,0.96)';
+    wrap.style.color = '#0a0a0a';
+    wrap.style.borderLeft = '4px solid var(--brand-accent, #ef4444)';
+    wrap.style.boxShadow = '0 2px 10px rgba(0,0,0,0.3)';
+
+    const quote = input.social_proof?.primary_quote;
+    const text = quote?.text || '';
+    const author = quote?.author_name || '';
+    const ml = el.maxLines || 4;
+    let html = `<div class="tp-overlay-content" style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:${ml};-webkit-box-orient:vertical;">` + escapeHtml(text);
+    if (author) html += `<div style="font-size:0.75em;color:#555;margin-top:0.25em;">— ${escapeHtml(author)}</div>`;
+    html += `</div>`;
+    wrap.innerHTML = html;
+  }
+
+  // Auto-fit text to its container — shrinks font-size in 5% steps until
+  // content fits or hits the readability floor (per renderer §5.5).
+  function fitTextToBox(wrap, content) {
+    if (!wrap || !content) return;
+    const baseFontPx = parseFloat(window.getComputedStyle(wrap).fontSize);
+    if (!baseFontPx) return;
+    let scale = 1.0;
+    const minScale = 0.55;
+    let attempts = 14;
+    while (scale > minScale && attempts-- > 0) {
+      if (content.scrollWidth <= content.clientWidth + 1 && content.scrollHeight <= content.clientHeight + 1) break;
+      scale -= 0.05;
+      wrap.style.fontSize = `${baseFontPx * scale}px`;
+    }
   }
 
   // Resolve a zone's content based on its kind + slot(s).

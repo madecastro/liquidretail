@@ -1968,15 +1968,20 @@
       stage.appendChild(renderPlacedElement(el, input));
     }
 
-    // Auto-fit text for elements that requested it (headline, product_meta).
-    // Two RAFs so the stage font-size set above has actually committed.
+    // Auto-fit text for elements that requested it (headline, product_meta,
+    // pill-narrow CTA, quote). Two RAFs so the stage font-size set above
+    // has actually committed.
     requestAnimationFrame(() => requestAnimationFrame(() => {
       for (const el of placement.elements) {
-        if (el.id === 'headline' || el.id === 'product_meta') {
-          const wrap = stage.querySelector(`[data-element-id="${el.id}"]`);
-          const content = wrap?.querySelector('.tp-overlay-content');
-          if (wrap && content) fitTextToBox(wrap, content);
-        }
+        const needsFit =
+          el.id === 'headline' ||
+          el.id === 'product_meta' ||
+          (el.id === 'cta'   && el.variant === 'pill-narrow') ||
+          (el.id === 'quote' && el.variant === 'card-narrow');
+        if (!needsFit) continue;
+        const wrap = stage.querySelector(`[data-element-id="${el.id}"]`);
+        const content = wrap?.querySelector('.tp-overlay-content');
+        if (wrap && content) fitTextToBox(wrap, content);
       }
     }));
 
@@ -2019,7 +2024,8 @@
         const lbl = document.createElement('span');
         lbl.className = 'tp-debug-label';
         const scalePct = typeof d.fontScale === 'number' && d.fontScale < 1 ? ` · ${Math.round(d.fontScale * 100)}%` : '';
-        lbl.textContent = `${d.id}${scalePct}`;
+        const variantBit = d.variant ? ` · ${d.variant}` : '';
+        lbl.textContent = `${d.id}${variantBit}${scalePct}`;
         box.appendChild(lbl);
         layer.appendChild(box);
       }
@@ -2121,17 +2127,27 @@
 
   function renderOverlayLogo(wrap, el, input) {
     const logo = input.brand?.logo;
+    // Square variant centers the logo in its tight corner; horizontal
+    // left-anchors the wordmark so it doesn't float oddly.
+    const objectPosition = el.variant === 'square' ? 'center center' : 'left center';
     if (logo) {
       const img = document.createElement('img');
       img.src = logo;
-      img.style.cssText = 'width:100%;height:100%;object-fit:contain;object-position:left center;';
+      img.style.cssText = `width:100%;height:100%;object-fit:contain;object-position:${objectPosition};`;
       img.loading = 'lazy';
       wrap.appendChild(img);
     } else {
-      wrap.style.display = 'flex'; wrap.style.alignItems = 'center'; wrap.style.padding = '0.2em 0.4em';
+      // Name-as-logo fallback. Square variant shows the first initial only;
+      // horizontal shows the full brand name.
+      wrap.style.display = 'flex'; wrap.style.alignItems = 'center'; wrap.style.justifyContent = el.variant === 'square' ? 'center' : 'flex-start';
+      wrap.style.padding = '0.2em 0.4em';
+      const brandName = input.brand?.name || 'BRAND';
+      const fallbackText = el.variant === 'square'
+        ? brandName.trim().charAt(0).toUpperCase()
+        : brandName;
       wrap.innerHTML =
-        `<div class="tp-overlay-content" style="font-weight:900;font-size:1.1em;text-shadow:0 1px 3px rgba(0,0,0,0.4);">` +
-        escapeHtml(input.brand?.name || 'BRAND') +
+        `<div class="tp-overlay-content" style="font-weight:900;font-size:${el.variant === 'square' ? '1.6' : '1.1'}em;text-shadow:0 1px 3px rgba(0,0,0,0.4);">` +
+        escapeHtml(fallbackText) +
         `</div>`;
     }
   }
@@ -2140,33 +2156,76 @@
     wrap.style.padding = '0.3em 0.5em';
     wrap.style.display = 'flex'; wrap.style.alignItems = 'center';
     const baseScale = (el.fontScale || 1);
-    wrap.style.fontSize = `${(1.25 * baseScale).toFixed(3)}em`;
+    // 1-line horizontal gets the biggest base font; stacked variants shrink
+    // slightly because they already have more vertical real estate.
+    const baseEm = el.variant === 'horizontal' ? 1.25
+                 : el.variant === 'stacked-2'  ? 1.10
+                 : el.variant === 'stacked-3'  ? 0.95
+                 :                                1.15;
+    wrap.style.fontSize = `${(baseEm * baseScale).toFixed(3)}em`;
     wrap.style.fontWeight = '900';
-    wrap.style.lineHeight = '1.1';
+    wrap.style.lineHeight = '1.08';
     wrap.style.letterSpacing = '-0.01em';
     wrap.style.textShadow = '0 1px 3px rgba(0,0,0,0.4)';
-    wrap.innerHTML = `<div class="tp-overlay-content" style="width:100%;">${escapeHtml(input.copy?.headline || '')}</div>`;
+    const maxLines = el.maxLines || 1;
+    // Multi-line clamp keeps very long headlines from overflowing even
+    // when the shape was chosen to "fit" N lines — content length is an
+    // estimate, not a contract.
+    wrap.innerHTML =
+      `<div class="tp-overlay-content" style="width:100%;` +
+      (maxLines > 1 ? `display:-webkit-box;-webkit-line-clamp:${maxLines};-webkit-box-orient:vertical;overflow:hidden;` : '') +
+      `">${escapeHtml(input.copy?.headline || '')}</div>`;
   }
 
   function renderOverlayProductMeta(wrap, el, input) {
     wrap.style.padding = '0.4em 0.6em';
     wrap.style.display = 'flex'; wrap.style.flexDirection = 'column'; wrap.style.justifyContent = 'center';
-    wrap.style.fontSize = `${(0.95 * (el.fontScale || 1)).toFixed(3)}em`;
+    // Stacked column variant gets a smaller base — it has more lines to fill.
+    const baseEm = el.variant === 'stacked' ? 0.82 : 0.95;
+    wrap.style.fontSize = `${(baseEm * (el.fontScale || 1)).toFixed(3)}em`;
     wrap.style.textShadow = '0 1px 3px rgba(0,0,0,0.4)';
 
-    const name = input.product?.name || '';
-    const price = input.product?.price;
-    const rating = input.social_proof?.rating_value;
+    const name        = input.product?.name || '';
+    const price       = input.product?.price;
+    const rating      = input.social_proof?.rating_value;
     const reviewCount = input.social_proof?.review_count;
 
     const parts = [];
-    parts.push(`<div style="font-weight:800;line-height:1.15;margin-bottom:0.2em;">${escapeHtml(name)}${price != null ? ` <span style="opacity:0.85;font-weight:600;">· ${escapeHtml(String(price))}</span>` : ''}</div>`);
-    if (typeof rating === 'number') {
-      parts.push(`<div style="font-size:0.88em;display:flex;align-items:center;gap:0.4em;flex-wrap:wrap;">` +
-        renderYellowStars(rating) +
-        `<span style="font-weight:700;">${rating.toFixed(1)}</span>` +
-        (typeof reviewCount === 'number' ? `<span style="opacity:0.78;font-weight:400;">(${reviewCount.toLocaleString()} reviews)</span>` : '') +
-      `</div>`);
+    const isStacked = el.layout === 'stack';
+
+    if (isStacked) {
+      // Stacked column: each field on its own line, left-aligned.
+      if (name) parts.push(
+        `<div style="font-weight:800;line-height:1.15;">${escapeHtml(name)}</div>`
+      );
+      if (price != null) parts.push(
+        `<div style="opacity:0.88;font-weight:600;margin-top:0.15em;">${escapeHtml(String(price))}</div>`
+      );
+      if (typeof rating === 'number') {
+        parts.push(
+          `<div style="margin-top:0.3em;line-height:1;">` + renderYellowStars(rating) + `</div>` +
+          `<div style="font-weight:700;font-size:0.92em;margin-top:0.15em;">${rating.toFixed(1)}` +
+          (typeof reviewCount === 'number' ? ` <span style="opacity:0.78;font-weight:400;">(${reviewCount.toLocaleString()})</span>` : '') +
+          `</div>`
+        );
+      }
+    } else {
+      // Inline: name · price on one line, stars + count on next.
+      parts.push(
+        `<div style="font-weight:800;line-height:1.15;margin-bottom:0.2em;">` +
+          escapeHtml(name) +
+          (price != null ? ` <span style="opacity:0.85;font-weight:600;">· ${escapeHtml(String(price))}</span>` : '') +
+        `</div>`
+      );
+      if (typeof rating === 'number') {
+        parts.push(
+          `<div style="font-size:0.88em;display:flex;align-items:center;gap:0.4em;flex-wrap:wrap;">` +
+            renderYellowStars(rating) +
+            `<span style="font-weight:700;">${rating.toFixed(1)}</span>` +
+            (typeof reviewCount === 'number' ? `<span style="opacity:0.78;font-weight:400;">(${reviewCount.toLocaleString()} reviews)</span>` : '') +
+          `</div>`
+        );
+      }
     }
     wrap.innerHTML = `<div class="tp-overlay-content" style="width:100%;">${parts.join('')}</div>`;
   }
@@ -2185,8 +2244,16 @@
     wrap.style.borderRadius = '999px';
     wrap.style.display = 'flex'; wrap.style.alignItems = 'center'; wrap.style.justifyContent = 'center';
     wrap.style.fontWeight = '800';
-    wrap.style.fontSize = '1em';
+    // pill-narrow is tight horizontal space; let the fit-text loop handle
+    // the final size but start smaller so the first paint isn't comically
+    // clipped. pill-wide is slimmer and can afford a touch larger base.
+    const baseEm = el.variant === 'pill-narrow' ? 0.78
+                 : el.variant === 'pill-wide'   ? 0.95
+                 :                                 1.0;
+    wrap.style.fontSize = `${baseEm.toFixed(2)}em`;
     wrap.style.letterSpacing = '0.04em';
+    wrap.style.textAlign = 'center';
+    wrap.style.lineHeight = '1.1';
     wrap.style.boxShadow = '0 4px 14px rgba(0,0,0,0.4)';
     wrap.innerHTML = `<div class="tp-overlay-content">${escapeHtml(input.cta?.text || 'Shop')}</div>`;
   }
@@ -2391,6 +2458,7 @@
       const chipHtml = `<span class="tp-decision-chip state-${d.state}">${escapeHtml(d.state.replace('-', ' '))}</span>`;
 
       const metaBits = [];
+      if (d.variant)                           metaBits.push(`shape: ${d.variant}${d.layout ? '/' + d.layout : ''}${d.maxLines ? ' · ' + d.maxLines + ' line' + (d.maxLines === 1 ? '' : 's') : ''}`);
       if (d.rectPct) {
         const pct = (v) => Math.round(v * 100);
         metaBits.push(`rect: ${pct(d.rectPct.x1)}%, ${pct(d.rectPct.y1)}% → ${pct(d.rectPct.x2)}%, ${pct(d.rectPct.y2)}%`);
@@ -2400,6 +2468,7 @@
       if (typeof d.fontScale === 'number' && d.fontScale < 1) metaBits.push(`font: ${Math.round(d.fontScale * 100)}%`);
       if (d.stats) {
         const s = d.stats;
+        if (typeof s.candidatesEvaluated === 'number') metaBits.push(`cands: ${s.candidatesEvaluated} eval / ${s.candidatesLegal} legal`);
         if (typeof s.bgBrightness === 'number') metaBits.push(`bg brightness: ${s.bgBrightness}`);
         if (typeof s.bgDensity === 'number')    metaBits.push(`bg density: ${s.bgDensity}`);
       }

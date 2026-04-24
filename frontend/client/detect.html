@@ -432,6 +432,16 @@
       white-space: nowrap; transition: all 0.12s;
     }
     .tp-chip:hover { color: #ccc; border-color: #3a3a3a; }
+
+    /* Conservation slider inline with debug chips — sized tight, shares
+       oz-slider base styles so the thumb/track look matches the overlay-
+       zones panel slider. */
+    .tp-conservation-slider-wrap {
+      display: flex; align-items: center; gap: 8px;
+      min-width: 180px;
+    }
+    .tp-conservation-slider-wrap .oz-slider { width: 140px; }
+    #tpConservationValue { min-width: 34px; text-align: right; font-size: 10px; }
     .tp-chip.active { background: #1f2937; border-color: #3b82f6; color: #93c5fd; }
     .tp-chip.disabled { opacity: 0.35; cursor: not-allowed; }
     .tp-chip.disabled:hover { color: #888; border-color: #2a2a2a; }
@@ -1068,6 +1078,13 @@
               <button id="tpDebugRestrictionsChip" type="button" class="tp-chip">Show restrictions</button>
             </div>
           </div>
+          <div class="tp-picker-group" id="tpConservationGroup">
+            <span class="tp-picker-label">Conservation</span>
+            <div class="tp-conservation-slider-wrap">
+              <input id="tpConservationSlider" type="range" min="0" max="100" value="50" class="oz-slider" />
+              <span id="tpConservationValue" class="oz-slider-value">50%</span>
+            </div>
+          </div>
         </div>
         <div class="tp-stage-wrap">
           <div id="tpStage" class="tp-stage"></div>
@@ -1552,8 +1569,13 @@
     lastInput: null,
     lastCanvas: null,
     showDebugBoxes: true,   // container boxes — placed elements (overlay) or canvas zones (canonical)
-    showRestrictions: true  // restriction layer — subject/face/text keep-outs from overlay analysis
+    showRestrictions: true, // restriction layer — subject/face/text keep-outs from overlay analysis
+    conservation: 0.5       // placement strictness; overlay-mode only (backend ignores on canonical)
   };
+
+  // Debounce timer for conservation slider — we refetch layout-input on
+  // change, so coalesce rapid drags before hitting the backend.
+  let tpConservationTimer = null;
 
   // Re-render the preview stage from cached TP_STATE. Called whenever a
   // debug toggle changes so the user doesn't have to re-pick template/ratio.
@@ -1590,6 +1612,24 @@
     restr?.addEventListener('click', () => {
       TP_STATE.showRestrictions = !TP_STATE.showRestrictions;
       syncRestr(); redrawTpStage();
+    });
+  })();
+
+  // Conservation slider — lives next to the debug chips. Drags coalesce via
+  // a 300ms debounce, then refetch (with refresh:true to bypass the layout-
+  // input cache, which is keyed on mediaId/template/ratio only). Non-overlay
+  // templates ignore the value — the backend skips the placement pass.
+  (function wireTpConservationSlider() {
+    const slider = document.getElementById('tpConservationSlider');
+    const valueEl = document.getElementById('tpConservationValue');
+    if (!slider || !valueEl) return;
+    slider.value = String(Math.round(TP_STATE.conservation * 100));
+    valueEl.textContent = `${slider.value}%`;
+    slider.addEventListener('input', () => {
+      TP_STATE.conservation = Number(slider.value) / 100;
+      valueEl.textContent = `${slider.value}%`;
+      clearTimeout(tpConservationTimer);
+      tpConservationTimer = setTimeout(() => { renderTemplatePreview(); }, 300);
     });
   })();
 
@@ -1707,7 +1747,12 @@
           mediaId:     state.mediaId,
           template:    TP_STATE.template,
           aspect_ratio: TP_STATE.aspectRatio,
-          options:     { allow_invalid: true }
+          options:     { allow_invalid: true, conservation: TP_STATE.conservation },
+          // Cache key is (mediaId, template, ratio) — doesn't include
+          // conservation — so bypass the cache whenever we render. Cheap
+          // for on-demand single-media preview; revisit if this lands on
+          // a batch rendering path.
+          refresh:     true
         })
       });
       const data = await res.json();

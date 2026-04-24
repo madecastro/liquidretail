@@ -1298,15 +1298,26 @@
       }
       case 'text':
       case 'quote_card': {
-        const val = tpGet(input, zone.slot);
-        let txt = '';
-        if (typeof val === 'string')      txt = val;
-        else if (val?.text)               txt = val.text;
-        else if (Array.isArray(val))      txt = val.filter(Boolean).join(' · ');
-        else if (val?.name || val?.price) txt = [val.name, val.price].filter(Boolean).join(' · ');
-        if (!txt) return `<div class="tp-placeholder">${escapeHtml(zone.slot || zone.kind)}</div>`;
-        const author = val?.author_name
-          ? `<div style="font-size:8px;color:#555;margin-top:3px;">— ${escapeHtml(val.author_name)}</div>`
+        // slot can be a single path string OR an array of paths (e.g.
+        // ["product.name", "product.price"] for a product_meta block).
+        // Resolve each path and join; if the path returned an object with
+        // a .text (quote), .name / .price (meta), use those fields.
+        const paths = Array.isArray(zone.slot) ? zone.slot : (zone.slot ? [zone.slot] : []);
+        const raws  = paths.map(p => tpGet(input, p));
+        const first = raws.find(v => v != null && v !== '');
+        const bits  = [];
+        for (const v of raws) {
+          if (v == null || v === '') continue;
+          if (typeof v === 'string')           bits.push(v);
+          else if (typeof v === 'number')      bits.push(String(v));
+          else if (v.text)                     bits.push(v.text);
+          else if (v.name || v.price)          bits.push([v.name, v.price].filter(Boolean).join(' · '));
+          else if (Array.isArray(v))           bits.push(v.map(x => (x?.text || String(x || ''))).filter(Boolean).join(' · '));
+        }
+        const txt = bits.filter(Boolean).join(' · ');
+        if (!txt) return `<div class="tp-placeholder">${escapeHtml(paths.join(' / ') || zone.kind)}</div>`;
+        const author = (first && typeof first === 'object' && first.author_name)
+          ? `<div style="font-size:8px;color:#555;margin-top:3px;">— ${escapeHtml(first.author_name)}</div>`
           : '';
         return `<div style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:${zone.max_lines||4};-webkit-box-orient:vertical;">${escapeHtml(txt)}</div>${author}`;
       }

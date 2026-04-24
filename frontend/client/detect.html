@@ -2233,9 +2233,12 @@
   }
 
   function renderOverlayCta(wrap, el, input) {
-    // Override scrim — CTA always uses brand accent fill.
-    wrap.style.background = `var(--brand-accent, #ef4444)`;
-    wrap.style.color = '#fff';
+    // Override scrim — CTA always uses brand accent fill. Text color is
+    // computed from the accent's luminance so a white/cream accent
+    // doesn't render invisible #fff text on top of itself.
+    const accent = isHex(input.brand?.accent_color) ? input.brand.accent_color : '#ef4444';
+    wrap.style.background = accent;
+    wrap.style.color = tpReadableOn(accent);
     wrap.style.borderRadius = '999px';
     wrap.style.display = 'flex'; wrap.style.alignItems = 'center'; wrap.style.justifyContent = 'center';
     wrap.style.fontWeight = '800';

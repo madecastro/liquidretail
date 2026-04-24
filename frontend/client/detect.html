@@ -572,6 +572,78 @@
     .tp-status .tp-bad { color: #f87171; font-weight: 600; }
     .tp-status code { font-family: 'Courier New', monospace; color: #e879f9; font-size: 10px; }
     .tp-empty { color: #555; font-size: 11px; padding: 16px; text-align: center; font-style: italic; }
+
+    /* ── AI Layout Studio (exploration tool) ── */
+    .als-header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 8px; }
+    .als-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .als-select {
+      background: #161616; border: 1px solid #2a2a2a; color: #ccc;
+      font-size: 11px; padding: 5px 10px; border-radius: 8px;
+    }
+    .als-go-btn {
+      background: #1f2937; border: 1px solid #3b82f6; color: #93c5fd;
+      font-size: 11px; font-weight: 600; padding: 6px 14px; border-radius: 999px;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .als-go-btn:hover:not(:disabled) { background: #3b82f6; color: #fff; }
+    .als-go-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .als-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+    }
+    @media (max-width: 700px) { .als-grid { grid-template-columns: 1fr; } }
+    .als-card {
+      background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 10px;
+      overflow: hidden; position: relative;
+    }
+    .als-card-meta {
+      padding: 8px 10px; display: flex; justify-content: space-between; align-items: center;
+      background: #0a0a0a; border-top: 1px solid #1a1a1a;
+      font-size: 10px; color: #888;
+    }
+    .als-card-meta .als-label {
+      color: #ccc; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.05em; font-size: 9px;
+    }
+    .als-stage { position: relative; width: 100%; background: #000; }
+    .als-stage img { width: 100%; height: 100%; display: block; object-fit: cover; }
+    .als-zones { position: absolute; inset: 0; pointer-events: none; }
+    .als-zone {
+      position: absolute; border: 1.25px solid; box-sizing: border-box;
+      display: flex; align-items: flex-start; justify-content: flex-start;
+    }
+    .als-zone-label {
+      position: absolute; top: 0; left: 0;
+      font-size: 8px; font-weight: 700; color: #fff;
+      background: rgba(0,0,0,0.75);
+      padding: 1px 4px; letter-spacing: 0.04em;
+      border-bottom-right-radius: 3px;
+    }
+    .als-role-logo          { border-color: #22d3ee; }
+    .als-role-hero_media,
+    .als-role-product_media,
+    .als-role-creator_media { border-color: #34d399; }
+    .als-role-quote_card    { border-color: #facc15; }
+    .als-role-cta           { border-color: #ef4444; }
+    .als-role-rating_bar    { border-color: #fb923c; }
+    .als-role-product_meta,
+    .als-role-headline,
+    .als-role-subheadline   { border-color: #a78bfa; }
+    .als-role-badge_row     { border-color: #f472b6; }
+    .als-role-background    { border-color: #555; }
+    .als-role-other         { border-color: #666; }
+    .als-card-error { padding: 20px; color: #f87171; font-size: 11px; text-align: center; }
+    .als-note { font-size: 10px; color: #555; padding: 10px; font-style: italic; }
+    .als-loading { padding: 30px; text-align: center; color: #888; font-size: 12px; }
+    .als-toggle {
+      font-size: 9px; padding: 2px 8px; border-radius: 999px;
+      background: #161616; border: 1px solid #2a2a2a; color: #888;
+      cursor: pointer; white-space: nowrap;
+    }
+    .als-toggle.active { background: #1f2937; border-color: #3b82f6; color: #93c5fd; }
+    .als-download {
+      color: #93c5fd; font-size: 9px; text-decoration: none;
+    }
+    .als-download:hover { text-decoration: underline; }
   </style>
 </head>
 <body class="min-h-screen">
@@ -899,6 +971,30 @@
         </div>
       </div>
 
+      <!-- ╔══ AI Layout Studio ══╗ -->
+      <div id="aiLayoutStudioPanel" class="section-card hidden">
+        <div class="als-header-row">
+          <p class="panel-label flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-indigo-400 inline-block"></span>
+            AI Layout Studio
+            <span class="text-[9px] text-[#555] font-normal normal-case ml-1">— exploration (gpt-image-1 + extraction)</span>
+          </p>
+          <div class="als-controls">
+            <select id="alsQuality" class="als-select" title="Image quality (cost trade-off)">
+              <option value="low" selected>low (~$0.15/session)</option>
+              <option value="medium">medium (~$0.60/session)</option>
+              <option value="high">high (~$2.30/session)</option>
+            </select>
+            <button id="alsGoBtn" class="als-go-btn" type="button">Generate 9 references</button>
+          </div>
+        </div>
+        <p id="alsStatus" class="text-[10px] text-[#555] mb-2"></p>
+        <p class="als-note">
+          Each session generates 3 layout variants (brand / product / social) at 3 aspect ratios (1:1, 9:16, 1.91:1) via gpt-image-1, then extracts zone geometry from each with gpt-4.1-vision. Text in the images will be garbled — only the LAYOUT matters. Toggle "Show zones" on any card to overlay the extracted rectangles.
+        </p>
+        <div id="alsGrid" class="als-grid"></div>
+      </div>
+
       <!-- ╔══ Ad Layout Preview (overlay zones) ══╗ -->
       <div id="overlayZonesPanel" class="section-card hidden">
         <div class="flex items-center justify-between mb-3">
@@ -1165,8 +1261,170 @@
     renderProductMatches();
     renderOverlayZonesPanel();
     renderTemplatePreview();
+    renderAiLayoutStudio();
     renderRightsToggle();
     updateApprovedCount();
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  AI Layout Studio
+  //  Exploration tool: asks gpt-image-1 for 9 reference layouts and
+  //  extracts zone geometry from each via gpt-4.1 Vision. Output is
+  //  reviewable on-screen — operator decides if any extracted layouts
+  //  are worth promoting to a brand-scoped canvas variant later.
+  // ══════════════════════════════════════════════════════════════
+  const ALS_STATE = {
+    lastMediaId: null,
+    loading: false,
+    session: null            // { references: [...] }
+  };
+
+  function renderAiLayoutStudio() {
+    const panel = document.getElementById('aiLayoutStudioPanel');
+    if (!state.mediaId) { panel.classList.add('hidden'); return; }
+    panel.classList.remove('hidden');
+
+    if (ALS_STATE.lastMediaId && ALS_STATE.lastMediaId !== state.mediaId) {
+      ALS_STATE.session = null;
+      document.getElementById('alsGrid').innerHTML = '';
+      document.getElementById('alsStatus').textContent = '';
+    }
+    ALS_STATE.lastMediaId = state.mediaId;
+    if (!ALS_STATE.session && !ALS_STATE.loading) {
+      document.getElementById('alsGrid').innerHTML =
+        '<p class="als-note">Press <strong>Generate 9 references</strong> to run an AI layout exploration for this media.</p>';
+    }
+  }
+
+  // One-time wire-up of the generate button.
+  (function wireAlsButton() {
+    const btn = document.getElementById('alsGoBtn');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+      if (!state.mediaId || ALS_STATE.loading) return;
+      const quality = document.getElementById('alsQuality').value;
+      ALS_STATE.loading = true;
+      btn.disabled = true;
+      const statusEl = document.getElementById('alsStatus');
+      const grid = document.getElementById('alsGrid');
+      statusEl.textContent = `Generating 9 references at ${quality} quality… this takes 30–90 seconds.`;
+      grid.innerHTML = '<div class="als-loading">⏳ gpt-image-1 is drawing 9 layout references in parallel…</div>';
+
+      const started = Date.now();
+      try {
+        const res = await fetch('/api/ai-layouts/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mediaId: state.mediaId, quality })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Generation failed');
+        ALS_STATE.session = data;
+        const ok = data.references.filter(r => r.status === 'ok').length;
+        const secs = ((Date.now() - started) / 1000).toFixed(1);
+        statusEl.textContent = `${ok}/${data.references.length} references ready in ${secs}s · brand=${data.brandName || '—'} · product=${data.productName || '—'}`;
+        drawAlsGrid(data);
+      } catch (err) {
+        grid.innerHTML = '';
+        statusEl.innerHTML = `<span style="color:#f87171">Error: ${escapeHtml(err.message)}</span>`;
+      } finally {
+        ALS_STATE.loading = false;
+        btn.disabled = false;
+      }
+    });
+  })();
+
+  function drawAlsGrid(session) {
+    const grid = document.getElementById('alsGrid');
+    grid.innerHTML = '';
+    for (const ref of session.references) {
+      grid.appendChild(buildAlsCard(ref));
+    }
+  }
+
+  function buildAlsCard(ref) {
+    const card = document.createElement('div');
+    card.className = 'als-card';
+
+    const stage = document.createElement('div');
+    stage.className = 'als-stage';
+    // Canvas aspect ratio — use the requested ratio for a proper preview box,
+    // even if gpt-image-1 rounded to a supported size (e.g. 1.91:1 → 1536×1024).
+    const [arNum, arDen] = ref.aspectRatio === '1.91:1' ? [191, 100] : ref.aspectRatio.split(':').map(Number);
+    stage.style.aspectRatio = `${arNum} / ${arDen}`;
+
+    if (ref.status !== 'ok' || !ref.imageUrl) {
+      stage.innerHTML = `<div class="als-card-error">${escapeHtml(ref.error || 'generation failed')}</div>`;
+    } else {
+      const img = document.createElement('img');
+      img.src = ref.imageUrl;
+      img.alt = `${ref.variant} ${ref.aspectRatio}`;
+      img.loading = 'lazy';
+      stage.appendChild(img);
+
+      const zoneLayer = document.createElement('div');
+      zoneLayer.className = 'als-zones';
+      zoneLayer.style.display = 'none';
+      for (const z of (ref.extractedCanvas?.zones || [])) {
+        const r = z.rectPct;
+        const zoneEl = document.createElement('div');
+        zoneEl.className = `als-zone als-role-${z.role}`;
+        zoneEl.style.left   = `${(r.x1 * 100).toFixed(2)}%`;
+        zoneEl.style.top    = `${(r.y1 * 100).toFixed(2)}%`;
+        zoneEl.style.width  = `${((r.x2 - r.x1) * 100).toFixed(2)}%`;
+        zoneEl.style.height = `${((r.y2 - r.y1) * 100).toFixed(2)}%`;
+        zoneEl.title = `${z.role} · confidence ${(z.confidence ?? 0).toFixed(2)} · ${z.contrastBg}\n${z.notes || ''}`;
+        const lbl = document.createElement('span');
+        lbl.className = 'als-zone-label';
+        lbl.textContent = z.role.replace('_', ' ');
+        zoneEl.appendChild(lbl);
+        zoneLayer.appendChild(zoneEl);
+      }
+      stage.appendChild(zoneLayer);
+    }
+
+    card.appendChild(stage);
+
+    const meta = document.createElement('div');
+    meta.className = 'als-card-meta';
+    const left = document.createElement('div');
+    left.innerHTML =
+      `<span class="als-label">${escapeHtml(ref.variant)}</span> · ${escapeHtml(ref.aspectRatio)}` +
+      (ref.extractedCanvas
+        ? ` · <span style="color:#ccc">${ref.extractedCanvas.zones.length} zones</span> · <span style="color:#666">${escapeHtml(ref.extractedCanvas.overallStyle || '')}</span>`
+        : '');
+    const right = document.createElement('div');
+    right.style.cssText = 'display:flex; gap:6px; align-items:center;';
+
+    if (ref.status === 'ok' && ref.imageUrl) {
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'als-toggle';
+      toggle.textContent = 'Show zones';
+      let on = false;
+      toggle.addEventListener('click', () => {
+        on = !on;
+        toggle.classList.toggle('active', on);
+        toggle.textContent = on ? 'Hide zones' : 'Show zones';
+        const zl = card.querySelector('.als-zones');
+        if (zl) zl.style.display = on ? 'block' : 'none';
+      });
+      right.appendChild(toggle);
+
+      const link = document.createElement('a');
+      link.className = 'als-download';
+      link.href = ref.imageUrl;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = 'Open';
+      right.appendChild(link);
+    }
+
+    meta.appendChild(left);
+    meta.appendChild(right);
+    card.appendChild(meta);
+
+    return card;
   }
 
   // ══════════════════════════════════════════════════════════════

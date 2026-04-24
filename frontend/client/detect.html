@@ -573,6 +573,64 @@
     .tp-status code { font-family: 'Courier New', monospace; color: #e879f9; font-size: 10px; }
     .tp-empty { color: #555; font-size: 11px; padding: 16px; text-align: center; font-style: italic; }
 
+    /* Debug-box overlay for overlay-mode preview. Dashed outline + pill
+       label over every placed element so the operator can see where the
+       placement algorithm landed each container. */
+    .tp-debug-layer { position: absolute; inset: 0; pointer-events: none; z-index: 50; }
+    .tp-debug-box {
+      position: absolute; box-sizing: border-box; border-radius: 4px;
+      border: 1.5px dashed;
+    }
+    .tp-debug-label {
+      position: absolute; top: -18px; left: 0;
+      font-size: 9px; font-weight: 700; padding: 2px 7px;
+      background: rgba(0,0,0,0.88); color: #fff;
+      border-radius: 999px; white-space: nowrap;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+    .tp-debug-box.state-placed           { border-color: #34d399; }
+    .tp-debug-box.state-fallback-placed  { border-color: #facc15; }
+    .tp-debug-box.state-placed           .tp-debug-label { background: rgba(52,211,153,0.92); color: #0a0a0a; }
+    .tp-debug-box.state-fallback-placed  .tp-debug-label { background: rgba(250,204,21,0.92); color: #0a0a0a; }
+
+    /* Decision trace on the right-side status panel (overlay mode only) */
+    .tp-decision-section-head {
+      font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+      color: #666; margin: 10px 0 6px;
+    }
+    .tp-decision-row {
+      display: grid; grid-template-columns: auto 1fr; gap: 10px;
+      padding: 8px 0; border-bottom: 1px solid #1a1a1a;
+    }
+    .tp-decision-row:last-child { border-bottom: none; }
+    .tp-decision-chip {
+      font-size: 9px; font-weight: 700; padding: 3px 8px;
+      border-radius: 999px; text-transform: uppercase; letter-spacing: 0.06em;
+      white-space: nowrap; align-self: start; line-height: 1;
+    }
+    .tp-decision-chip.state-placed           { background: rgba(52,211,153,0.18); color: #34d399; }
+    .tp-decision-chip.state-fallback-placed  { background: rgba(250,204,21,0.18); color: #facc15; }
+    .tp-decision-chip.state-dropped          { background: rgba(148,163,184,0.22); color: #94a3b8; }
+    .tp-decision-chip.state-failed-required  { background: rgba(239,68,68,0.20); color: #f87171; }
+    .tp-decision-chip.state-skipped          { background: rgba(85,85,85,0.35); color: #888; }
+    .tp-decision-body { font-size: 11px; color: #ccc; line-height: 1.4; }
+    .tp-decision-body .tp-dec-id {
+      color: #fff; font-weight: 700; font-size: 11px;
+    }
+    .tp-decision-body .tp-dec-reason {
+      color: #888; margin-top: 3px;
+    }
+    .tp-decision-body .tp-dec-meta {
+      color: #555; font-size: 9px; margin-top: 4px;
+      font-family: 'Courier New', monospace; letter-spacing: -0.01em;
+    }
+    .tp-overlay-mode-row {
+      display: flex; gap: 10px; font-size: 10px; color: #888;
+      margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #1a1a1a;
+    }
+    .tp-overlay-mode-row strong { color: #ccc; }
+
     /* ── AI Layout Studio (exploration tool) ── */
     .als-header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 8px; }
     .als-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -963,6 +1021,12 @@
           <div class="tp-picker-group">
             <span class="tp-picker-label">Aspect ratio</span>
             <div id="tpRatioChips" class="tp-picker-chips"></div>
+          </div>
+          <div class="tp-picker-group" id="tpDebugGroup" style="display:none;">
+            <span class="tp-picker-label">Debug</span>
+            <div class="tp-picker-chips">
+              <button id="tpDebugBoxesChip" type="button" class="tp-chip">Show container boxes</button>
+            </div>
           </div>
         </div>
         <div class="tp-stage-wrap">
@@ -1446,8 +1510,29 @@
     supportedRatios: {},    // { template_id: [ratios] }
     lastMediaId: null,
     lastInput: null,
-    lastCanvas: null
+    lastCanvas: null,
+    showDebugBoxes: true    // debug overlay default-on for overlay-mode templates
   };
+
+  // One-time wire-up of the debug-boxes chip.
+  (function wireTpDebugChip() {
+    const chip = document.getElementById('tpDebugBoxesChip');
+    if (!chip) return;
+    const sync = () => {
+      chip.classList.toggle('active', TP_STATE.showDebugBoxes);
+      chip.textContent = TP_STATE.showDebugBoxes ? 'Hide container boxes' : 'Show container boxes';
+    };
+    sync();
+    chip.addEventListener('click', () => {
+      TP_STATE.showDebugBoxes = !TP_STATE.showDebugBoxes;
+      sync();
+      const stage = document.getElementById('tpStage');
+      if (stage && TP_STATE.lastInput?.placement) {
+        // Re-draw to toggle debug layer
+        drawOverlayCanvas(stage, TP_STATE.lastInput);
+      }
+    });
+  })();
 
   async function renderTemplatePreview() {
     const panel = document.getElementById('templatePreviewPanel');
@@ -1580,14 +1665,26 @@
       // block with pre-computed element rects + text colors + scrim
       // intensity. Render via the placement path instead of the
       // canonical canvas-zone path.
-      if (data.input?.placement?.elements?.length) {
+      const isOverlayMode = !!data.input?.placement;
+      document.getElementById('tpDebugGroup').style.display = isOverlayMode ? '' : 'none';
+
+      if (isOverlayMode && data.input.placement.elements?.length) {
+        drawOverlayCanvas(stage, data.input);
+      } else if (isOverlayMode) {
+        // Overlay mode but nothing placed — still show the stage (will
+        // likely be mostly empty) so the decisions panel can explain why.
         drawOverlayCanvas(stage, data.input);
       } else if (!data.canvas) {
         stage.innerHTML = '<div class="tp-empty">No canvas spec for this combo.</div>';
       } else {
         drawTpCanvas(stage, data.input, data.canvas);
       }
-      renderTpStatus(status, data.validation, data.input);
+
+      if (isOverlayMode) {
+        renderOverlayDecisionsPanel(status, data.input, data.validation);
+      } else {
+        renderTpStatus(status, data.validation, data.input);
+      }
       document.getElementById('templatePreviewMeta').textContent =
         `${TP_STATE.template} · ${TP_STATE.aspectRatio} · ${data.validation?.ok ? 'valid' : 'invalid'}`;
     } catch (err) {
@@ -1754,9 +1851,33 @@
     // Surface failures
     if (placement.failedRequired?.length) {
       const warn = document.createElement('div');
-      warn.style.cssText = 'position:absolute;top:6px;right:6px;background:rgba(239,68,68,0.9);color:#fff;font-size:9px;padding:2px 6px;border-radius:999px;';
+      warn.style.cssText = 'position:absolute;top:6px;right:6px;background:rgba(239,68,68,0.9);color:#fff;font-size:9px;padding:2px 6px;border-radius:999px;z-index:60;';
       warn.textContent = `failed: ${placement.failedRequired.join(',')}`;
       stage.appendChild(warn);
+    }
+
+    // Debug box overlay — dashed rect + pill label over every placed element
+    // so the operator can see exactly where the placement algorithm landed
+    // each container vs. what the final content looks like.
+    if (TP_STATE.showDebugBoxes) {
+      const layer = document.createElement('div');
+      layer.className = 'tp-debug-layer';
+      for (const d of (placement.decisions || [])) {
+        if (!d.rectPct) continue;  // only draw boxes for elements that got placed
+        const r = d.rectPct;
+        const box = document.createElement('div');
+        box.className = `tp-debug-box state-${d.state}`;
+        box.style.cssText =
+          `left:${(r.x1*100).toFixed(2)}%;top:${(r.y1*100).toFixed(2)}%;` +
+          `width:${((r.x2-r.x1)*100).toFixed(2)}%;height:${((r.y2-r.y1)*100).toFixed(2)}%;`;
+        const lbl = document.createElement('span');
+        lbl.className = 'tp-debug-label';
+        const scalePct = typeof d.fontScale === 'number' && d.fontScale < 1 ? ` · ${Math.round(d.fontScale * 100)}%` : '';
+        lbl.textContent = `${d.id}${scalePct}`;
+        box.appendChild(lbl);
+        layer.appendChild(box);
+      }
+      stage.appendChild(layer);
     }
   }
 
@@ -2035,6 +2156,74 @@
     if (Array.isArray(slot)) return slot.map(s => tpGet(input, s)).filter(v => v != null && v !== '');
     const v = tpGet(input, slot);
     return v == null || v === '' ? [] : [v];
+  }
+
+  // Decisions panel for overlay-mode previews. Shows the per-element
+  // trace the backend emitted: state (placed / fallback-placed / dropped /
+  // failed-required / skipped), reason, and placement metadata when placed.
+  function renderOverlayDecisionsPanel(statusEl, input, validation) {
+    const placement = input.placement;
+    if (!placement) { statusEl.innerHTML = ''; return; }
+
+    const parts = [];
+
+    // Mode summary
+    const mode = placement.mode || 'overlay';
+    const conservation = typeof placement.conservation === 'number'
+      ? `${Math.round(placement.conservation * 100)}%` : '—';
+    parts.push(`<div class="tp-overlay-mode-row">
+      <div><strong>Mode:</strong> ${escapeHtml(mode)}</div>
+      <div><strong>Conservation:</strong> ${conservation}</div>
+      <div><strong>Placed:</strong> ${placement.elements?.length || 0}</div>
+    </div>`);
+
+    // Validation echo (still useful)
+    if (validation) {
+      if (validation.ok) {
+        parts.push(`<p style="font-size:11px;color:#34d399;margin-bottom:10px;">✓ Input satisfies <code style="color:#e879f9;font-family:'Courier New',monospace;">${escapeHtml(validation.template_id)}</code> validation</p>`);
+      } else {
+        parts.push(`<p style="font-size:11px;color:#f87171;margin-bottom:10px;">✗ Input did NOT satisfy template validation — render proceeded with allow_invalid</p>`);
+      }
+    }
+
+    // Decision trace
+    parts.push(`<p class="tp-decision-section-head">Element placement trace</p>`);
+    for (const d of (placement.decisions || [])) {
+      const chipHtml = `<span class="tp-decision-chip state-${d.state}">${escapeHtml(d.state.replace('-', ' '))}</span>`;
+
+      const metaBits = [];
+      if (d.rectPct) {
+        const pct = (v) => Math.round(v * 100);
+        metaBits.push(`rect: ${pct(d.rectPct.x1)}%, ${pct(d.rectPct.y1)}% → ${pct(d.rectPct.x2)}%, ${pct(d.rectPct.y2)}%`);
+      }
+      if (d.textColor)                         metaBits.push(`text: ${d.textColor}`);
+      if (d.scrim && d.scrim.type !== 'none')  metaBits.push(`scrim: ${d.scrim.type.replace('gradient-', '')} ${(d.scrim.opacity || 0).toFixed(2)} ${d.scrim.direction || ''}`);
+      if (typeof d.fontScale === 'number' && d.fontScale < 1) metaBits.push(`font: ${Math.round(d.fontScale * 100)}%`);
+      if (d.stats) {
+        const s = d.stats;
+        if (typeof s.bgBrightness === 'number') metaBits.push(`bg brightness: ${s.bgBrightness}`);
+        if (typeof s.bgDensity === 'number')    metaBits.push(`bg density: ${s.bgDensity}`);
+      }
+
+      parts.push(`
+        <div class="tp-decision-row">
+          ${chipHtml}
+          <div class="tp-decision-body">
+            <span class="tp-dec-id">${escapeHtml(d.id)}</span>
+            ${d.required ? '<span style="font-size:9px;color:#888;margin-left:6px;">required</span>' : '<span style="font-size:9px;color:#555;margin-left:6px;">optional</span>'}
+            ${d.region ? `<span style="font-size:9px;color:#666;margin-left:6px;">→ ${escapeHtml(d.region)}</span>` : ''}
+            <div class="tp-dec-reason">${escapeHtml(d.reason || '')}</div>
+            ${metaBits.length ? `<div class="tp-dec-meta">${escapeHtml(metaBits.join(' · '))}</div>` : ''}
+          </div>
+        </div>
+      `);
+    }
+
+    if (placement.failedRequired?.length) {
+      parts.push(`<p style="font-size:10px;color:#f87171;margin-top:10px;padding-top:8px;border-top:1px solid #222;">⚠ Required elements that could not place: ${placement.failedRequired.map(id => `<code style="color:#f87171;">${escapeHtml(id)}</code>`).join(', ')}. Inset-mode fallback ${placement.mode === 'inset' ? 'was invoked.' : 'was attempted but also failed.'}</p>`);
+    }
+
+    statusEl.innerHTML = parts.join('');
   }
 
   function renderTpStatus(statusEl, validation, input) {

@@ -1985,13 +1985,8 @@
       }
     }));
 
-    // Surface failures
-    if (placement.failedRequired?.length) {
-      const warn = document.createElement('div');
-      warn.style.cssText = 'position:absolute;top:6px;right:6px;background:rgba(239,68,68,0.9);color:#fff;font-size:9px;padding:2px 6px;border-radius:999px;z-index:60;';
-      warn.textContent = `failed: ${placement.failedRequired.join(',')}`;
-      stage.appendChild(warn);
-    }
+    // Failure surfacing lives in the right-panel decision trace — no
+    // on-image pill needed.
 
     // Restriction layer — draws the keep-out rects (primary subject, faces,
     // secondary subjects, text) beneath the container layer so the operator

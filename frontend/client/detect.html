@@ -2113,11 +2113,11 @@
     const dark = scrim.type === 'gradient-dark';
     const c1 = dark ? `rgba(0,0,0,${op.toFixed(3)})` : `rgba(255,255,255,${op.toFixed(3)})`;
     const c0 = dark ? 'rgba(0,0,0,0)' : 'rgba(255,255,255,0)';
-    switch (scrim.direction) {
-      case 'top-fade':    return `linear-gradient(180deg, ${c1} 0%, ${c0} 100%)`;
-      case 'bottom-fade': return `linear-gradient(0deg, ${c1} 0%, ${c0} 100%)`;
-      default:            return `radial-gradient(ellipse at center, ${c1} 30%, ${c0} 100%)`;
-    }
+    // Uniform radial tint for every direction: solid-ish through the
+    // interior (where the text sits), soft feather at the edges. The
+    // older top-fade/bottom-fade produced a half-opaque / half-transparent
+    // box that read as a hard rectangle instead of a shading.
+    return `radial-gradient(ellipse at center, ${c1} 70%, ${c0} 100%)`;
   }
 
   function renderOverlayLogo(wrap, el, input) {

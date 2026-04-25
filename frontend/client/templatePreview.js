@@ -261,12 +261,131 @@
       // Load brand webfont (if any) so composition actually uses it
       // instead of silently falling back to system-ui.
       ensureWebfontLoaded(data.input?.brand?.font_family);
+      // Refresh the Brand Object tab in parallel — the right-panel
+      // structure exists only on ads.html, so the helper no-ops on
+      // detect.html (or any host page lacking #tpBrandObject).
+      refreshBrandObjectPane(data.input?.brand?.name);
       document.getElementById('templatePreviewMeta').textContent =
         `${TP_STATE.template} · ${TP_STATE.aspectRatio} · ${data.validation?.ok ? 'valid' : 'invalid'}`;
     } catch (err) {
       stage.innerHTML = '';
       status.innerHTML = `<p class="tp-bad">${escapeHtml(err.message)}</p>`;
     }
+  }
+
+  // Wire the Debug / Brand Object tabs once on first load. The host page
+  // (ads.html) provides the .tp-tab buttons + .tp-tab-pane elements; if
+  // they're absent (detect.html, anywhere else), this no-ops.
+  (function wireTpTabs() {
+    const tabs = document.querySelectorAll('.tp-tab');
+    if (!tabs.length) return;
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const target = tab.dataset.tpTab;
+        document.querySelectorAll('.tp-tab').forEach(t => t.classList.toggle('active', t.dataset.tpTab === target));
+        document.querySelectorAll('.tp-tab-pane').forEach(p => p.classList.toggle('active', p.dataset.tpPane === target));
+      });
+    });
+  })();
+
+  // Fetch the full Brand catalog doc by name and render every stored
+  // field into the Brand Object tab. Uses /api/brand/by-name/:name —
+  // returns the entire doc, not the subset that ships in input.brand.
+  async function refreshBrandObjectPane(brandName) {
+    const pane = document.getElementById('tpBrandObject');
+    if (!pane) return;
+    if (!brandName) {
+      pane.innerHTML = '<p class="tp-brand-empty">No brand on this Media.</p>';
+      return;
+    }
+    pane.innerHTML = '<p class="tp-brand-empty">Loading brand…</p>';
+    try {
+      const res = await fetch(`/api/brand/by-name/${encodeURIComponent(brandName)}`);
+      if (res.status === 404) {
+        pane.innerHTML = `<p class="tp-brand-empty">No catalog entry for <code>${escapeHtml(brandName)}</code>.</p>`;
+        return;
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      pane.innerHTML = renderBrandObject(data.brand);
+    } catch (err) {
+      pane.innerHTML = `<p class="tp-brand-error">Brand fetch failed: ${escapeHtml(err.message)}</p>`;
+    }
+  }
+
+  function renderBrandObject(brand) {
+    if (!brand) return '<p class="tp-brand-empty">empty</p>';
+    const isCurated = (k) => Array.isArray(brand.curatedFields) && brand.curatedFields.includes(k);
+    const curatedTag = (k) => isCurated(k) ? '<span class="tp-brand-curated-tag">curated</span>' : '';
+
+    const isHexColor = (s) => typeof s === 'string' && /^#[0-9a-f]{6}$/i.test(s);
+    const colorVal = (hex, key) => isHexColor(hex)
+      ? `<span class="tp-brand-swatch" style="background:${hex}"></span><code>${escapeHtml(hex)}</code>${curatedTag(key)}`
+      : empty();
+    const empty = () => '<span class="empty">—</span>';
+    const txt = (v, key) => (v == null || v === '')
+      ? empty()
+      : `${escapeHtml(String(v))}${curatedTag(key)}`;
+    const row = (k, v) => `<div class="tp-brand-row"><div class="tp-brand-key">${escapeHtml(k)}</div><div class="tp-brand-val">${v}</div></div>`;
+    const sec = (label) => `<div class="tp-brand-section">${escapeHtml(label)}</div>`;
+
+    const parts = [];
+
+    // Identity
+    parts.push(sec('Identity'));
+    parts.push(row('name', txt(brand.name, 'name')));
+    parts.push(row('tagline', txt(brand.tagline, 'tagline')));
+    parts.push(row('websiteUrl', brand.websiteUrl
+      ? `<a href="${escapeHtml(brand.websiteUrl)}" target="_blank" rel="noopener" style="color:#93c5fd;">${escapeHtml(brand.websiteUrl)}</a>`
+      : empty()));
+
+    // Visual identity
+    parts.push(sec('Visual'));
+    parts.push(row('logo', brand.logoUrl
+      ? `<img class="tp-brand-logo-thumb" src="${escapeHtml(brand.logoUrl)}" alt="logo" />${curatedTag('logoUrl')}`
+      : empty()));
+    parts.push(row('primary', colorVal(brand.primaryColor, 'primaryColor')));
+    parts.push(row('secondary', colorVal(brand.secondaryColor, 'secondaryColor')));
+    parts.push(row('accent', colorVal(brand.accentColor, 'accentColor')));
+    parts.push(row('font', txt(brand.fontFamily, 'fontFamily')));
+
+    // Voice
+    parts.push(sec('Voice'));
+    const tones = Array.isArray(brand.tone) ? brand.tone : [];
+    parts.push(row('tone', tones.length
+      ? tones.map(t => `<span class="tp-brand-tag">${escapeHtml(t)}</span>`).join('') + curatedTag('tone')
+      : empty()));
+
+    // Demographics
+    const demos = Array.isArray(brand.demographics) ? brand.demographics : [];
+    if (demos.length) {
+      parts.push(sec(`Demographics (${demos.length})`));
+      parts.push('<div>' + demos.map(d => `
+        <div class="tp-brand-persona">
+          <div class="tp-brand-persona-name">${escapeHtml(d.name || 'unnamed')}</div>
+          ${d.description ? `<div class="tp-brand-persona-desc">${escapeHtml(d.description)}</div>` : ''}
+          ${Array.isArray(d.interests) && d.interests.length ? `<div class="tp-brand-persona-desc"><strong>likes:</strong> ${d.interests.map(escapeHtml).join(', ')}</div>` : ''}
+          ${Array.isArray(d.painPoints) && d.painPoints.length ? `<div class="tp-brand-persona-desc"><strong>worries:</strong> ${d.painPoints.map(escapeHtml).join(', ')}</div>` : ''}
+        </div>
+      `).join('') + '</div>');
+    }
+
+    // Provenance
+    parts.push(sec('Provenance'));
+    parts.push(row('source', brand.source
+      ? `<span class="tp-brand-tag tp-brand-source-${brand.source}">${escapeHtml(brand.source)}</span>`
+      : empty()));
+    parts.push(row('curatedFields', Array.isArray(brand.curatedFields) && brand.curatedFields.length
+      ? brand.curatedFields.map(f => `<code>${escapeHtml(f)}</code>`).join(' · ')
+      : empty()));
+    parts.push(row('enrichedAt', brand.enrichedAt
+      ? new Date(brand.enrichedAt).toLocaleString()
+      : empty()));
+    parts.push(row('createdAt', brand.createdAt
+      ? new Date(brand.createdAt).toLocaleString()
+      : empty()));
+
+    return parts.join('');
   }
 
   function drawTpCanvas(stage, input, canvas) {

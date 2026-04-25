@@ -1916,6 +1916,26 @@
     return 0.2126 * r + 0.7152 * g + 0.0722 * b;
   }
 
+  // Hex → rgba string with arbitrary alpha. Used for borders/scrims that
+  // need to derive a translucent variant of a base color.
+  function tpHexToRgba(hex, alpha) {
+    if (!isHex(hex)) return `rgba(0,0,0,${alpha})`;
+    const n = parseInt(hex.slice(1), 16);
+    return `rgba(${(n>>16)&0xff},${(n>>8)&0xff},${n&0xff},${alpha})`;
+  }
+
+  // Pick the fill color for the CTA pill. Prefer accent; if accent is
+  // missing or near-white (would disappear on a light photo), fall
+  // through to primary; final fallback is the brand-default red.
+  function pickCtaFillColor(brand) {
+    const accent  = isHex(brand?.accent_color)  ? brand.accent_color  : null;
+    const primary = isHex(brand?.primary_color) ? brand.primary_color : null;
+    const tooLight = (c) => tpRelLum(c) > 0.85;
+    if (accent  && !tooLight(accent))  return accent;
+    if (primary && !tooLight(primary)) return primary;
+    return accent || primary || '#ef4444';
+  }
+
   // Pick headline text color + any scrim-opacity boost needed for contrast.
   // Tries brand.accent_color, then brand.primary_color; falls back to
   // white/black derived from scrim type. Returns { color, scrimBoost }.
@@ -2336,18 +2356,21 @@
   }
 
   function renderOverlayCta(wrap, el, input) {
-    // Override scrim — CTA always uses brand accent fill. Text color is
-    // computed from the accent's luminance so a white/cream accent
-    // doesn't render invisible #fff text on top of itself.
-    const accent = isHex(input.brand?.accent_color) ? input.brand.accent_color : '#ef4444';
-    wrap.style.background = accent;
-    wrap.style.color = tpReadableOn(accent);
-    wrap.style.borderRadius = '999px';
+    // Pick fill: accent → primary → default. Skip accent if it's
+    // null or near-white (would vanish on a light image).
+    const fill      = pickCtaFillColor(input.brand);
+    const textColor = tpReadableOn(fill);
+    wrap.style.background = fill;
+    wrap.style.color = textColor;
+    // Flat rectangle with a thin border — CTA stands out via the border
+    // contrast + drop shadow rather than the older pill shape. Border
+    // mirrors the text color (white on dark fills, dark on light fills)
+    // at moderate alpha so it reads as an outline, not a hard frame.
+    wrap.style.borderRadius = '4px';
+    wrap.style.border = `1.5px solid ${tpHexToRgba(textColor, 0.65)}`;
+    wrap.style.boxSizing = 'border-box';
     wrap.style.display = 'flex'; wrap.style.alignItems = 'center'; wrap.style.justifyContent = 'center';
     wrap.style.fontWeight = '800';
-    // pill-narrow is tight horizontal space; let the fit-text loop handle
-    // the final size but start smaller so the first paint isn't comically
-    // clipped. pill-wide is slimmer and can afford a touch larger base.
     const baseEm = el.variant === 'pill-narrow' ? 0.78
                  : el.variant === 'pill-wide'   ? 0.95
                  :                                 1.0;

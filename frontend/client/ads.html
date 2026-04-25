@@ -777,21 +777,35 @@
     .als-download:hover { text-decoration: underline; }
   </style>
 
-    /* ── Media picker grid ──────────────────────────────────────── */
+    /* ── Media picker ribbon — horizontally scrollable strip of 4:5 tiles ── */
     .ads-picker-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      display: flex;
+      flex-direction: row;
       gap: 12px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding-bottom: 8px;       /* room for the scrollbar without clipping cards */
+      scroll-snap-type: x proximity;
+      scroll-behavior: smooth;
+      -webkit-overflow-scrolling: touch;
     }
+    /* Subtle dark scrollbar so it stays out of the way */
+    .ads-picker-grid::-webkit-scrollbar { height: 8px; }
+    .ads-picker-grid::-webkit-scrollbar-track { background: #161616; border-radius: 4px; }
+    .ads-picker-grid::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 4px; }
+    .ads-picker-grid::-webkit-scrollbar-thumb:hover { background: #3a3a3a; }
     .ads-pick-card {
       position: relative;
+      flex: 0 0 200px;          /* fixed 200px wide, no shrink/grow */
+      width: 200px;
+      height: 250px;             /* 4:5 (200×250) */
       border-radius: 10px;
       background: #161616;
       border: 1.5px solid #2a2a2a;
       overflow: hidden;
       cursor: pointer;
       transition: border-color 0.12s, transform 0.12s;
-      aspect-ratio: 1 / 1;
+      scroll-snap-align: start;
     }
     .ads-pick-card:hover { border-color: #444; }
     .ads-pick-card.active { border-color: #ef4444; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(239,68,68,0.18); }
@@ -818,7 +832,7 @@
     .ads-pick-meta .brand { font-weight: 700; color: #fff; }
     .ads-pick-meta .date  { color: #888; font-size: 9px; margin-top: 1px; }
     .ads-pick-empty {
-      grid-column: 1 / -1;
+      flex: 1 1 auto;            /* fill the ribbon when there's nothing else */
       padding: 32px; text-align: center;
       color: #555; font-size: 12px; font-style: italic;
     }

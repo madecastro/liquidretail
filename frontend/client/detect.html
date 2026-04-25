@@ -2396,8 +2396,6 @@
     const quote = input.social_proof?.primary_quote;
     const text = quote?.text || '';
     const author = quote?.author_name || '';
-    const rating = input.social_proof?.rating_value;
-    const reviewCount = input.social_proof?.review_count;
     const ml = el.maxLines || 4;
     // Reserve 1 line budget for attribution + review line below the quote.
     const quoteLines = Math.max(2, ml - 2);
@@ -2415,24 +2413,14 @@
         `<div style="font-style:normal;font-size:0.78em;opacity:0.85;margin-top:0.35em;font-weight:600;">— ${escapeHtml(author)}</div>`
       );
     }
-    // Rating + review count line, pulled from social_proof and stacked
-    // right below the attribution. Stars lead, then the numeric rating,
-    // then the review count in parens.
-    if (typeof rating === 'number' || typeof reviewCount === 'number') {
-      const pieces = [];
-      if (typeof rating === 'number') {
-        pieces.push(renderYellowStars(rating));
-        pieces.push(`<span style="font-weight:700;">${rating.toFixed(1)}</span>`);
-      }
-      if (typeof reviewCount === 'number') {
-        pieces.push(`<span style="opacity:0.8;font-weight:400;">(${reviewCount.toLocaleString()} reviews)</span>`);
-      }
-      parts.push(
-        `<div style="font-style:normal;font-size:0.78em;display:flex;align-items:center;gap:0.4em;flex-wrap:wrap;margin-top:0.2em;line-height:1;">` +
-        pieces.join('') +
-        `</div>`
-      );
-    }
+    // Always 5 yellow stars under the attribution — the quote block is
+    // editorial endorsement, not a numeric rating. Star count is decorative;
+    // numeric rating + review count live in product_meta.
+    parts.push(
+      `<div style="font-style:normal;margin-top:0.25em;line-height:1;">` +
+      renderYellowStars(5) +
+      `</div>`
+    );
 
     wrap.innerHTML = `<div class="tp-overlay-content" style="width:100%;">${parts.join('')}</div>`;
   }

@@ -29,6 +29,30 @@
     .field-label { display: block; font-size: 0.72rem; font-weight: 600; color: #666;
                    text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 5px; }
 
+    /* Brand logo row — small inline picker that sits inside the upload form */
+    .brand-logo-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .brand-logo-pick {
+      font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px;
+      background: #161616; border: 1px solid #2a2a2a; color: #888; cursor: pointer;
+      transition: all 0.12s; white-space: nowrap;
+    }
+    .brand-logo-pick:hover { color: #ccc; border-color: #444; background: #1a1a1a; }
+    .brand-logo-preview {
+      width: 36px; height: 36px; border-radius: 6px;
+      background: #141414; border: 1px solid #2a2a2a;
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden; flex-shrink: 0;
+    }
+    .brand-logo-preview img { max-width: 100%; max-height: 100%; object-fit: contain; }
+    .brand-logo-name { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .brand-logo-clear {
+      width: 24px; height: 24px; border-radius: 999px; padding: 0;
+      background: transparent; border: 1px solid #2a2a2a;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; line-height: 1; cursor: pointer;
+    }
+    .brand-logo-clear:hover { border-color: #ef4444; background: rgba(239,68,68,0.08); }
+
     /* ── Drop zone ── */
     #dropZone {
       border: 2px dashed #2e2e2e; border-radius: 12px;
@@ -816,6 +840,23 @@
               <label class="field-label">Brand URL <span class="text-[#555] font-normal normal-case">(optional — seeds brand catalog)</span></label>
               <input type="url" name="brandUrl" placeholder="https://example.com" class="field-input" />
             </div>
+            <div class="col-span-2">
+              <label class="field-label">Brand Logo <span class="text-[#555] font-normal normal-case">(optional — overrides auto-fetched logo)</span></label>
+              <div class="brand-logo-row">
+                <button type="button" id="brandLogoBtn"
+                        onclick="document.getElementById('brandLogoInput').click()"
+                        class="brand-logo-pick">Choose logo image</button>
+                <div id="brandLogoPreview" class="brand-logo-preview hidden">
+                  <img id="brandLogoPreviewImg" alt="logo preview" />
+                </div>
+                <span id="brandLogoName" class="brand-logo-name text-[#555] text-xs"></span>
+                <button type="button" id="brandLogoClear"
+                        class="brand-logo-clear hidden text-[#888] text-xs hover:text-red-400"
+                        title="Remove">×</button>
+              </div>
+              <input id="brandLogoInput" type="file" name="brandLogo"
+                     accept="image/png,image/jpeg,image/svg+xml,image/webp" class="hidden" />
+            </div>
             <div>
               <label class="field-label">Creator name <span class="text-[#555] font-normal normal-case">(optional)</span></label>
               <input type="text" name="creatorName" placeholder="Saltwater Joe" class="field-input" />
@@ -1225,6 +1266,43 @@
   ['dragleave','drop'].forEach(e => dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.remove('drag-over'); }));
   dropZone.addEventListener('drop', ev => { const f = ev.dataTransfer.files[0]; if (f) { photoInput.files = ev.dataTransfer.files; showPreview(f); } });
   photoInput.addEventListener('change', () => { if (photoInput.files[0]) showPreview(photoInput.files[0]); });
+
+  // ══════════════════════════════════════════════════════════════
+  //  Brand logo picker — small inline preview + clear button.
+  //  File rides along with the detect form as multipart/form-data
+  //  (input has name="brandLogo"); backend uploads to Cloudinary and
+  //  writes the URL onto the Brand catalog as a curated asset.
+  // ══════════════════════════════════════════════════════════════
+  (function wireBrandLogoPicker() {
+    const input   = document.getElementById('brandLogoInput');
+    const preview = document.getElementById('brandLogoPreview');
+    const previewImg = document.getElementById('brandLogoPreviewImg');
+    const nameEl  = document.getElementById('brandLogoName');
+    const clearBtn= document.getElementById('brandLogoClear');
+    const pickBtn = document.getElementById('brandLogoBtn');
+    if (!input || !preview || !previewImg || !nameEl || !clearBtn || !pickBtn) return;
+
+    const showLogo = (file) => {
+      const url = URL.createObjectURL(file);
+      previewImg.src = url;
+      preview.classList.remove('hidden');
+      nameEl.textContent = file.name;
+      clearBtn.classList.remove('hidden');
+      pickBtn.textContent = 'Replace';
+    };
+    const clearLogo = () => {
+      input.value = '';
+      previewImg.src = '';
+      preview.classList.add('hidden');
+      nameEl.textContent = '';
+      clearBtn.classList.add('hidden');
+      pickBtn.textContent = 'Choose logo image';
+    };
+    input.addEventListener('change', () => {
+      if (input.files[0]) showLogo(input.files[0]);
+    });
+    clearBtn.addEventListener('click', clearLogo);
+  })();
 
   // ══════════════════════════════════════════════════════════════
   //  Status helpers

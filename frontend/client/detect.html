@@ -2084,20 +2084,20 @@
       stage.appendChild(renderPlacedElement(el, input));
     }
 
-    // Auto-fit text for elements that requested it (headline, product_meta,
-    // pill-narrow CTA, quote). Two RAFs so the stage font-size set above
-    // has actually committed.
+    // Auto-fit text for every text-bearing element. Two RAFs so the
+    // stage font-size set above has actually committed.
+    // Dense multi-block elements (product_meta + quote) get a lower
+    // minScale floor since they stack name/price/stars/rating or
+    // text/author/stars and need more shrink headroom to fit at small
+    // preview scales without clipping the bottom blocks.
     requestAnimationFrame(() => requestAnimationFrame(() => {
       for (const el of placement.elements) {
-        const needsFit =
-          el.id === 'headline' ||
-          el.id === 'product_meta' ||
-          (el.id === 'cta'   && el.variant === 'pill-narrow') ||
-          (el.id === 'quote' && el.variant === 'card-narrow');
-        if (!needsFit) continue;
+        if (el.id === 'logo') continue;  // logo is image-bearing, no auto-fit
         const wrap = stage.querySelector(`[data-element-id="${el.id}"]`);
         const content = wrap?.querySelector('.tp-overlay-content');
-        if (wrap && content) fitTextToBox(wrap, content);
+        if (!wrap || !content) continue;
+        const minScale = (el.id === 'product_meta' || el.id === 'quote') ? 0.40 : 0.55;
+        fitTextToBox(wrap, content, minScale);
       }
     }));
 
@@ -2357,7 +2357,9 @@
     const isStacked = el.layout === 'stack';
 
     if (isStacked) {
-      // Stacked column: each field on its own line, left-aligned.
+      // Stacked column: name, price, then stars + rating + review-count
+      // CONDENSED to one line so the column stays readable in narrow
+      // side-rail rects without clipping the bottom row.
       if (name) parts.push(
         `<div style="font-weight:800;line-height:1.15;">${escapeHtml(name)}</div>`
       );
@@ -2366,9 +2368,10 @@
       );
       if (typeof rating === 'number') {
         parts.push(
-          `<div style="margin-top:0.3em;line-height:1;">` + renderYellowStars(rating) + `</div>` +
-          `<div style="font-weight:700;font-size:0.92em;margin-top:0.15em;">${rating.toFixed(1)}` +
-          (typeof reviewCount === 'number' ? ` <span style="opacity:0.78;font-weight:400;">(${reviewCount.toLocaleString()})</span>` : '') +
+          `<div style="margin-top:0.3em;display:flex;align-items:center;gap:0.4em;flex-wrap:wrap;line-height:1;font-size:0.92em;">` +
+            renderYellowStars(rating) +
+            `<span style="font-weight:700;">${rating.toFixed(1)}</span>` +
+            (typeof reviewCount === 'number' ? `<span style="opacity:0.78;font-weight:400;">(${reviewCount.toLocaleString()})</span>` : '') +
           `</div>`
         );
       }
@@ -2494,13 +2497,15 @@
   }
 
   // Auto-fit text to its container — shrinks font-size in 5% steps until
-  // content fits or hits the readability floor (per renderer §5.5).
-  function fitTextToBox(wrap, content) {
+  // content fits or hits the readability floor. Caller can pass a custom
+  // minScale; defaults to 0.55 for single-block elements and is typically
+  // lowered to 0.40 for stacked multi-block elements (product_meta, quote)
+  // that need more headroom before clipping the bottom rows.
+  function fitTextToBox(wrap, content, minScale = 0.55) {
     if (!wrap || !content) return;
     const baseFontPx = parseFloat(window.getComputedStyle(wrap).fontSize);
     if (!baseFontPx) return;
     let scale = 1.0;
-    const minScale = 0.55;
     let attempts = 14;
     while (scale > minScale && attempts-- > 0) {
       if (content.scrollWidth <= content.clientWidth + 1 && content.scrollHeight <= content.clientHeight + 1) break;

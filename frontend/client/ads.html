@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Flood QRF — Ad Generation</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="auth.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    * { font-family: 'Inter', system-ui, sans-serif; }
+    body { background: #0a0a0a; color: #f0f0f0; }
+    nav  { background: #111; border-bottom: 1px solid #1f1f1f; }
+
+    .section-card { background: #111; border: 1.5px solid #1f1f1f; border-radius: 18px; padding: 24px; }
+    .panel-label  { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: #555; margin-bottom: 12px; }
+
+    /* ── Inputs ── */
+    .field-input {
+      display: block; width: 100%;
+      background: #1c1c1e; border: 1.5px solid #2e2e2e;
+      color: #f0f0f0; border-radius: 10px;
+      padding: 10px 14px; font-size: 0.875rem; outline: none;
+      transition: border-color 0.15s;
+    }
+    .field-input::placeholder { color: #555; }
+    .field-input:focus { border-color: #C8102E; }
+    input[type="date"], input[type="time"] { color-scheme: dark; color: #f0f0f0; }
+    .field-label { display: block; font-size: 0.72rem; font-weight: 600; color: #666;
+                   text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 5px; }
+
+    /* Brand logo row — small inline picker that sits inside the upload form */
+    .brand-logo-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .brand-logo-pick {
+      font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px;
+      background: #161616; border: 1px solid #2a2a2a; color: #888; cursor: pointer;
+      transition: all 0.12s; white-space: nowrap;
+    }
+    .brand-logo-pick:hover { color: #ccc; border-color: #444; background: #1a1a1a; }
+    .brand-logo-preview {
+      width: 36px; height: 36px; border-radius: 6px;
+      background: #141414; border: 1px solid #2a2a2a;
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden; flex-shrink: 0;
+    }
+    .brand-logo-preview img { max-width: 100%; max-height: 100%; object-fit: contain; }
+    .brand-logo-name { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .brand-logo-clear {
+      width: 24px; height: 24px; border-radius: 999px; padding: 0;
+      background: transparent; border: 1px solid #2a2a2a;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; line-height: 1; cursor: pointer;
+    }
+    .brand-logo-clear:hover { border-color: #ef4444; background: rgba(239,68,68,0.08); }
+
+    /* ── Drop zone ── */
+    #dropZone {
+      border: 2px dashed #2e2e2e; border-radius: 12px;
+      background: #141414; cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    #dropZone:hover     { border-color: #444; background: #1a1a1a; }
+    #dropZone.drag-over { border-color: #C8102E; background: #1f1010; }
+
+    /* ── Image containers ── */
+    .img-wrap { position: relative; display: inline-block; line-height: 0; }
+    .img-wrap img { display: block; width: 100%; border-radius: 8px; }
+
+    /* ── Product bboxes ── */
+    .bbox {
+      position: absolute; border: 2px solid #f59e0b; border-radius: 4px;
+      cursor: pointer; transition: border-color 0.15s, background 0.15s; box-sizing: border-box;
+    }
+    .bbox:hover { border-color: #fcd34d; }
+    .bbox.approved { border-color: #34d399; background: rgba(52,211,153,0.08); }
+    .bbox.rejected { border-color: #f87171; background: rgba(248,113,113,0.08); opacity: 0.5; }
+    .bbox-label {
+      position: absolute; top: -22px; left: -1px;
+      background: #f59e0b; color: #000;
+      font-size: 10px; font-weight: 700; padding: 1px 6px;
+      border-radius: 3px 3px 0 0; white-space: nowrap; transition: background 0.15s;
+    }
+    .bbox.approved .bbox-label { background: #34d399; }
+    .bbox.rejected .bbox-label { background: #f87171; color: #fff; }
+
+    /* ── Subject overlay ── */
+    .sbox {
+      position: absolute; border-radius: 6px; box-sizing: border-box;
+      pointer-events: none;
+    }
+    .sbox.primary   { border: 2px solid #818cf8; background: rgba(129,140,248,0.08); }
+    .sbox.secondary { border: 2px dashed #4f5d87; background: rgba(79,93,135,0.05); }
+    .sbox-label {
+      position: absolute; top: -22px; left: -1px;
+      background: #818cf8; color: #fff;
+      font-size: 10px; font-weight: 700; padding: 1px 6px;
+      border-radius: 3px 3px 0 0; white-space: nowrap; max-width: 160px; overflow: hidden; text-overflow: ellipsis;
+    }
+    .sbox.secondary .sbox-label { background: #4f5d87; }
+
+    /* ── Text overlay ── */
+    .tbox {
+      position: absolute; border: 1.5px solid #f472b6; background: rgba(244,114,182,0.08);
+      border-radius: 3px; box-sizing: border-box; pointer-events: none;
+    }
+    .tbox-label {
+      position: absolute; top: -20px; left: -1px;
+      background: #f472b6; color: #000;
+      font-size: 9px; font-weight: 700; padding: 1px 5px;
+      border-radius: 2px 2px 0 0; white-space: nowrap; max-width: 160px; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    /* ── Crop frame overlay ── */
+    .crop-frame {
+      position: absolute; box-sizing: border-box; border-radius: 4px; pointer-events: none;
+      border: 2px solid #60a5fa; background: rgba(96,165,250,0.06);
+      transition: opacity 0.2s;
+    }
+    .crop-frame.winner { border-color: #34d399; border-width: 2.5px; background: rgba(52,211,153,0.1); }
+    .crop-frame.dim    { border-color: #2563eb33; opacity: 0.4; }
+
+    /* ── Safe envelope overlay (subject union across frames) ── */
+    .safe-envelope {
+      position: absolute; box-sizing: border-box; border-radius: 4px; pointer-events: none;
+      border: 2px dashed #fbbf24; background: rgba(251,191,36,0.04);
+    }
+    .safe-envelope-label {
+      position: absolute; top: -20px; left: -1px;
+      background: #fbbf24; color: #000;
+      font-size: 9px; font-weight: 700; padding: 1px 6px;
+      border-radius: 3px 3px 0 0; white-space: nowrap;
+    }
+
+    /* ── Cards ── */
+    .det-card {
+      background: #161616; border: 1.5px solid #242424; border-radius: 12px; overflow: hidden;
+      transition: border-color 0.15s;
+    }
+    .det-card.approved { border-color: #34d399; }
+    .det-card.rejected { border-color: #f87171; opacity: 0.5; }
+    .det-card.winner   { border-color: #34d399; }
+
+    .crop-card {
+      background: #161616; border: 1.5px solid #242424; border-radius: 12px; overflow: hidden;
+      cursor: pointer; transition: border-color 0.15s, transform 0.1s, box-shadow 0.15s;
+      position: relative;
+    }
+    .crop-card:hover   { border-color: #3a3a3a; transform: translateY(-1px); }
+    .crop-card.selected { border-color: #34d399; border-width: 2px; box-shadow: 0 0 0 2px rgba(52,211,153,0.25); }
+
+    /* ── Tabs ── */
+    .tab-btn {
+      font-size: 0.7rem; font-weight: 700; padding: 6px 14px; border-radius: 8px;
+      text-transform: uppercase; letter-spacing: 0.07em; transition: background 0.15s, color 0.15s;
+      color: #555; cursor: pointer; border: none; background: transparent;
+    }
+    .tab-btn.active { background: #1f1f1f; color: #f0f0f0; }
+
+    /* ── Judge badge ── */
+    .judge-badge {
+      font-size: 9px; font-weight: 700; padding: 2px 7px; border-radius: 999px;
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .judge-badge.winner { background: #064e3b; color: #34d399; border: 1px solid #065f46; }
+    .judge-badge.normal { background: #1c1c1e; color: #555; border: 1px solid #2a2a2a; }
+
+    /* Judge score pill shown per-candidate (right side of thumbnail) */
+    .judge-score {
+      position: absolute; bottom: 4px; right: 4px;
+      background: rgba(0,0,0,0.75); color: #fbbf24;
+      font-size: 10px; font-weight: 700; font-family: 'Courier New', monospace;
+      padding: 1px 6px; border-radius: 4px; letter-spacing: 0.02em;
+    }
+    .judge-score.rejected { color: #fca5a5; background: rgba(124, 45, 45, 0.85); }
+
+    /* Rejected candidate overlay */
+    .judge-reject-banner {
+      position: absolute; left: 0; right: 0; bottom: 0;
+      background: rgba(124, 45, 45, 0.85); color: #fecaca;
+      font-size: 9px; font-weight: 700; padding: 3px 6px; text-align: center;
+      letter-spacing: 0.03em; text-transform: uppercase;
+    }
+    .crop-card.rejected { opacity: 0.6; }
+
+    /* ── Timestamp chip ── */
+    .time-chip {
+      font-size: 9px; font-weight: 600; padding: 1px 6px; border-radius: 4px;
+      background: #1a2e1a; color: #86efac; border: 1px solid #1a4728; font-family: 'Courier New', monospace;
+    }
+
+    /* ── Entity chip ── */
+    .entity-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: #1c1c1e; border: 1px solid #2e2e2e; border-radius: 999px;
+      padding: 4px 10px; font-size: 11px; color: #f0f0f0;
+      margin: 3px; cursor: pointer; transition: background 0.12s, border-color 0.12s;
+    }
+    .entity-chip:hover { background: #262626; border-color: #3a3a3a; }
+    .entity-chip .etype {
+      font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
+      padding: 1px 5px; border-radius: 3px; background: #333; color: #aaa;
+    }
+    .entity-chip[data-type="product"] .etype { background: #4a1d24; color: #fda4af; }
+    .entity-chip[data-type="brand"]   .etype { background: #1e3a5c; color: #93c5fd; }
+    .entity-chip[data-type="model"]   .etype { background: #3b2a5c; color: #c4b5fd; }
+    .entity-chip[data-type="part_number"] .etype { background: #4a3d0a; color: #fde68a; }
+    .entity-chip[data-type="quantity"] .etype { background: #1a4728; color: #86efac; }
+
+    /* ── Transcript segment ── */
+    .segment-row {
+      display: flex; gap: 10px; padding: 6px 4px; border-left: 2px solid transparent;
+      cursor: pointer; transition: background 0.12s, border-color 0.12s;
+    }
+    .segment-row:hover { background: #141414; border-left-color: #C8102E; }
+    .segment-row .seg-time {
+      font-family: 'Courier New', monospace; font-size: 10px; color: #555;
+      flex-shrink: 0; width: 58px; padding-top: 2px;
+    }
+    .segment-row .seg-text { font-size: 12px; color: #ccc; line-height: 1.5; }
+    .segment-row.active { background: #1a0e0e; border-left-color: #f87171; }
+
+    /* ── Inline entity highlight within transcript segments ── */
+    mark.entity-highlight {
+      background: transparent; color: #f0f0f0; font-weight: 600;
+      padding: 0 2px; border-radius: 2px; border-bottom: 2px solid #555;
+    }
+    mark.entity-highlight[data-type="product"]     { border-bottom-color: #fda4af; }
+    mark.entity-highlight[data-type="brand"]       { border-bottom-color: #93c5fd; }
+    mark.entity-highlight[data-type="model"]       { border-bottom-color: #c4b5fd; }
+    mark.entity-highlight[data-type="part_number"] { border-bottom-color: #fde68a; }
+    mark.entity-highlight[data-type="quantity"]    { border-bottom-color: #86efac; }
+
+    /* ── Video timeline markers (product first-seen positions) ── */
+    .timeline-wrap { position: relative; }
+    .timeline-markers {
+      position: absolute; left: 0; right: 0; bottom: 2px; height: 6px;
+      pointer-events: none;
+    }
+    .timeline-marker {
+      position: absolute; top: 0; width: 8px; height: 6px;
+      background: #f59e0b; border-radius: 2px;
+      transform: translateX(-50%); pointer-events: auto; cursor: pointer;
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.5);
+    }
+    .timeline-marker:hover { background: #fcd34d; }
+    .timeline-marker .tm-tip {
+      position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+      background: #000; color: #fff; padding: 2px 6px; border-radius: 3px;
+      font-size: 10px; white-space: nowrap;
+      opacity: 0; pointer-events: none; transition: opacity 0.15s;
+    }
+    .timeline-marker:hover .tm-tip { opacity: 1; }
+
+    /* ── Stage timings table ── */
+    .stage-row {
+      display: flex; justify-content: space-between; padding: 4px 8px;
+      font-size: 11px; border-bottom: 1px solid #1a1a1a;
+    }
+    .stage-row:last-child { border-bottom: none; }
+    .stage-name { color: #aaa; }
+    .stage-time { color: #555; font-family: 'Courier New', monospace; }
+
+    /* ── Hero frame caption ── */
+    .hero-caption {
+      font-size: 10px; color: #777; margin-top: 6px; padding: 4px 10px;
+      background: #1a1a1a; border-radius: 6px; display: inline-block;
+    }
+    .hero-caption .key { color: #aaa; font-weight: 600; }
+
+    /* ── Provider-failure row ── */
+    .provider-fail {
+      display: flex; align-items: center; gap: 10px; padding: 6px 10px;
+      background: #1a0e0e; border: 1px solid #2a1515; border-radius: 6px;
+      font-size: 11px; color: #fca5a5; margin-top: 6px;
+    }
+    .provider-fail .label { color: #f87171; font-weight: 600; min-width: 110px; }
+    .provider-fail .msg   { color: #aaa; font-family: 'Courier New', monospace; font-size: 10px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* ── Product identification hero card ── */
+    .id-card {
+      display: flex; gap: 16px; padding: 16px;
+      background: linear-gradient(135deg, #0f1a24 0%, #141414 100%);
+      border: 1px solid #1e3a5c; border-radius: 14px;
+    }
+    .id-thumb {
+      width: 120px; height: 120px; flex-shrink: 0;
+      border-radius: 10px; overflow: hidden;
+      background: #0a0a0a; display: flex; align-items: center; justify-content: center;
+    }
+    .id-thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .id-thumb.placeholder { font-size: 10px; color: #444; }
+    .id-body { flex: 1; min-width: 0; }
+    .id-brand { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #60a5fa; }
+    .id-name  { font-size: 18px; font-weight: 700; color: #f0f0f0; margin-top: 2px; line-height: 1.2; }
+    .id-variant { font-size: 12px; color: #888; margin-top: 2px; }
+    .id-reasoning { font-size: 11px; color: #aaa; margin-top: 10px; line-height: 1.5; }
+    .id-cta {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #1e3a5c; color: #93c5fd; font-size: 11px; font-weight: 600;
+      padding: 6px 12px; border-radius: 8px; margin-top: 10px;
+      transition: background 0.15s;
+    }
+    .id-cta:hover { background: #274a73; }
+    /* Certainty pill */
+    .certainty-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 999px;
+      text-transform: uppercase; letter-spacing: 0.08em;
+    }
+    .certainty-pill.high    { background: #052e1a; color: #34d399; border: 1px solid #0a5c36; }
+    .certainty-pill.medium  { background: #2e1f05; color: #fbbf24; border: 1px solid #5c3e0a; }
+    .certainty-pill.low     { background: #2e0a0a; color: #f87171; border: 1px solid #5c1a1a; }
+    .certainty-pill.unknown { background: #1c1c1e; color: #666; border: 1px solid #2a2a2a; }
+    .certainty-bar {
+      height: 4px; background: #1c1c1e; border-radius: 2px; overflow: hidden; margin-top: 8px;
+    }
+    .certainty-bar-fill {
+      height: 100%; transition: width 0.3s;
+    }
+    .certainty-bar-fill.high    { background: #34d399; }
+    .certainty-bar-fill.medium  { background: #fbbf24; }
+    .certainty-bar-fill.low     { background: #f87171; }
+    .certainty-bar-fill.unknown { background: #555; }
+
+    /* ── Product details section ── */
+    .details-block { margin-top: 16px; }
+    .details-section-label {
+      font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+      color: #666; margin-bottom: 8px;
+    }
+    .seller-row {
+      display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center;
+      padding: 8px 10px; border-bottom: 1px solid #1a1a1a;
+      font-size: 12px;
+    }
+    .seller-row:last-child { border-bottom: none; }
+    .seller-row a { color: #60a5fa; }
+    .seller-row a:hover { color: #93c5fd; }
+    .seller-row .price-cell { color: #34d399; font-family: 'Courier New', monospace; font-weight: 600; }
+    .seller-row .shipping-cell { color: #555; font-size: 10px; }
+
+    .stars {
+      display: inline-flex; align-items: center; gap: 2px;
+      color: #fbbf24; font-size: 13px; line-height: 1;
+    }
+    .stars .empty { color: #3a3a3a; }
+
+    .review-card {
+      background: #161616; border: 1px solid #242424; border-radius: 10px; padding: 12px;
+    }
+    .review-card .header {
+      display: flex; justify-content: space-between; align-items: center; gap: 8px;
+      margin-bottom: 6px;
+    }
+    .review-card .author { font-size: 11px; color: #aaa; font-weight: 600; }
+    .review-card .date   { font-size: 10px; color: #555; }
+    .review-card .title  { font-size: 12px; color: #f0f0f0; font-weight: 600; margin-bottom: 4px; }
+    .review-card .text   { font-size: 11px; color: #bbb; line-height: 1.5; }
+
+    .rating-bar {
+      display: grid; grid-template-columns: 24px 1fr 32px; gap: 8px; align-items: center;
+      font-size: 10px; color: #888; margin-bottom: 2px;
+    }
+    .rating-bar .bar { height: 4px; background: #1c1c1e; border-radius: 2px; overflow: hidden; }
+    .rating-bar .fill { height: 100%; background: #fbbf24; }
+
+    .specs-table { font-size: 11px; color: #aaa; }
+    .specs-table dt { color: #666; margin-top: 6px; font-weight: 600; }
+    .specs-table dd { color: #ccc; margin-left: 12px; }
+
+    @keyframes spin    { to { transform: rotate(360deg); } }
+    @keyframes pulse   { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+    @keyframes fadeUp  { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+    .spinner  { animation: spin 0.8s linear infinite; }
+    .pulse    { animation: pulse 1.5s ease-in-out infinite; }
+    .fade-up  { animation: fadeUp 0.25s ease forwards; }
+
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: #0a0a0a; }
+    ::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 3px; }
+
+    /* ── Overlay Zones (ad-layout preview) ── */
+    .oz-card   { background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 14px; padding: 12px; }
+    .oz-stage  { position: relative; width: 100%; background: #000; border-radius: 10px; overflow: hidden; }
+    .oz-stage img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .oz-layer  { position: absolute; inset: 0; pointer-events: none; }
+    .oz-heatmap { position: absolute; inset: 0; display: grid; pointer-events: none; }
+
+    /* Active (masked-out) restriction — drawn with a dim red overlay + dashed
+       outline. Covers part of the image to signal "don't overlay here." */
+    .oz-restriction {
+      position: absolute; border-radius: 3px;
+      border: 1.25px dashed rgba(239, 68, 68, 0.75);
+      background: rgba(239, 68, 68, 0.22);
+      backdrop-filter: brightness(0.55);
+      transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+    }
+    .oz-restriction.class-product {
+      border-color: rgba(239, 68, 68, 1);
+      background: rgba(239, 68, 68, 0.35);
+    }
+    .oz-restriction.class-face            { border-color: rgba(251, 146, 60, 0.9); background: rgba(251, 146, 60, 0.22); }
+    .oz-restriction.class-secondary_subject { border-color: rgba(250, 204, 21, 0.9); background: rgba(250, 204, 21, 0.20); }
+    .oz-restriction.class-text            { border-color: rgba(167, 139, 250, 0.9); background: rgba(167, 139, 250, 0.20); }
+    .oz-restriction.class-object          { border-color: rgba(148, 163, 184, 0.85); background: rgba(148, 163, 184, 0.18); }
+
+    /* Inactive restriction — below the conservation threshold; shown faintly
+       so operators can see what they're trading off when they slide. */
+    .oz-restriction.inactive {
+      opacity: 0.28;
+      background: transparent;
+      backdrop-filter: none;
+      border-style: dotted;
+    }
+
+    .oz-restriction-label {
+      position: absolute; top: 2px; left: 2px;
+      font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+      color: #fff; background: rgba(0,0,0,0.7); padding: 1px 4px; border-radius: 3px;
+      pointer-events: none;
+    }
+
+    .oz-controls { display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap; align-items: center; }
+    .oz-toggle {
+      font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+      padding: 4px 10px; border-radius: 999px;
+      background: #161616; border: 1px solid #2a2a2a; color: #888;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .oz-toggle:hover          { color: #ccc; border-color: #3a3a3a; }
+    .oz-toggle.active         { background: #1f2937; border-color: #3b82f6; color: #93c5fd; }
+
+    .oz-slider-group { flex: 1 1 180px; min-width: 160px; }
+    .oz-slider-label {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.06em;
+      margin-bottom: 4px;
+    }
+    .oz-slider-value { color: #93c5fd; font-family: 'Courier New', monospace; font-weight: 700; }
+    .oz-slider {
+      width: 100%; accent-color: #3b82f6; height: 2px; cursor: pointer;
+    }
+
+    .oz-legend { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 10px; font-size: 10px; color: #888; }
+    .oz-legend-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+    .oz-meta { font-size: 10px; color: #555; margin-top: 6px; }
+
+    /* ── Creative Template Preview ── */
+    .tp-pickers { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 12px; }
+    .tp-picker-group { display: flex; flex-direction: column; gap: 6px; }
+    .tp-picker-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: #666; font-weight: 700; }
+    .tp-picker-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tp-chip {
+      font-size: 10px; font-weight: 600; padding: 4px 10px; border-radius: 999px;
+      background: #161616; border: 1px solid #2a2a2a; color: #888; cursor: pointer;
+      white-space: nowrap; transition: all 0.12s;
+    }
+    .tp-chip:hover { color: #ccc; border-color: #3a3a3a; }
+
+    /* Conservation slider inline with debug chips — sized tight, shares
+       oz-slider base styles so the thumb/track look matches the overlay-
+       zones panel slider. */
+    .tp-conservation-slider-wrap {
+      display: flex; align-items: center; gap: 8px;
+      min-width: 180px;
+    }
+    .tp-conservation-slider-wrap .oz-slider { width: 140px; }
+    #tpConservationValue { min-width: 34px; text-align: right; font-size: 10px; }
+    .tp-chip.active { background: #1f2937; border-color: #3b82f6; color: #93c5fd; }
+    .tp-chip.disabled { opacity: 0.35; cursor: not-allowed; }
+    .tp-chip.disabled:hover { color: #888; border-color: #2a2a2a; }
+
+    .tp-stage-wrap { display: grid; grid-template-columns: minmax(0, 420px) 1fr; gap: 16px; }
+    @media (max-width: 900px) { .tp-stage-wrap { grid-template-columns: 1fr; } }
+
+    /* The stage's font-size is set dynamically in JS (≈ width/32) so the em
+       units below scale with the preview canvas. Brand colors flow through
+       CSS custom properties set per render. */
+    .tp-stage {
+      --brand-primary:   #1f2937;
+      --brand-secondary: #0a0a0a;
+      --brand-accent:    #ef4444;
+      --brand-text-on:   #ffffff;   /* text color on top of brand fill */
+      font-family: var(--brand-font, system-ui, -apple-system, 'Segoe UI', sans-serif);
+      position: relative; width: 100%;
+      background: linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%);
+      border: 1px solid #262626; border-radius: 12px; overflow: hidden;
+      font-size: 12px;
+    }
+    .tp-zone {
+      position: absolute; box-sizing: border-box; overflow: hidden;
+      font-family: inherit;
+    }
+    .tp-zone img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .tp-zone.kind-media img { border-radius: inherit; }
+
+    /* Plain text zones sit directly on the stage background (headline,
+       eyebrow, product_meta). Use the brand's on-color with a subtle
+       shadow so readable on any bg. */
+    .tp-zone.kind-text {
+      color: var(--brand-text-on);
+      font-weight: 800;
+      font-size: 1.1em;
+      line-height: 1.15;
+      letter-spacing: -0.01em;
+      padding: 0.2em 0;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.55);
+      display: flex; align-items: center;
+    }
+
+    /* Quote cards retain the white surface for readability but carry a
+       brand-accent accent bar on the left so they read as a brand element. */
+    .tp-zone.kind-quote_card {
+      background: rgba(255,255,255,0.97); color: #0a0a0a;
+      padding: 0.55em 0.75em 0.55em calc(0.75em + 4px);
+      font-size: 0.95em; line-height: 1.3;
+      border-radius: 8px;
+      border-left: 4px solid var(--brand-accent);
+      display: flex; flex-direction: column; justify-content: center;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+    }
+
+    .tp-zone.kind-cta {
+      background: var(--brand-accent); color: var(--brand-text-on);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 1em; letter-spacing: 0.04em;
+      border-radius: 999px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+    }
+
+    .tp-zone.kind-logo { display: flex; align-items: center; justify-content: flex-start; }
+    .tp-zone.kind-logo img { object-fit: contain; }
+
+    .tp-zone.kind-proof_bar {
+      background: rgba(0,0,0,0.7); color: var(--brand-text-on);
+      padding: 0.35em 0.7em; font-size: 0.85em;
+      border-radius: 999px;
+      display: flex; align-items: center; gap: 0.6em; white-space: nowrap;
+      backdrop-filter: blur(6px);
+    }
+
+    .tp-zone.kind-metrics_row {
+      display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+      gap: 0.4em; color: var(--brand-text-on); font-size: 0.85em;
+    }
+    .tp-metric {
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 8px; padding: 0.4em; text-align: center;
+      backdrop-filter: blur(4px);
+    }
+    .tp-metric strong {
+      display: block; font-size: 1.6em; font-weight: 900;
+      color: var(--brand-text-on); line-height: 1;
+    }
+    .tp-metric span {
+      display: block; font-size: 0.75em;
+      color: rgba(255,255,255,0.72);
+      margin-top: 0.25em;
+      text-transform: uppercase; letter-spacing: 0.07em;
+    }
+
+    .tp-zone.kind-review_stack { display: flex; flex-direction: column; gap: 0.4em; }
+    .tp-review-bubble {
+      background: rgba(255,255,255,0.97); color: #0a0a0a;
+      border-radius: 8px;
+      border-left: 3px solid var(--brand-accent);
+      padding: 0.4em 0.55em 0.4em calc(0.55em + 3px);
+      font-size: 0.8em; line-height: 1.25; flex: 0 0 auto;
+      overflow: hidden;
+      display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.18);
+    }
+
+    .tp-zone.kind-identity_row {
+      background: rgba(0,0,0,0.6); color: var(--brand-text-on);
+      padding: 0.35em 0.7em; font-size: 0.85em;
+      border-radius: 999px;
+      display: flex; align-items: center; gap: 0.5em; white-space: nowrap;
+      backdrop-filter: blur(6px);
+    }
+    .tp-zone.kind-identity_row .tp-handle { color: var(--brand-accent); }
+
+    .tp-zone.kind-badge_row {
+      display: flex; gap: 0.4em; align-items: center; flex-wrap: wrap;
+    }
+    .tp-chip-mini {
+      background: rgba(0,0,0,0.7); color: var(--brand-text-on);
+      padding: 0.25em 0.7em; border-radius: 999px;
+      font-size: 0.85em; font-weight: 600; white-space: nowrap;
+      backdrop-filter: blur(6px);
+    }
+
+    .tp-placeholder {
+      background: repeating-linear-gradient(45deg, rgba(255,255,255,0.04) 0 8px, transparent 8px 16px);
+      border: 1px dashed rgba(255,255,255,0.18); color: #aaa;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.75em; font-style: italic; border-radius: 6px;
+      width: 100%; height: 100%;
+    }
+    .tp-status {
+      background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 12px;
+      padding: 12px; font-size: 11px; color: #aaa; line-height: 1.5;
+    }
+    .tp-status .tp-ok { color: #34d399; font-weight: 600; }
+    .tp-status .tp-bad { color: #f87171; font-weight: 600; }
+    .tp-status code { font-family: 'Courier New', monospace; color: #e879f9; font-size: 10px; }
+    .tp-empty { color: #555; font-size: 11px; padding: 16px; text-align: center; font-style: italic; }
+
+    /* Debug-box overlay for overlay-mode preview. Dashed outline + pill
+       label over every placed element so the operator can see where the
+       placement algorithm landed each container. */
+    .tp-debug-layer { position: absolute; inset: 0; pointer-events: none; z-index: 50; }
+    .tp-debug-box {
+      position: absolute; box-sizing: border-box; border-radius: 4px;
+      border: 1.5px dashed;
+    }
+    .tp-debug-label {
+      position: absolute; top: -18px; left: 0;
+      font-size: 9px; font-weight: 700; padding: 2px 7px;
+      background: rgba(0,0,0,0.88); color: #fff;
+      border-radius: 999px; white-space: nowrap;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+    .tp-debug-box.state-placed           { border-color: #34d399; }
+    .tp-debug-box.state-fallback-placed  { border-color: #facc15; }
+    .tp-debug-box.state-placed           .tp-debug-label { background: rgba(52,211,153,0.92); color: #0a0a0a; }
+    .tp-debug-box.state-fallback-placed  .tp-debug-label { background: rgba(250,204,21,0.92); color: #0a0a0a; }
+
+    /* Canvas-zone debug boxes (canonical templates) — cyan-ish tint to
+       distinguish from overlay-mode placement boxes. */
+    .tp-debug-box.kind-canvas-zone       { border-color: #67e8f9; }
+    .tp-debug-box.kind-canvas-zone .tp-debug-label { background: rgba(103,232,249,0.92); color: #083344; }
+
+    /* Restriction/keep-out overlay (from OverlayZoneArtifact analysis).
+       Solid-ish colored tint so the keep-outs are visually distinct from
+       placement containers. pointer-events: none via parent layer. */
+    .tp-restriction-layer { position: absolute; inset: 0; pointer-events: none; z-index: 49; }
+    .tp-restriction-box {
+      position: absolute; box-sizing: border-box; border-radius: 4px;
+      border: 1.5px dashed;
+    }
+    .tp-restriction-label {
+      position: absolute; top: -16px; left: 0;
+      font-size: 8px; font-weight: 700; padding: 1px 6px;
+      color: #fff; border-radius: 999px; white-space: nowrap;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+    .tp-restriction-box.role-primary  { border-color: #f87171; background: rgba(248,113,113,0.10); }
+    .tp-restriction-box.role-face     { border-color: #fb923c; background: rgba(251,146,60,0.10); }
+    .tp-restriction-box.role-secondary{ border-color: #fde047; background: rgba(253,224,71,0.08); }
+    .tp-restriction-box.role-text     { border-color: #a78bfa; background: rgba(167,139,250,0.08); }
+    .tp-restriction-box.role-other    { border-color: #94a3b8; background: rgba(148,163,184,0.08); }
+    .tp-restriction-box.role-primary  .tp-restriction-label { background: rgba(248,113,113,0.92); }
+    .tp-restriction-box.role-face     .tp-restriction-label { background: rgba(251,146,60,0.92); color: #0a0a0a; }
+    .tp-restriction-box.role-secondary.tp-restriction-box .tp-restriction-label { background: rgba(253,224,71,0.92); color: #0a0a0a; }
+    .tp-restriction-box.role-text     .tp-restriction-label { background: rgba(167,139,250,0.92); }
+    .tp-restriction-box.role-other    .tp-restriction-label { background: rgba(148,163,184,0.92); color: #0a0a0a; }
+
+    .tp-analysis-chip {
+      position: absolute; top: 6px; left: 6px; z-index: 55;
+      font-size: 9px; font-weight: 700; padding: 2px 8px;
+      background: rgba(0,0,0,0.72); color: #fbbf24;
+      border-radius: 999px; letter-spacing: 0.04em;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+
+    /* Decision trace on the right-side status panel (overlay mode only) */
+    .tp-decision-section-head {
+      font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+      color: #666; margin: 10px 0 6px;
+    }
+    .tp-decision-row {
+      display: grid; grid-template-columns: auto 1fr; gap: 10px;
+      padding: 8px 0; border-bottom: 1px solid #1a1a1a;
+    }
+    .tp-decision-row:last-child { border-bottom: none; }
+    .tp-decision-chip {
+      font-size: 9px; font-weight: 700; padding: 3px 8px;
+      border-radius: 999px; text-transform: uppercase; letter-spacing: 0.06em;
+      white-space: nowrap; align-self: start; line-height: 1;
+    }
+    .tp-decision-chip.state-placed           { background: rgba(52,211,153,0.18); color: #34d399; }
+    .tp-decision-chip.state-fallback-placed  { background: rgba(250,204,21,0.18); color: #facc15; }
+    .tp-decision-chip.state-dropped          { background: rgba(148,163,184,0.22); color: #94a3b8; }
+    .tp-decision-chip.state-failed-required  { background: rgba(239,68,68,0.20); color: #f87171; }
+    .tp-decision-chip.state-skipped          { background: rgba(85,85,85,0.35); color: #888; }
+    .tp-decision-body { font-size: 11px; color: #ccc; line-height: 1.4; }
+    .tp-decision-body .tp-dec-id {
+      color: #fff; font-weight: 700; font-size: 11px;
+    }
+    .tp-decision-body .tp-dec-reason {
+      color: #888; margin-top: 3px;
+    }
+    .tp-decision-body .tp-dec-meta {
+      color: #555; font-size: 9px; margin-top: 4px;
+      font-family: 'Courier New', monospace; letter-spacing: -0.01em;
+    }
+    .tp-overlay-mode-row {
+      display: flex; gap: 10px; font-size: 10px; color: #888;
+      margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #1a1a1a;
+    }
+    .tp-overlay-mode-row strong { color: #ccc; }
+
+    /* ── AI Layout Studio (exploration tool) ── */
+    .als-header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 8px; }
+    .als-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .als-select {
+      background: #161616; border: 1px solid #2a2a2a; color: #ccc;
+      font-size: 11px; padding: 5px 10px; border-radius: 8px;
+    }
+    .als-go-btn {
+      background: #1f2937; border: 1px solid #3b82f6; color: #93c5fd;
+      font-size: 11px; font-weight: 600; padding: 6px 14px; border-radius: 999px;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .als-go-btn:hover:not(:disabled) { background: #3b82f6; color: #fff; }
+    .als-go-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .als-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+    }
+    @media (max-width: 700px) { .als-grid { grid-template-columns: 1fr; } }
+    .als-card {
+      background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 10px;
+      overflow: hidden; position: relative;
+    }
+    .als-card-meta {
+      padding: 8px 10px; display: flex; justify-content: space-between; align-items: center;
+      background: #0a0a0a; border-top: 1px solid #1a1a1a;
+      font-size: 10px; color: #888;
+    }
+    .als-card-meta .als-label {
+      color: #ccc; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.05em; font-size: 9px;
+    }
+    .als-stage { position: relative; width: 100%; background: #000; }
+    .als-stage img { width: 100%; height: 100%; display: block; object-fit: cover; }
+    .als-zones { position: absolute; inset: 0; pointer-events: none; }
+    .als-zone {
+      position: absolute; border: 1.25px solid; box-sizing: border-box;
+      display: flex; align-items: flex-start; justify-content: flex-start;
+    }
+    .als-zone-label {
+      position: absolute; top: 0; left: 0;
+      font-size: 8px; font-weight: 700; color: #fff;
+      background: rgba(0,0,0,0.75);
+      padding: 1px 4px; letter-spacing: 0.04em;
+      border-bottom-right-radius: 3px;
+    }
+    .als-role-logo          { border-color: #22d3ee; }
+    .als-role-hero_media,
+    .als-role-product_media,
+    .als-role-creator_media { border-color: #34d399; }
+    .als-role-quote_card    { border-color: #facc15; }
+    .als-role-cta           { border-color: #ef4444; }
+    .als-role-rating_bar    { border-color: #fb923c; }
+    .als-role-product_meta,
+    .als-role-headline,
+    .als-role-subheadline   { border-color: #a78bfa; }
+    .als-role-badge_row     { border-color: #f472b6; }
+    .als-role-background    { border-color: #555; }
+    .als-role-other         { border-color: #666; }
+    .als-card-error { padding: 20px; color: #f87171; font-size: 11px; text-align: center; }
+    .als-note { font-size: 10px; color: #555; padding: 10px; font-style: italic; }
+    .als-loading { padding: 30px; text-align: center; color: #888; font-size: 12px; }
+    .als-toggle {
+      font-size: 9px; padding: 2px 8px; border-radius: 999px;
+      background: #161616; border: 1px solid #2a2a2a; color: #888;
+      cursor: pointer; white-space: nowrap;
+    }
+    .als-toggle.active { background: #1f2937; border-color: #3b82f6; color: #93c5fd; }
+    .als-download {
+      color: #93c5fd; font-size: 9px; text-decoration: none;
+    }
+    .als-download:hover { text-decoration: underline; }
+  </style>
+
+    /* ── Media picker grid ──────────────────────────────────────── */
+    .ads-picker-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 12px;
+    }
+    .ads-pick-card {
+      position: relative;
+      border-radius: 10px;
+      background: #161616;
+      border: 1.5px solid #2a2a2a;
+      overflow: hidden;
+      cursor: pointer;
+      transition: border-color 0.12s, transform 0.12s;
+      aspect-ratio: 1 / 1;
+    }
+    .ads-pick-card:hover { border-color: #444; }
+    .ads-pick-card.active { border-color: #ef4444; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(239,68,68,0.18); }
+    .ads-pick-card img,
+    .ads-pick-card video {
+      width: 100%; height: 100%;
+      object-fit: cover; display: block;
+    }
+    .ads-pick-card.unready { opacity: 0.45; }
+    .ads-pick-card.unready::after {
+      content: "not ready";
+      position: absolute; bottom: 6px; left: 6px;
+      font-size: 9px; padding: 2px 6px; border-radius: 999px;
+      background: rgba(0,0,0,0.78); color: #888;
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .ads-pick-meta {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      padding: 6px 8px;
+      background: linear-gradient(0deg, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%);
+      font-size: 10px; color: #ccc; line-height: 1.2;
+      pointer-events: none;
+    }
+    .ads-pick-meta .brand { font-weight: 700; color: #fff; }
+    .ads-pick-meta .date  { color: #888; font-size: 9px; margin-top: 1px; }
+    .ads-pick-empty {
+      grid-column: 1 / -1;
+      padding: 32px; text-align: center;
+      color: #555; font-size: 12px; font-style: italic;
+    }
+    .ads-pick-controls {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    .ads-pick-controls .ads-toggle {
+      font-size: 11px; padding: 4px 10px; border-radius: 999px;
+      background: #161616; border: 1px solid #2a2a2a; color: #888;
+      cursor: pointer; transition: all 0.12s;
+    }
+    .ads-pick-controls .ads-toggle.active { background: #1f2937; border-color: #3b82f6; color: #93c5fd; }
+    .ads-pick-controls .ads-toggle:hover { color: #ccc; }
+    .ads-pick-meta-line {
+      font-size: 11px; color: #555; margin-left: auto;
+    }
+  </style>
+</head>
+<body class="min-h-screen">
+
+  <!-- ── Navbar ─────────────────────────────────────────────────────── -->
+  <nav class="sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <img src="assets/logo.png" alt="Flood QRF" class="w-9 h-9 object-contain" />
+        <div class="leading-tight">
+          <div class="font-bold text-white tracking-wide text-sm">FLOOD QRF</div>
+          <div class="text-[10px] text-[#555] uppercase tracking-widest hidden sm:block">Ad Generation</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-5">
+        <a href="detect.html" class="text-[#555] hover:text-white text-sm transition-colors">Detection Review</a>
+        <a href="index.html"  class="text-[#555] hover:text-white text-sm transition-colors">← Inventory</a>
+        <button onclick="logout()" class="text-[#555] hover:text-white text-sm transition-colors">Sign out</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+
+    <!-- ── Media Library Picker ─────────────────────────────────── -->
+    <div class="section-card fade-up">
+      <div class="flex items-center gap-2 mb-4">
+        <svg class="w-4 h-4 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"/>
+        </svg>
+        <h2 class="text-sm font-semibold text-white uppercase tracking-wider">Media Library</h2>
+      </div>
+
+      <div class="ads-pick-controls">
+        <button id="adsPickReadyToggle" type="button" class="ads-toggle active">Ready only</button>
+        <span id="adsPickMetaLine" class="ads-pick-meta-line">loading…</span>
+      </div>
+
+      <div id="adsPickerGrid" class="ads-picker-grid">
+        <p class="ads-pick-empty">Loading media…</p>
+      </div>
+    </div>
+
+    <!-- ── Creative Template Preview (driven by picker selection) ─ -->
+    <div id="templatePreviewPanel" class="section-card fade-up hidden">
+      <div class="flex items-center justify-between mb-3">
+        <p class="panel-label flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-fuchsia-400 inline-block"></span>
+          Creative Template Preview
+        </p>
+        <p id="templatePreviewMeta" class="text-[10px] text-[#444]"></p>
+      </div>
+      <div class="tp-pickers">
+        <div class="tp-picker-group">
+          <span class="tp-picker-label">Template</span>
+          <div id="tpTemplateChips" class="tp-picker-chips"></div>
+        </div>
+        <div class="tp-picker-group">
+          <span class="tp-picker-label">Aspect ratio</span>
+          <div id="tpRatioChips" class="tp-picker-chips"></div>
+        </div>
+        <div class="tp-picker-group" id="tpDebugGroup">
+          <span class="tp-picker-label">Debug</span>
+          <div class="tp-picker-chips">
+            <button id="tpDebugBoxesChip" type="button" class="tp-chip">Show container boxes</button>
+            <button id="tpDebugRestrictionsChip" type="button" class="tp-chip">Show restrictions</button>
+            <button id="tpDebugDensityChip" type="button" class="tp-chip">Show density</button>
+          </div>
+        </div>
+        <div class="tp-picker-group" id="tpConservationGroup">
+          <span class="tp-picker-label">Conservation</span>
+          <div class="tp-conservation-slider-wrap">
+            <input id="tpConservationSlider" type="range" min="0" max="100" value="50" class="oz-slider" />
+            <span id="tpConservationValue" class="oz-slider-value">50%</span>
+          </div>
+        </div>
+      </div>
+      <div class="tp-stage-wrap">
+        <div id="tpStage" class="tp-stage"></div>
+        <div id="tpStatus" class="tp-status"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // Minimal state object shared with templatePreview.js (it reads
+    // window.state.mediaId for the active media).
+    window.state = { mediaId: null, rights: { approved: false } };
+
+    // Utility the preview module uses for safe HTML embedding.
+    function escapeHtml(s) {
+      return String(s == null ? "" : s)
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+    window.escapeHtml = escapeHtml;
+
+    // ══════════════════════════════════════════════════════════════
+    //  Media picker — pulls /api/media (most recent first), renders
+    //  thumbnails, drives state.mediaId on click.
+    // ══════════════════════════════════════════════════════════════
+    const PICK_STATE = { items: [], readyOnly: true };
+
+    async function loadMediaList() {
+      const grid = document.getElementById("adsPickerGrid");
+      const meta = document.getElementById("adsPickMetaLine");
+      grid.innerHTML = '<p class="ads-pick-empty">Loading media…</p>';
+      meta.textContent = "loading…";
+      try {
+        const url = `/api/media?limit=48${PICK_STATE.readyOnly ? "&ready=true" : ""}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        PICK_STATE.items = data.media || [];
+        renderPickerGrid();
+        meta.textContent = `${data.media?.length || 0} of ${data.total || 0} media`;
+      } catch (err) {
+        grid.innerHTML = `<p class="ads-pick-empty">Failed to load: ${escapeHtml(err.message)}</p>`;
+        meta.textContent = "";
+      }
+    }
+
+    function renderPickerGrid() {
+      const grid = document.getElementById("adsPickerGrid");
+      if (!PICK_STATE.items.length) {
+        grid.innerHTML = '<p class="ads-pick-empty">No media yet. Run a detection on the Detection Review page first.</p>';
+        return;
+      }
+      grid.innerHTML = "";
+      for (const m of PICK_STATE.items) {
+        const card = document.createElement("div");
+        card.className = "ads-pick-card" + (m.ready ? "" : " unready") + (state.mediaId === m.mediaId ? " active" : "");
+        card.dataset.mediaId = m.mediaId;
+        if (m.fileType === "video") {
+          card.innerHTML = `<video src="${escapeHtml(m.fileUrl)}" muted preload="metadata" playsinline></video>`;
+        } else {
+          card.innerHTML = `<img src="${escapeHtml(m.fileUrl)}" alt="${escapeHtml(m.fileName || "")}" loading="lazy" />`;
+        }
+        const date = m.createdAt ? new Date(m.createdAt).toLocaleDateString() : "";
+        card.insertAdjacentHTML("beforeend",
+          `<div class="ads-pick-meta">` +
+            (m.brand ? `<div class="brand">${escapeHtml(m.brand)}</div>` : "") +
+            (date ? `<div class="date">${escapeHtml(date)}</div>` : "") +
+          `</div>`
+        );
+        card.addEventListener("click", () => pickMedia(m.mediaId));
+        grid.appendChild(card);
+      }
+    }
+
+    function pickMedia(mediaId) {
+      if (!mediaId) return;
+      state.mediaId = mediaId;
+      document.querySelectorAll(".ads-pick-card").forEach(c => {
+        c.classList.toggle("active", c.dataset.mediaId === mediaId);
+      });
+      const m = PICK_STATE.items.find(x => x.mediaId === mediaId);
+      state.rights = { approved: !!m?.rightsApproved };
+      document.getElementById("templatePreviewPanel").classList.remove("hidden");
+      if (window.renderTemplatePreview) window.renderTemplatePreview();
+    }
+
+    document.getElementById("adsPickReadyToggle").addEventListener("click", (e) => {
+      PICK_STATE.readyOnly = !PICK_STATE.readyOnly;
+      e.currentTarget.classList.toggle("active", PICK_STATE.readyOnly);
+      loadMediaList();
+    });
+
+    loadMediaList();
+  </script>
+
+  <script src="templatePreview.js"></script>
+
+</body>
+</html>

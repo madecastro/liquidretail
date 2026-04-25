@@ -30,6 +30,7 @@
     showDebugBoxes: true,    // container boxes — placed elements (overlay) or canvas zones (canonical)
     showRestrictions: true,  // restriction layer — subject/face/text keep-outs from overlay analysis
     showDensity: false,      // density heatmap — visualize the densityGrid the silhouette-aware legality uses
+    phoneFrame: false,       // mock-phone frame around the stage — useful for visualizing ad in-context
     conservation: 0.5        // placement strictness; overlay-mode only (backend ignores on canonical)
   };
 
@@ -55,6 +56,7 @@
     const boxes = document.getElementById('tpDebugBoxesChip');
     const restr = document.getElementById('tpDebugRestrictionsChip');
     const dens  = document.getElementById('tpDebugDensityChip');
+    const phone = document.getElementById('tpDebugPhoneChip');
     const syncBoxes = () => {
       if (!boxes) return;
       boxes.classList.toggle('active', TP_STATE.showDebugBoxes);
@@ -70,7 +72,13 @@
       dens.classList.toggle('active', TP_STATE.showDensity);
       dens.textContent = TP_STATE.showDensity ? 'Hide density' : 'Show density';
     };
-    syncBoxes(); syncRestr(); syncDens();
+    const syncPhone = () => {
+      if (!phone) return;
+      phone.classList.toggle('active', TP_STATE.phoneFrame);
+      phone.textContent = TP_STATE.phoneFrame ? 'Hide phone frame' : 'Show phone frame';
+      applyPhoneFrame();
+    };
+    syncBoxes(); syncRestr(); syncDens(); syncPhone();
     boxes?.addEventListener('click', () => {
       TP_STATE.showDebugBoxes = !TP_STATE.showDebugBoxes;
       syncBoxes(); redrawTpStage();
@@ -83,7 +91,30 @@
       TP_STATE.showDensity = !TP_STATE.showDensity;
       syncDens(); redrawTpStage();
     });
+    phone?.addEventListener('click', () => {
+      TP_STATE.phoneFrame = !TP_STATE.phoneFrame;
+      syncPhone();
+    });
   })();
+
+  // Wrap / unwrap the stage in a .phone-shell so the CSS bezel + notch
+  // appears around the rendered ad. Pure DOM decoration — no re-render
+  // needed, the stage element itself is preserved and just moved.
+  function applyPhoneFrame() {
+    const stage = document.getElementById('tpStage');
+    if (!stage) return;
+    const inShell = stage.parentElement && stage.parentElement.classList?.contains('phone-shell');
+    if (TP_STATE.phoneFrame && !inShell) {
+      const shell = document.createElement('div');
+      shell.className = 'phone-shell';
+      stage.parentElement.insertBefore(shell, stage);
+      shell.appendChild(stage);
+    } else if (!TP_STATE.phoneFrame && inShell) {
+      const shell = stage.parentElement;
+      shell.parentElement.insertBefore(stage, shell);
+      shell.remove();
+    }
+  }
 
   // Conservation slider — lives next to the debug chips. Drags coalesce via
   // a 300ms debounce, then refetch (with refresh:true to bypass the layout-
@@ -176,10 +207,13 @@
       const chip = document.createElement('button');
       chip.type = 'button';
       const isSupported = supported.includes(r);
-      chip.className = 'tp-chip' +
+      chip.className = 'tp-chip tp-chip-stacked' +
         (r === TP_STATE.aspectRatio ? ' active' : '') +
         (!isSupported ? ' disabled' : '');
-      chip.textContent = r;
+      chip.innerHTML =
+        `<span class="tp-chip-main">${escapeHtml(RATIO_USE_CASES[r]?.label || r)}</span>` +
+        `<span class="tp-chip-sub">${escapeHtml(r)}</span>`;
+      chip.title = RATIO_USE_CASES[r]?.tip || r;
       if (isSupported) {
         chip.addEventListener('click', async () => {
           if (r === TP_STATE.aspectRatio) return;
@@ -197,6 +231,17 @@
       ratioChips.appendChild(chip);
     }
   }
+
+  // Use-case taxonomy for the aspect-ratio chips. label = visible primary
+  // line, tip = tooltip / more detail. Numeric ratio sits below as the
+  // secondary line so the engineering value stays at hand.
+  const RATIO_USE_CASES = {
+    '1:1':    { label: 'IG feed',           tip: 'Instagram feed (square)' },
+    '4:5':    { label: 'IG feed (portrait)', tip: 'Instagram feed (portrait), Pinterest' },
+    '9:16':   { label: 'Reels / Stories',   tip: 'IG/TikTok Reels, IG Stories, Snap' },
+    '1.91:1': { label: 'Link cards',        tip: 'Facebook/Instagram link cards, Twitter cards' },
+    '16:9':   { label: 'YouTube',           tip: 'YouTube thumbnails, FB video feed' }
+  };
 
   async function loadAndDrawPreview() {
     const stage = document.getElementById('tpStage');

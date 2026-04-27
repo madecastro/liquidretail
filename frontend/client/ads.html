@@ -476,15 +476,32 @@
     /* The stage's font-size is set dynamically in JS (≈ width/32) so the em
        units below scale with the preview canvas. Brand colors flow through
        CSS custom properties set per render. */
+    /* Frame is the visible area: takes the available width, holds the
+       canvas aspect-ratio, hides anything outside (the scaled stage). */
+    .tp-stage-frame {
+      position: relative;
+      width: 100%;
+      overflow: hidden;
+      background: #0a0a0a;
+      border: 1px solid #262626;
+      border-radius: 12px;
+    }
+    /* Stage is rendered at FULL CANVAS PIXEL DIMENSIONS (e.g. 1000x1778)
+       and visually scaled down via CSS transform to fit the frame. This
+       gives WYSIWYG fidelity — text renders at production font sizes
+       (e.g. 45px headlines) so the preview matches what the renderer
+       would produce, not a degraded sub-pixel approximation. JS sets
+       width/height in px and the scale transform after each render. */
     .tp-stage {
       --brand-primary:   #1f2937;
       --brand-secondary: #0a0a0a;
       --brand-accent:    #ef4444;
-      --brand-text-on:   #ffffff;   /* text color on top of brand fill */
+      --brand-text-on:   #ffffff;
       font-family: var(--brand-font, system-ui, -apple-system, 'Segoe UI', sans-serif);
-      position: relative; width: 100%;
+      position: absolute; top: 0; left: 0;
+      transform-origin: top left;
       background: linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%);
-      border: 1px solid #262626; border-radius: 12px; overflow: hidden;
+      border-radius: 12px; overflow: hidden;
       font-size: 12px;
     }
     .tp-zone {
@@ -888,12 +905,15 @@
       z-index: 200;
       pointer-events: none;
     }
-    /* Stage inside the shell: keep its aspect-ratio, fit-to-screen */
-    .phone-shell > #tpStage {
+    /* Frame inside the shell: keeps its aspect ratio + fits the phone screen.
+       The stage inside the frame remains at full canvas pixel size + scaled. */
+    .phone-shell > #tpStageFrame {
       width: auto;
       max-width: 100%;
       max-height: 100%;
       flex-shrink: 1;
+      border: none;
+      background: transparent;
     }
 
     /* ── Right-panel tabs (Debug / Brand Object) ────────────────── */
@@ -1107,7 +1127,9 @@
         </div>
       </div>
       <div class="tp-stage-wrap">
-        <div id="tpStage" class="tp-stage"></div>
+        <div id="tpStageFrame" class="tp-stage-frame">
+          <div id="tpStage" class="tp-stage"></div>
+        </div>
         <div class="tp-side">
           <div class="tp-tabs" role="tablist">
             <button type="button" class="tp-tab active" data-tp-tab="debug"    role="tab">Debug</button>

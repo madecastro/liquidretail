@@ -97,23 +97,78 @@
     });
   })();
 
-  // Wrap / unwrap the stage in a .phone-shell so the CSS bezel + notch
-  // appears around the rendered ad. Pure DOM decoration — no re-render
-  // needed, the stage element itself is preserved and just moved.
+  // Wrap / unwrap the FRAME in a .phone-shell so the CSS bezel + notch
+  // appears around the rendered ad. We wrap the frame (not the stage)
+  // so the inner scale-transform on tpStage stays intact — the frame
+  // is the responsive aspect-ratio holder; the stage inside is at
+  // canvas pixel size and scaled.
   function applyPhoneFrame() {
-    const stage = document.getElementById('tpStage');
-    if (!stage) return;
-    const inShell = stage.parentElement && stage.parentElement.classList?.contains('phone-shell');
+    const frame = document.getElementById('tpStageFrame');
+    if (!frame) return;
+    const inShell = frame.parentElement && frame.parentElement.classList?.contains('phone-shell');
     if (TP_STATE.phoneFrame && !inShell) {
       const shell = document.createElement('div');
       shell.className = 'phone-shell';
-      stage.parentElement.insertBefore(shell, stage);
-      shell.appendChild(stage);
+      frame.parentElement.insertBefore(shell, frame);
+      shell.appendChild(frame);
     } else if (!TP_STATE.phoneFrame && inShell) {
-      const shell = stage.parentElement;
-      shell.parentElement.insertBefore(stage, shell);
+      const shell = frame.parentElement;
+      shell.parentElement.insertBefore(frame, shell);
       shell.remove();
     }
+    // Fit transform may need to recompute since the frame's available
+    // width changed when its parent did.
+    requestAnimationFrame(applyStageScale);
+  }
+
+  // Canonical canvas pixel dimensions per aspect ratio. Width is fixed
+  // at 1000 across all ratios so text sizing (em base = width/22 = 45px)
+  // is consistent regardless of orientation. These match the canonical
+  // canvas spec at server/schemas/rsSocialProof.canvas.v1.json.
+  const CANVAS_DIMS = {
+    '1:1':    { w: 1000, h: 1000 },
+    '4:5':    { w: 1000, h: 1250 },
+    '9:16':   { w: 1000, h: 1778 },
+    '16:9':   { w: 1000, h: 563 },
+    '1.91:1': { w: 1000, h: 524 }
+  };
+
+  function dimsForRatio(ratio) {
+    return CANVAS_DIMS[ratio] || CANVAS_DIMS['1:1'];
+  }
+
+  // Size the frame to the canvas aspect, the stage to canvas pixel
+  // dimensions, set the em-base font-size relative to canvas width
+  // (so production text sizes apply during DOM rendering), and apply
+  // a transform: scale(N) so the stage visually fits the frame.
+  // Called at the end of each draw routine + on phone-frame toggle.
+  function applyCanvasSize(canvasW, canvasH) {
+    const frame = document.getElementById('tpStageFrame');
+    const stage = document.getElementById('tpStage');
+    if (!frame || !stage) return;
+    frame.style.aspectRatio = `${canvasW} / ${canvasH}`;
+    stage.style.width  = `${canvasW}px`;
+    stage.style.height = `${canvasH}px`;
+    // Production-scale font: width/22 ≈ 45px on a 1000-wide canvas.
+    // Em multipliers on every overlay element now produce real ad-sized
+    // text instead of preview-cramped sub-pixel approximations.
+    stage.style.fontSize = `${Math.max(12, canvasW / 22)}px`;
+    requestAnimationFrame(applyStageScale);
+  }
+
+  // Compute the scale factor so the stage fits the frame and apply it.
+  // Called after layout is committed (RAF) so frame.clientWidth is real.
+  function applyStageScale() {
+    const frame = document.getElementById('tpStageFrame');
+    const stage = document.getElementById('tpStage');
+    if (!frame || !stage) return;
+    const stageW = parseFloat(stage.style.width) || 0;
+    const stageH = parseFloat(stage.style.height) || 0;
+    if (!stageW || !stageH) return;
+    const fW = frame.clientWidth, fH = frame.clientHeight;
+    if (!fW || !fH) return;
+    const scale = Math.min(fW / stageW, fH / stageH);
+    stage.style.transform = `scale(${scale.toFixed(4)})`;
   }
 
   // Conservation slider — lives next to the debug chips. Drags coalesce via
@@ -319,6 +374,15 @@
       status.innerHTML = `<p class="tp-bad">${escapeHtml(err.message)}</p>`;
     }
   }
+
+  // Recompute the stage scale on viewport resize so the WYSIWYG preview
+  // continues to fit when the user resizes the window or toggles the
+  // tab pane width. Debounced via RAF so we don't churn during drags.
+  let _resizeRaf = 0;
+  window.addEventListener('resize', () => {
+    cancelAnimationFrame(_resizeRaf);
+    _resizeRaf = requestAnimationFrame(applyStageScale);
+  });
 
   // Wire the Debug / Brand Object tabs once on first load. The host page
   // (ads.html) provides the .tp-tab buttons + .tp-tab-pane elements; if
@@ -617,7 +681,8 @@
   function drawTpCanvas(stage, input, canvas) {
     const w = canvas.canvas.width, h = canvas.canvas.height;
     stage.innerHTML = '';
-    stage.style.aspectRatio = `${w} / ${h}`;
+    // WYSIWYG: render at full canvas pixel size and scale via CSS.
+    applyCanvasSize(w, h);
 
     // Pull brand tokens once. Primary/secondary/accent all fall back to
     // sensible neutrals so the preview still renders when a Brand stub
@@ -650,13 +715,9 @@
       stage.style.background = primary;
     }
 
-    // Scale zone typography to canvas width so em units inside .tp-zone
-    // rules stay proportional. ~width/30 keeps headline ~1.1em readable
-    // without busting the narrow chip zones.
-    requestAnimationFrame(() => {
-      const r = stage.getBoundingClientRect();
-      if (r.width > 0) stage.style.fontSize = `${Math.max(10, r.width / 22)}px`;
-    });
+    // Font-size is now baked in by applyCanvasSize() against canvas
+    // pixel width, so em units render at production sizes regardless of
+    // how the stage is visually scaled afterward.
 
     for (const zone of (canvas.zones || [])) {
       const el = document.createElement('div');
@@ -835,10 +896,12 @@
     const placement = input.placement;
     stage.innerHTML = '';
 
-    // Aspect-ratio container
-    const ar = input.aspect_ratio;
-    const [arNum, arDen] = ar === '1.91:1' ? [191, 100] : ar.split(':').map(Number);
-    stage.style.aspectRatio = `${arNum} / ${arDen}`;
+    // WYSIWYG: stage gets actual canvas pixel dimensions; CSS transform
+    // scales it to fit the visible frame. Text rendering happens at
+    // production sizes so what we see matches what the renderer would
+    // produce.
+    const dims = dimsForRatio(input.aspect_ratio);
+    applyCanvasSize(dims.w, dims.h);
 
     // Brand tokens (same as canonical preview)
     const brand = input.brand || {};
@@ -876,11 +939,7 @@
       stage.style.background = primary;
     }
 
-    // Set stage font-size proportional to width so element em units scale.
-    requestAnimationFrame(() => {
-      const r = stage.getBoundingClientRect();
-      if (r.width > 0) stage.style.fontSize = `${Math.max(10, r.width / 22)}px`;
-    });
+    // Font-size now set by applyCanvasSize against canvas pixel width.
 
     // Draw each placed element
     for (const el of placement.elements) {

@@ -306,10 +306,12 @@
       // Load brand webfont (if any) so composition actually uses it
       // instead of silently falling back to system-ui.
       ensureWebfontLoaded(data.input?.brand?.font_family);
-      // Refresh the Brand Object tab in parallel — the right-panel
-      // structure exists only on ads.html, so the helper no-ops on
-      // detect.html (or any host page lacking #tpBrandObject).
+      // Refresh the Brand Object + Matching tabs in parallel — the
+      // right-panel tab structure exists only on ads.html, so each
+      // helper no-ops on detect.html (or any host page lacking the
+      // tab elements).
       refreshBrandObjectPane(data.input?.brand?.name);
+      refreshMatchingPane(state.mediaId);
       document.getElementById('templatePreviewMeta').textContent =
         `${TP_STATE.template} · ${TP_STATE.aspectRatio} · ${data.validation?.ok ? 'valid' : 'invalid'}`;
     } catch (err) {
@@ -429,6 +431,185 @@
     parts.push(row('createdAt', brand.createdAt
       ? new Date(brand.createdAt).toLocaleString()
       : empty()));
+
+    return parts.join('');
+  }
+
+  // Fetch the latest ProductMatchArtifact and render the Matching tab.
+  // Shows decision-tree outcome, identification card, per-provider
+  // evidence, brand-category fallback, brand reviews, and the YOLO+GPT
+  // identifications that fed the decision.
+  async function refreshMatchingPane(mediaId) {
+    const pane = document.getElementById('tpMatching');
+    if (!pane) return;
+    if (!mediaId) {
+      pane.innerHTML = '<p class="tp-match-empty">No media selected.</p>';
+      return;
+    }
+    pane.innerHTML = '<p class="tp-match-empty">Loading match…</p>';
+    try {
+      const res = await fetch(`/api/media/${encodeURIComponent(mediaId)}/match`);
+      if (res.status === 404) {
+        pane.innerHTML = '<p class="tp-match-empty">No match artifact yet — detect run hasn\'t reached product-match for this Media.</p>';
+        return;
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      pane.innerHTML = renderMatchingArtifact(data.match);
+    } catch (err) {
+      pane.innerHTML = `<p class="tp-match-error">Match fetch failed: ${escapeHtml(err.message)}</p>`;
+    }
+  }
+
+  function renderMatchingArtifact(match) {
+    if (!match) return '<p class="tp-match-empty">empty</p>';
+    const sec = (label) => `<div class="tp-match-section">${escapeHtml(label)}</div>`;
+    const parts = [];
+
+    // ── Outcome banner ──
+    const outcome   = match.outcome || 'unknown';
+    const reasoning = match.outcomeReasoning || '';
+    const winner    = match.winner || null;
+    parts.push(
+      `<div class="tp-match-outcome-row">` +
+        `<span class="tp-match-badge outcome-${outcome}">${escapeHtml(outcome.replace(/_/g, ' '))}</span>` +
+        (winner ? `<span class="tp-match-winner">winner: <code>${escapeHtml(winner)}</code></span>` : '') +
+        (reasoning ? `<div class="tp-match-reasoning">${escapeHtml(reasoning)}</div>` : '') +
+      `</div>`
+    );
+
+    // ── Catalog match (the GPT-4.1 reasoner identification) ──
+    const ident = match.identification;
+    if (ident) {
+      parts.push(sec('Catalog match (reasoner)'));
+      const certPct = typeof ident.certainty === 'number' ? `${(ident.certainty * 100).toFixed(0)}%` : '—';
+      const detailBits = [];
+      if (ident.brand)               detailBits.push(`brand: <code>${escapeHtml(ident.brand)}</code>`);
+      if (ident.certaintyLabel)      detailBits.push(`label: ${escapeHtml(ident.certaintyLabel)}`);
+      detailBits.push(`certainty: <code>${certPct}</code>`);
+      if (ident.details?.price?.display) detailBits.push(`price: <code>${escapeHtml(ident.details.price.display)}</code>`);
+      if (typeof ident.details?.rating === 'number') detailBits.push(`rating: <code>${ident.details.rating.toFixed(1)}★</code>`);
+      if (typeof ident.details?.reviewCount === 'number') detailBits.push(`reviews: <code>${ident.details.reviewCount.toLocaleString()}</code>`);
+      parts.push(
+        `<div class="tp-match-card">` +
+          `<div class="tp-match-card-title">${escapeHtml(ident.productName || '(no product name)')}</div>` +
+          `<div class="tp-match-card-meta">${detailBits.join(' · ')}</div>` +
+          (ident.details?.reviewSummary?.summary
+            ? `<div class="tp-match-card-meta" style="margin-top:6px;color:#888;">"${escapeHtml(ident.details.reviewSummary.summary)}"</div>`
+            : '') +
+        `</div>`
+      );
+    } else {
+      parts.push(sec('Catalog match'));
+      parts.push('<div class="tp-match-card"><div class="tp-match-card-meta">no reasoner identification</div></div>');
+    }
+
+    // ── Brand-category fallback (only when outcome === 'category') ──
+    if (match.brandCategory && (match.brandCategory.url || match.brandCategory.breadcrumb)) {
+      parts.push(sec('Brand collection (category fallback)'));
+      const bc = match.brandCategory;
+      parts.push(
+        `<div class="tp-match-card">` +
+          (bc.breadcrumb ? `<div class="tp-match-card-title">${escapeHtml(bc.breadcrumb)}</div>` : '') +
+          (bc.url
+            ? `<div class="tp-match-card-meta"><a class="tp-match-link" href="${escapeHtml(bc.url)}" target="_blank" rel="noopener">${escapeHtml(bc.url)}</a></div>`
+            : '') +
+          (typeof bc.confidence === 'number'
+            ? `<div class="tp-match-card-meta" style="margin-top:4px;">confidence: <code>${(bc.confidence * 100).toFixed(0)}%</code></div>`
+            : '') +
+        `</div>`
+      );
+    }
+
+    // ── Brand reviews (only when outcome === 'branding') ──
+    if (match.brandReviews && Array.isArray(match.brandReviews.quotes) && match.brandReviews.quotes.length) {
+      const br = match.brandReviews;
+      const meta = [];
+      if (typeof br.rating === 'number')      meta.push(`${br.rating.toFixed(1)}★`);
+      if (typeof br.reviewCount === 'number') meta.push(`${br.reviewCount.toLocaleString()} reviews`);
+      parts.push(sec(`Brand reviews${meta.length ? ' (' + meta.join(' · ') + ')' : ''}`));
+      if (br.summary) {
+        parts.push(`<div class="tp-match-card"><div class="tp-match-card-meta" style="color:#ccc;font-style:italic;">${escapeHtml(br.summary)}</div></div>`);
+      }
+      for (const q of br.quotes.slice(0, 6)) {
+        parts.push(
+          `<div class="tp-match-quote">` +
+            `<div class="tp-match-quote-text">"${escapeHtml(q.text)}"</div>` +
+            ((q.author || q.source)
+              ? `<div class="tp-match-quote-meta">— ${escapeHtml(q.author || 'unknown')}${q.source ? ` · ${escapeHtml(q.source)}` : ''}</div>`
+              : '') +
+          `</div>`
+        );
+      }
+    }
+
+    // ── Per-provider evidence ──
+    const providers = match.providers || {};
+    const providerNames = Object.keys(providers);
+    if (providerNames.length) {
+      parts.push(sec(`Provider matches (${providerNames.length})`));
+      for (const name of providerNames) {
+        const p = providers[name];
+        const matches = Array.isArray(p?.matches) ? p.matches : [];
+        parts.push(
+          `<div class="tp-match-provider">` +
+            `<div class="tp-match-provider-head">` +
+              `<span class="tp-match-provider-name">${escapeHtml(name)}</span>` +
+              `<span class="tp-match-provider-count">${matches.length} match${matches.length === 1 ? '' : 'es'}</span>` +
+            `</div>` +
+            (p?.reasoning
+              ? `<div class="tp-match-provider-reason">${escapeHtml(p.reasoning.length > 280 ? p.reasoning.slice(0, 277) + '…' : p.reasoning)}</div>`
+              : '') +
+            (p?.queryUsed
+              ? `<div class="tp-match-provider-reason"><strong>query:</strong> <code style="color:#e879f9;">${escapeHtml(p.queryUsed)}</code></div>`
+              : '') +
+            matches.slice(0, 6).map(m =>
+              `<a class="tp-match-link" href="${escapeHtml(m.url || '#')}" target="_blank" rel="noopener" title="${escapeHtml(m.title || m.url || '')}">` +
+                (m.retailer ? `<span class="retailer">${escapeHtml(m.retailer)}</span>` : '') +
+                escapeHtml(m.title || m.url || '(no title)') +
+              `</a>`
+            ).join('') +
+          `</div>`
+        );
+      }
+    }
+
+    // ── Errors per provider (skipped/failed) ──
+    const errors = match.errors || {};
+    const errorNames = Object.keys(errors);
+    if (errorNames.length) {
+      parts.push(sec(`Provider errors (${errorNames.length})`));
+      for (const name of errorNames) {
+        parts.push(
+          `<div class="tp-match-provider">` +
+            `<div class="tp-match-provider-head">` +
+              `<span class="tp-match-provider-name" style="color:#f87171;">${escapeHtml(name)}</span>` +
+              `<span class="tp-match-provider-count">error</span>` +
+            `</div>` +
+            `<div class="tp-match-provider-reason">${escapeHtml(errors[name])}</div>` +
+          `</div>`
+        );
+      }
+    }
+
+    // ── Query used (the inputs the matcher saw) ──
+    if (match.query) {
+      const q = match.query;
+      parts.push(sec('Query inputs'));
+      const queryRows = [];
+      if (q.brand)          queryRows.push(`brand: <code>${escapeHtml(q.brand)}</code>`);
+      if (q.brandUrl)       queryRows.push(`brandUrl: <code>${escapeHtml(q.brandUrl)}</code>`);
+      if (q.category)       queryRows.push(`category: <code>${escapeHtml(q.category)}</code>`);
+      if (q.primarySubject) queryRows.push(`subject: ${escapeHtml(q.primarySubject)}`);
+      if (q.caption)        queryRows.push(`caption: "${escapeHtml(q.caption)}"`);
+      if (Array.isArray(q.textDetected) && q.textDetected.length) queryRows.push(`text: ${q.textDetected.map(t => `"${escapeHtml(t)}"`).join(', ')}`);
+      parts.push(`<div class="tp-match-card"><div class="tp-match-card-meta" style="line-height:1.7;">${queryRows.join('<br>') || 'no query data'}</div></div>`);
+    }
+
+    // ── Footer ──
+    if (match.createdAt) {
+      parts.push(`<div class="tp-match-section" style="margin-top:14px;color:#444;">Resolved ${new Date(match.createdAt).toLocaleString()}</div>`);
+    }
 
     return parts.join('');
   }

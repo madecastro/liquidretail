@@ -250,6 +250,21 @@
         </div>
       </div>
 
+      <div id="autoSyncRow" class="hidden mt-4 pt-4 border-t border-[#1f1f1f] flex items-center gap-3 flex-wrap">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="text-white font-semibold text-sm">Auto-sync</span>
+            <span id="autoSyncPill" class="source-pill source-stub">Off</span>
+          </div>
+          <p id="autoSyncDetail" class="text-[#888] text-xs mt-1">Schedule catalog (daily) and post (hourly) pulls. Cap throttles auto-queued detect runs to control compute cost.</p>
+        </div>
+        <label class="text-xs text-[#888] flex items-center gap-1.5">
+          Cap/day
+          <input id="autoSyncCap" type="number" min="0" max="1000" step="5" class="field-input" style="width:75px;padding:5px 8px;font-size:12px;" />
+        </label>
+        <button id="autoSyncToggleBtn" type="button" class="pill-btn">Enable</button>
+      </div>
+
       <div id="postsRow" class="hidden mt-4 pt-4 border-t border-[#1f1f1f] flex items-center gap-3 flex-wrap">
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-2">
@@ -419,6 +434,11 @@
     const catalogCountPill= document.getElementById('catalogCountPill');
     const catalogDetail   = document.getElementById('catalogDetail');
     const catalogSyncBtn  = document.getElementById('catalogSyncBtn');
+    const autoSyncRow     = document.getElementById('autoSyncRow');
+    const autoSyncPill    = document.getElementById('autoSyncPill');
+    const autoSyncDetail  = document.getElementById('autoSyncDetail');
+    const autoSyncCap     = document.getElementById('autoSyncCap');
+    const autoSyncToggleBtn = document.getElementById('autoSyncToggleBtn');
     const postsRow        = document.getElementById('postsRow');
     const postsCountPill  = document.getElementById('postsCountPill');
     const postsDetail     = document.getElementById('postsDetail');
@@ -784,7 +804,9 @@
           igDisconnectBtn.classList.remove('hidden');
           catalogRow.classList.remove('hidden');
           postsRow.classList.remove('hidden');
+          autoSyncRow.classList.remove('hidden');
           catalogBrowserRow.classList.remove('hidden');
+          loadAutoSyncSettings();
           // Sync button is meaningful only when a catalog was selected.
           catalogSyncBtn.disabled = !c.catalogId;
           if (!c.catalogId) {
@@ -805,6 +827,7 @@
           igDisconnectBtn.classList.add('hidden');
           catalogRow.classList.add('hidden');
           postsRow.classList.add('hidden');
+          autoSyncRow.classList.add('hidden');
           catalogBrowserRow.classList.add('hidden');
         }
       } catch (err) {
@@ -870,6 +893,60 @@
         }
       } catch (_) { /* non-fatal */ }
     }
+
+    // ── Auto-sync settings (V2 #4) ───────────────────────────────────
+    let autoSyncState = { autoSyncEnabled: false, dailyDetectRunCap: 50 };
+
+    async function loadAutoSyncSettings() {
+      try {
+        const res = await fetch('/api/integrations/instagram/sync-settings');
+        if (!res.ok) return;
+        const data = await res.json();
+        autoSyncState = data.syncSettings || autoSyncState;
+        renderAutoSync();
+      } catch (_) { /* non-fatal */ }
+    }
+
+    function renderAutoSync() {
+      const on = !!autoSyncState.autoSyncEnabled;
+      autoSyncPill.textContent = on ? 'On' : 'Off';
+      autoSyncPill.className   = 'source-pill ' + (on ? 'source-curated' : 'source-stub');
+      autoSyncToggleBtn.textContent = on ? 'Disable' : 'Enable';
+      autoSyncCap.value = autoSyncState.dailyDetectRunCap ?? 50;
+      autoSyncDetail.textContent = on
+        ? `Catalog: every ${autoSyncState.catalogCadenceHours || 24}h · Posts: every ${autoSyncState.postsCadenceHours || 1}h · Cap ${autoSyncState.dailyDetectRunCap ?? 50} runs/day`
+        : 'Schedule catalog (daily) and post (hourly) pulls. Cap throttles auto-queued detect runs to control compute cost.';
+    }
+
+    async function patchAutoSync(body) {
+      const res = await fetch('/api/integrations/instagram/sync-settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      autoSyncState = data.syncSettings;
+      renderAutoSync();
+    }
+
+    autoSyncToggleBtn.addEventListener('click', async () => {
+      autoSyncToggleBtn.disabled = true;
+      try {
+        await patchAutoSync({ autoSyncEnabled: !autoSyncState.autoSyncEnabled });
+      } catch (err) {
+        alert('Auto-sync toggle failed: ' + err.message);
+      } finally {
+        autoSyncToggleBtn.disabled = false;
+      }
+    });
+
+    autoSyncCap.addEventListener('change', async () => {
+      const v = Number(autoSyncCap.value);
+      if (!Number.isFinite(v) || v < 0) { autoSyncCap.value = autoSyncState.dailyDetectRunCap ?? 50; return; }
+      try { await patchAutoSync({ dailyDetectRunCap: v }); }
+      catch (err) { alert('Cap update failed: ' + err.message); }
+    });
 
     postsSyncBtn.addEventListener('click', async () => {
       postsSyncBtn.disabled = true;

@@ -169,6 +169,23 @@
       </div>
     </div>
 
+    <!-- Integrations (Instagram for now; TikTok/YouTube to follow) -->
+    <div id="integrationsCard" class="card hidden">
+      <p class="panel-label">Integrations</p>
+      <div id="igRow" class="flex items-center gap-3 flex-wrap">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="text-white font-semibold text-sm">Instagram</span>
+            <span id="igStatusPill" class="source-pill source-stub">Not connected</span>
+          </div>
+          <p id="igDetail" class="text-[#888] text-xs mt-1">Connect to sync product catalog and pull recent posts/reels into the detect pipeline.</p>
+        </div>
+        <button id="igConnectBtn"    type="button" class="pill-btn primary">Connect Instagram</button>
+        <button id="igDisconnectBtn" type="button" class="pill-btn hidden">Disconnect</button>
+      </div>
+      <p id="igConfigWarn" class="text-[#facc15] text-xs mt-3 hidden">Server is missing Meta OAuth env vars — add META_APP_ID / META_APP_SECRET / META_REDIRECT_URI / INTEGRATION_ENCRYPTION_KEY to enable.</p>
+    </div>
+
     <form id="brandForm" class="space-y-6 hidden">
       <!-- Identity -->
       <div class="card">
@@ -316,6 +333,12 @@
     const reviewMeta      = document.getElementById('reviewMeta');
     const enrichStatus    = document.getElementById('enrichStatus');
     const enrichStatusText= document.getElementById('enrichStatusText');
+    const integrationsCard= document.getElementById('integrationsCard');
+    const igStatusPill    = document.getElementById('igStatusPill');
+    const igDetail        = document.getElementById('igDetail');
+    const igConnectBtn    = document.getElementById('igConnectBtn');
+    const igDisconnectBtn = document.getElementById('igDisconnectBtn');
+    const igConfigWarn    = document.getElementById('igConfigWarn');
 
     const ENRICH_STAGE_LABELS = {
       'brandfetch':    'Fetching brand kit (Brandfetch)',
@@ -374,6 +397,8 @@
         headerLoading.classList.add('hidden');
         headerContent.classList.remove('hidden');
         form.classList.remove('hidden');
+        integrationsCard.classList.remove('hidden');
+        loadIgStatus();
         // Self-drive polling whenever enrichment is active. Covers
         // both "user clicked refresh" and "page loaded mid-enrichment".
         if (currentBrand.enrichmentStage) ensurePolling();
@@ -633,6 +658,99 @@
     window.addEventListener('beforeunload', (e) => {
       if (dirty) { e.preventDefault(); e.returnValue = ''; }
     });
+
+    // ── Instagram integration ──────────────────────────────────────
+    async function loadIgStatus() {
+      try {
+        const res = await fetch('/api/integrations/instagram/status');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (!data.configured) {
+          igConfigWarn.classList.remove('hidden');
+          igConnectBtn.disabled = true;
+        } else {
+          igConfigWarn.classList.add('hidden');
+          igConnectBtn.disabled = false;
+        }
+        const c = data.credential;
+        if (c) {
+          igStatusPill.textContent = 'Connected';
+          igStatusPill.className   = 'source-pill source-curated';
+          const parts = [];
+          if (c.igUsername) parts.push(`@${c.igUsername}`);
+          if (c.pageName)   parts.push(`Page: ${c.pageName}`);
+          if (c.catalogId)  parts.push(`Catalog: ${c.catalogId}`);
+          if (c.expiresAt) {
+            const days = Math.round((new Date(c.expiresAt) - Date.now()) / 86400000);
+            parts.push(`expires in ${days}d`);
+          }
+          igDetail.textContent = parts.join(' · ') || 'Connected';
+          igConnectBtn.textContent = 'Reconnect';
+          igDisconnectBtn.classList.remove('hidden');
+        } else {
+          igStatusPill.textContent = 'Not connected';
+          igStatusPill.className   = 'source-pill source-stub';
+          igDetail.textContent = 'Connect to sync product catalog and pull recent posts/reels into the detect pipeline.';
+          igConnectBtn.textContent = 'Connect Instagram';
+          igDisconnectBtn.classList.add('hidden');
+        }
+      } catch (err) {
+        igDetail.textContent = `Failed to load IG status: ${err.message}`;
+      }
+    }
+
+    igConnectBtn.addEventListener('click', async () => {
+      igConnectBtn.disabled = true;
+      try {
+        const res = await fetch('/api/integrations/instagram/connect', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        // Full-page navigation to Meta's consent screen — the callback
+        // bounces the user back to brand.html with ?ig_status=...
+        window.location.href = data.authorizeUrl;
+      } catch (err) {
+        alert('Connect failed: ' + err.message);
+        igConnectBtn.disabled = false;
+      }
+    });
+
+    igDisconnectBtn.addEventListener('click', async () => {
+      if (!confirm('Disconnect Instagram from this brand? Re-connecting requires going through Meta consent again.')) return;
+      igDisconnectBtn.disabled = true;
+      try {
+        const res = await fetch('/api/integrations/instagram', { method: 'DELETE' });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.error || `HTTP ${res.status}`);
+        }
+        await loadIgStatus();
+      } catch (err) {
+        alert('Disconnect failed: ' + err.message);
+      } finally {
+        igDisconnectBtn.disabled = false;
+      }
+    });
+
+    // Show a one-shot banner when Meta bounces us back from OAuth.
+    (function handleOAuthReturn() {
+      const params = new URLSearchParams(window.location.search);
+      const status = params.get('ig_status');
+      if (!status) return;
+      const msg = params.get('ig_msg') || '';
+      const map = {
+        connected: { color: '#34d399', text: `Instagram connected${msg ? ` (${msg})` : ''}` },
+        denied:    { color: '#facc15', text: `Instagram connect cancelled${msg ? `: ${msg}` : ''}` },
+        error:     { color: '#f87171', text: `Instagram connect failed${msg ? `: ${msg}` : ''}` }
+      };
+      const cfg = map[status] || map.error;
+      const banner = document.createElement('div');
+      banner.style.cssText = `position:fixed;top:16px;left:50%;transform:translateX(-50%);background:#111;border:1px solid ${cfg.color};color:${cfg.color};padding:10px 18px;border-radius:10px;font-size:13px;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,0.4);`;
+      banner.textContent = cfg.text;
+      document.body.appendChild(banner);
+      setTimeout(() => banner.remove(), 6000);
+      // Strip the params so a refresh doesn't re-show the banner.
+      window.history.replaceState({}, '', window.location.pathname);
+    })();
 
     load();
   </script>

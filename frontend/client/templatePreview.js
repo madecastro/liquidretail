@@ -916,27 +916,25 @@
     stage.style.setProperty('--brand-accent',  accent);
     stage.style.fontFamily = fontStack;
 
-    // Background. Overlay mode = full-bleed image. Inset mode = brand
-    // primary fill with the image inscribed inside imageRect.
+    // Background. Overlay mode = full-bleed asset. Inset mode = brand
+    // primary fill with the asset inscribed inside imageRect.
+    // When backgroundMedia.video is set (Media is a video), render a
+    // <video> element with the still image as poster — autoplay,
+    // muted, looped, playsinline so it acts as a moving hero in the
+    // preview and matches what the eventual renderer will produce.
     if (placement.mode === 'inset' && placement.imageRect) {
       stage.style.background = placement.backgroundColor || primary;
       const ir = placement.imageRect;
-      const img = document.createElement('img');
-      img.src = placement.backgroundMedia.image;
-      img.style.cssText =
-        'position:absolute;' +
+      const cssRect =
+        `position:absolute;` +
         `left:${(ir.x1*100).toFixed(2)}%;top:${(ir.y1*100).toFixed(2)}%;` +
         `width:${((ir.x2-ir.x1)*100).toFixed(2)}%;height:${((ir.y2-ir.y1)*100).toFixed(2)}%;` +
-        'object-fit:cover;display:block;';
-      img.loading = 'lazy';
-      stage.appendChild(img);
-    } else if (placement.backgroundMedia?.image) {
+        `object-fit:cover;display:block;`;
+      stage.appendChild(makeBackgroundAsset(placement.backgroundMedia, cssRect));
+    } else if (placement.backgroundMedia?.image || placement.backgroundMedia?.video) {
       stage.style.background = primary;
-      const img = document.createElement('img');
-      img.src = placement.backgroundMedia.image;
-      img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;';
-      img.loading = 'lazy';
-      stage.appendChild(img);
+      const cssRect = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;';
+      stage.appendChild(makeBackgroundAsset(placement.backgroundMedia, cssRect));
     } else {
       stage.style.background = primary;
     }
@@ -1056,6 +1054,32 @@
     }
 
     if (layer.childElementCount > 0) stage.appendChild(layer);
+  }
+
+  // Build the full-bleed (or inset) background element. Renders a
+  // <video> with the image as poster when a video URL is present
+  // (source Media is a video), else a plain <img>. Common cssText
+  // is applied by the caller so position/inset/object-fit match
+  // overlay vs inset modes.
+  function makeBackgroundAsset(bgMedia, cssText) {
+    if (bgMedia?.video) {
+      const v = document.createElement('video');
+      v.src = bgMedia.video;
+      if (bgMedia.image) v.poster = bgMedia.image;
+      v.muted = true;
+      v.autoplay = true;
+      v.loop = true;
+      v.playsInline = true;
+      v.setAttribute('playsinline', '');
+      v.preload = 'metadata';
+      v.style.cssText = cssText;
+      return v;
+    }
+    const img = document.createElement('img');
+    img.src = bgMedia?.image || '';
+    img.loading = 'lazy';
+    img.style.cssText = cssText;
+    return img;
   }
 
   // Map a restriction classification + strictness to a color role.
@@ -1383,8 +1407,19 @@
     switch (zone.kind) {
       case 'media': {
         const media = tpGet(input, zone.slot);
-        const src = media?.image || media?.video_poster || null;
-        if (src) return `<img src="${escapeHtml(src)}" alt="${escapeHtml(zone.slot || '')}" />`;
+        // Prefer video when the media object carries one (source Media
+        // is a video); use the image as poster. Falls back to a plain
+        // <img> tag when only an image is available.
+        const videoSrc = media?.video || null;
+        const imgSrc   = media?.image || media?.video_poster || null;
+        if (videoSrc) {
+          return `<video src="${escapeHtml(videoSrc)}"` +
+                 (imgSrc ? ` poster="${escapeHtml(imgSrc)}"` : '') +
+                 ` muted autoplay loop playsinline preload="metadata"></video>`;
+        }
+        if (imgSrc) {
+          return `<img src="${escapeHtml(imgSrc)}" alt="${escapeHtml(zone.slot || '')}" />`;
+        }
         return `<div class="tp-placeholder">${escapeHtml(zone.slot || 'media')}</div>`;
       }
       case 'text':

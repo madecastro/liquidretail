@@ -84,6 +84,33 @@
 
     .empty-block { color: #555; font-size: 11px; padding: 12px; text-align: center; font-style: italic; }
 
+    /* Catalog browser cards */
+    .cb-card {
+      background: #0f0f0f; border: 1px solid #1f1f1f; border-radius: 10px;
+      padding: 10px; display: flex; flex-direction: column; gap: 8px; min-width: 0;
+    }
+    .cb-thumb {
+      width: 100%; aspect-ratio: 1/1; background: #161616 center/contain no-repeat;
+      border: 1px solid #1f1f1f; border-radius: 6px;
+    }
+    .cb-title  { color: #ddd; font-size: 12px; font-weight: 600; line-height: 1.3;
+                 overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+    .cb-meta   { color: #777; font-size: 10px; }
+    .cb-price  { color: #34d399; font-size: 12px; font-weight: 600; }
+    .cb-pill   { display: inline-block; font-size: 9px; font-weight: 700; text-transform: uppercase;
+                 letter-spacing: 0.05em; padding: 2px 6px; border-radius: 999px; background: #1f1f1f; color: #888; }
+    .cb-pill.has-reviews   { background: rgba(52,211,153,0.15); color: #34d399; }
+    .cb-pill.has-matches   { background: rgba(59,130,246,0.18); color: #93c5fd; }
+    .cb-pill.out-of-stock  { background: rgba(248,113,113,0.15); color: #f87171; }
+    .cb-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; }
+    .cb-btn {
+      font-size: 10px; padding: 4px 8px; border-radius: 6px;
+      background: #161616; border: 1px solid #2a2a2a; color: #aaa; cursor: pointer;
+    }
+    .cb-btn:hover  { border-color: #444; color: #fff; }
+    .cb-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .cb-btn.primary { background: #1f2937; border-color: #1f2937; color: #93c5fd; }
+
     .save-bar {
       position: sticky; bottom: 16px;
       background: #0a0a0a; border-top: 1px solid #1f1f1f;
@@ -194,6 +221,33 @@
           <p id="catalogDetail" class="text-[#888] text-xs mt-1">No sync yet. Pull the brand's Meta product catalog to enable local product matching during detect.</p>
         </div>
         <button id="catalogSyncBtn" type="button" class="pill-btn">Sync catalog</button>
+      </div>
+
+      <div id="catalogBrowserRow" class="hidden mt-4 pt-4 border-t border-[#1f1f1f]">
+        <div class="flex items-center gap-2 mb-3 flex-wrap">
+          <span class="text-white font-semibold text-sm">Catalog browser</span>
+          <button id="catalogBrowserToggle" type="button" class="pill-btn" style="font-size:11px;padding:4px 10px;">Show</button>
+          <span id="catalogBrowserSummary" class="text-[#666] text-xs ml-auto"></span>
+        </div>
+        <div id="catalogBrowserBody" class="hidden">
+          <div class="flex items-center gap-2 mb-3 flex-wrap">
+            <input id="cbSearch" type="text" placeholder="Search title / description…" class="field-input flex-1 min-w-[180px]" style="padding:6px 10px;font-size:12px;" />
+            <select id="cbCategory" class="field-input" style="padding:6px 10px;font-size:12px;width:auto;">
+              <option value="">All categories</option>
+            </select>
+            <label class="text-xs text-[#888] flex items-center gap-1.5">
+              <input id="cbInStock" type="checkbox" /> In stock only
+            </label>
+            <label class="text-xs text-[#888] flex items-center gap-1.5">
+              <input id="cbHasReviews" type="checkbox" /> Has reviews
+            </label>
+          </div>
+          <div id="cbGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+          <div class="flex items-center justify-between mt-3">
+            <span id="cbStatus" class="text-[#666] text-xs"></span>
+            <button id="cbLoadMore" type="button" class="pill-btn hidden" style="font-size:11px;padding:5px 12px;">Load more</button>
+          </div>
+        </div>
       </div>
 
       <div id="postsRow" class="hidden mt-4 pt-4 border-t border-[#1f1f1f] flex items-center gap-3 flex-wrap">
@@ -369,6 +423,17 @@
     const postsCountPill  = document.getElementById('postsCountPill');
     const postsDetail     = document.getElementById('postsDetail');
     const postsSyncBtn    = document.getElementById('postsSyncBtn');
+    const catalogBrowserRow    = document.getElementById('catalogBrowserRow');
+    const catalogBrowserToggle = document.getElementById('catalogBrowserToggle');
+    const catalogBrowserBody   = document.getElementById('catalogBrowserBody');
+    const catalogBrowserSummary= document.getElementById('catalogBrowserSummary');
+    const cbSearch        = document.getElementById('cbSearch');
+    const cbCategory      = document.getElementById('cbCategory');
+    const cbInStock       = document.getElementById('cbInStock');
+    const cbHasReviews    = document.getElementById('cbHasReviews');
+    const cbGrid          = document.getElementById('cbGrid');
+    const cbStatus        = document.getElementById('cbStatus');
+    const cbLoadMore      = document.getElementById('cbLoadMore');
 
     const ENRICH_STAGE_LABELS = {
       'brandfetch':    'Fetching brand kit (Brandfetch)',
@@ -719,6 +784,7 @@
           igDisconnectBtn.classList.remove('hidden');
           catalogRow.classList.remove('hidden');
           postsRow.classList.remove('hidden');
+          catalogBrowserRow.classList.remove('hidden');
           // Sync button is meaningful only when a catalog was selected.
           catalogSyncBtn.disabled = !c.catalogId;
           if (!c.catalogId) {
@@ -739,6 +805,7 @@
           igDisconnectBtn.classList.add('hidden');
           catalogRow.classList.add('hidden');
           postsRow.classList.add('hidden');
+          catalogBrowserRow.classList.add('hidden');
         }
       } catch (err) {
         igDetail.textContent = `Failed to load IG status: ${err.message}`;
@@ -826,6 +893,152 @@
         postsSyncBtn.textContent = prev;
       }
     });
+
+    // ── Catalog browser (V2 #1) ─────────────────────────────────────
+    let cbOffset = 0;
+    let cbTotal  = 0;
+    const CB_PAGE = 24;
+    let cbSearchTimer = null;
+
+    catalogBrowserToggle.addEventListener('click', () => {
+      const open = !catalogBrowserBody.classList.contains('hidden');
+      if (open) {
+        catalogBrowserBody.classList.add('hidden');
+        catalogBrowserToggle.textContent = 'Show';
+      } else {
+        catalogBrowserBody.classList.remove('hidden');
+        catalogBrowserToggle.textContent = 'Hide';
+        if (!cbGrid.children.length) loadCatalogPage(true);
+      }
+    });
+
+    function cbBuildQuery(reset) {
+      const params = new URLSearchParams({
+        limit:  String(CB_PAGE),
+        offset: String(reset ? 0 : cbOffset)
+      });
+      if (cbSearch.value.trim())   params.set('q',          cbSearch.value.trim());
+      if (cbCategory.value)        params.set('category',   cbCategory.value);
+      if (cbInStock.checked)       params.set('inStock',    '1');
+      if (cbHasReviews.checked)    params.set('hasReviews', '1');
+      return params.toString();
+    }
+
+    async function loadCatalogPage(reset) {
+      if (reset) {
+        cbOffset = 0;
+        cbGrid.innerHTML = '';
+        cbStatus.textContent = 'Loading…';
+        cbLoadMore.classList.add('hidden');
+      } else {
+        cbStatus.textContent = 'Loading more…';
+      }
+      try {
+        const res = await fetch(`/api/integrations/instagram/catalog?${cbBuildQuery(reset)}`);
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.error || `HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        cbTotal  = data.total;
+        cbOffset = data.offset + data.products.length;
+
+        // First load: populate the category filter dropdown.
+        if (reset && cbCategory.options.length <= 1) {
+          for (const c of data.categories) {
+            const opt = document.createElement('option');
+            opt.value = c; opt.textContent = c;
+            cbCategory.appendChild(opt);
+          }
+        }
+
+        if (!data.products.length && reset) {
+          cbStatus.textContent = data.total === 0
+            ? 'No catalog items synced yet — click "Sync catalog" above.'
+            : 'No items match these filters.';
+          return;
+        }
+
+        for (const p of data.products) cbGrid.appendChild(renderCatalogCard(p));
+        cbStatus.textContent = `Showing ${cbGrid.children.length} of ${cbTotal.toLocaleString()}`;
+        if (data.hasMore) cbLoadMore.classList.remove('hidden');
+        else              cbLoadMore.classList.add('hidden');
+        catalogBrowserSummary.textContent = `${cbTotal.toLocaleString()} item${cbTotal === 1 ? '' : 's'}`;
+      } catch (err) {
+        cbStatus.textContent = `Failed: ${err.message}`;
+      }
+    }
+
+    function renderCatalogCard(p) {
+      const card = document.createElement('div');
+      card.className = 'cb-card';
+      const priceStr = p.price != null ? `${p.currency || ''} ${p.price.toFixed(2)}`.trim() : '';
+      const outOfStock = p.availability && !/in stock/i.test(p.availability);
+      const reviewsLine = p.hasReviews
+        ? `<span class="cb-pill has-reviews">${p.reviewsRating ? p.reviewsRating.toFixed(1)+'★' : ''} reviews</span>`
+        : `<span class="cb-pill">no reviews</span>`;
+      const matchPill = p.matchCount > 0
+        ? `<span class="cb-pill has-matches">${p.matchCount} match${p.matchCount === 1 ? '' : 'es'}</span>`
+        : '';
+      const stockPill = outOfStock
+        ? `<span class="cb-pill out-of-stock">${escapeHtml(p.availability)}</span>`
+        : '';
+
+      card.innerHTML = `
+        <div class="cb-thumb" style="${p.imageUrl ? `background-image:url('${escapeAttr(p.imageUrl)}')` : ''}"></div>
+        <div class="cb-title" title="${escapeAttr(p.title)}">${escapeHtml(p.title)}</div>
+        <div class="cb-meta">${p.category ? escapeHtml(p.category) : '<em style="color:#444">no category</em>'}</div>
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <span class="cb-price">${escapeHtml(priceStr)}</span>
+          <div class="flex items-center gap-1 flex-wrap">${reviewsLine}${matchPill}${stockPill}</div>
+        </div>
+        <div class="cb-actions">
+          ${p.productUrl ? `<a href="${escapeAttr(p.productUrl)}" target="_blank" rel="noopener" class="cb-btn">View →</a>` : ''}
+          <button type="button" class="cb-btn primary" data-action="refresh-reviews" data-id="${p.id}">${p.hasReviews ? 'Refresh reviews' : 'Fetch reviews'}</button>
+        </div>
+      `;
+
+      const refreshBtn = card.querySelector('[data-action="refresh-reviews"]');
+      refreshBtn.addEventListener('click', async () => {
+        refreshBtn.disabled = true;
+        const orig = refreshBtn.textContent;
+        refreshBtn.textContent = 'Fetching…';
+        try {
+          const res = await fetch(`/api/integrations/instagram/catalog/${encodeURIComponent(p.id)}/refresh-reviews`, { method: 'POST' });
+          const d = await res.json();
+          if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
+          const r = d.productReviews;
+          const cnt = r?.quotes?.length || 0;
+          refreshBtn.textContent = cnt ? `✓ ${cnt} quote${cnt === 1 ? '' : 's'}` : '✓ no quotes';
+          // Reflect new state in the card pills.
+          const pillsRow = card.querySelector('.flex.items-center.justify-between .flex.items-center.gap-1');
+          if (pillsRow && cnt) {
+            const old = pillsRow.querySelector('.cb-pill');
+            if (old) old.outerHTML = `<span class="cb-pill has-reviews">${r.rating ? r.rating.toFixed(1)+'★' : ''} reviews</span>`;
+          }
+          setTimeout(() => { refreshBtn.disabled = false; refreshBtn.textContent = 'Refresh reviews'; }, 2000);
+        } catch (err) {
+          refreshBtn.textContent = '✗ failed';
+          setTimeout(() => { refreshBtn.disabled = false; refreshBtn.textContent = orig; }, 2500);
+          console.warn('refresh-reviews failed:', err);
+        }
+      });
+
+      return card;
+    }
+
+    function escapeAttr(s) { return escapeHtml(s); }
+
+    cbLoadMore.addEventListener('click', () => loadCatalogPage(false));
+
+    // Filter changes reset the grid.
+    cbSearch.addEventListener('input', () => {
+      clearTimeout(cbSearchTimer);
+      cbSearchTimer = setTimeout(() => loadCatalogPage(true), 300);
+    });
+    cbCategory.addEventListener('change',   () => loadCatalogPage(true));
+    cbInStock.addEventListener('change',    () => loadCatalogPage(true));
+    cbHasReviews.addEventListener('change', () => loadCatalogPage(true));
 
     igConnectBtn.addEventListener('click', async () => {
       igConnectBtn.disabled = true;

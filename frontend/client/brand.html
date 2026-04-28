@@ -232,6 +232,15 @@
             </div>
           </div>
           <div>
+            <label class="field-label">Font color</label>
+            <div class="color-row">
+              <input type="color" name="fontColorPicker" class="color-swatch-input" />
+              <input type="text"  name="fontColor"       class="field-input" placeholder="#111111" />
+              <button type="button" data-clear="fontColor" class="pill-btn ghost text-[#666]" style="font-size:10px;padding:4px 8px;">Clear</button>
+            </div>
+            <p class="field-help">Body / headline text color used in brand copy.</p>
+          </div>
+          <div>
             <label class="field-label">Font family <span id="fontSourceBadge" class="font-source-pill hidden"></span></label>
             <input type="text" name="fontFamily" class="field-input" placeholder="Inter" />
             <p class="field-help">Any Google Fonts family name. Loads automatically in the preview.</p>
@@ -436,6 +445,7 @@
       set('primaryColor', b.primaryColor);
       set('secondaryColor', b.secondaryColor);
       set('accentColor', b.accentColor);
+      set('fontColor', b.fontColor);
       set('fontFamily', b.fontFamily);
       set('tone', (b.tone || []).join(', '));
       set('hashtags', (b.hashtags || []).join(', '));
@@ -444,6 +454,7 @@
       syncPicker('primaryColor');
       syncPicker('secondaryColor');
       syncPicker('accentColor');
+      syncPicker('fontColor');
       // Font source badge.
       if (b.fontSource && b.fontSource !== 'curated') {
         fontSourceBadge.textContent = b.fontSource;
@@ -507,7 +518,7 @@
     }
 
     // Wire color pickers ↔ text fields.
-    ['primaryColor', 'secondaryColor', 'accentColor'].forEach(name => {
+    ['primaryColor', 'secondaryColor', 'accentColor', 'fontColor'].forEach(name => {
       const picker = form.elements[name + 'Picker'];
       const text   = form.elements[name];
       picker.addEventListener('input', () => { text.value = picker.value; markDirty(); });
@@ -549,6 +560,7 @@
         primaryColor:   (fd.get('primaryColor') || '').toString().trim() || null,
         secondaryColor: (fd.get('secondaryColor') || '').toString().trim() || null,
         accentColor:    (fd.get('accentColor') || '').toString().trim() || null,
+        fontColor:      (fd.get('fontColor') || '').toString().trim() || null,
         fontFamily:     (fd.get('fontFamily') || '').toString().trim() || null,
         tone:           splitCsv(fd.get('tone')),
         hashtags:       splitCsv(fd.get('hashtags')),

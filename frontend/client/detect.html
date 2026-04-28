@@ -268,6 +268,22 @@
     }
     .hero-caption .key { color: #aaa; font-weight: 600; }
 
+    /* Media-source pill + IG metadata block */
+    .media-source-block {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      margin-top: 6px; font-size: 10px; color: #888;
+    }
+    .source-pill-md {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+      padding: 3px 9px; border-radius: 999px;
+    }
+    .source-pill-md.upload    { background: #1f1f1f; color: #888; }
+    .source-pill-md.instagram { background: rgba(225,48,108,0.15); color: #f472b6; }
+    .media-source-block a       { color: #93c5fd; text-decoration: none; }
+    .media-source-block a:hover { text-decoration: underline; }
+    .media-source-block .dot    { color: #444; }
+
     /* ── Provider-failure row ── */
     .provider-fail {
       display: flex; align-items: center; gap: 10px; padding: 6px 10px;
@@ -920,6 +936,7 @@
             Detection Results
           </h2>
           <p id="detectionSummary" class="text-[#555] text-xs mt-0.5"></p>
+          <div id="mediaSourceBlock" class="media-source-block hidden"></div>
           <div id="heroCaption" class="hero-caption hidden"></div>
         </div>
         <div class="flex items-center gap-2 flex-wrap justify-end">
@@ -1193,6 +1210,7 @@
     primarySubjectDesc: null,
     rights: { approved: false },
     mediaId: null,
+    mediaSource: null,                  // { source, permalink, postedAt, creatorHandle, postType }
     heroFrameSec: null, heroReason: null, videoDurationSec: null,
     stageTimings: {},  // { yolo: 1234, judge: 3210, ... } in ms
     judge: null,
@@ -1373,6 +1391,7 @@
       state.heroReason    = d.heroReason || null;
       state.videoDurationSec = d.videoDurationSec ?? null;
       state.stageTimings  = d.stageTimings || {};
+      state.mediaSource   = d.mediaSource || null;
       state.selectedRatio  = '5:4';
       state.selectedCropId = null;
 
@@ -1400,6 +1419,35 @@
   }
 
   // ══════════════════════════════════════════════════════════════
+  //  Media-source pill + IG metadata block
+  // ══════════════════════════════════════════════════════════════
+  function renderMediaSourceBlock() {
+    const block = document.getElementById('mediaSourceBlock');
+    if (!block) return;
+    const ms = state.mediaSource;
+    if (!ms) { block.classList.add('hidden'); return; }
+
+    const isIg = ms.source === 'instagram';
+    const isReel = isIg && /^(VIDEO|REEL)$/i.test(ms.postType || '');
+    const label = isIg ? (isReel ? 'Instagram Reel' : 'Instagram Post')
+                       : (ms.source === 'manual_upload' ? 'Manual upload' : (ms.source || 'Unknown'));
+    const pillClass = isIg ? 'instagram' : 'upload';
+    const parts = [`<span class="source-pill-md ${pillClass}">${escapeHtml(label)}</span>`];
+
+    if (isIg) {
+      if (ms.creatorHandle) parts.push(`@${escapeHtml(ms.creatorHandle)}`);
+      if (ms.postedAt) {
+        const d = new Date(ms.postedAt);
+        if (!isNaN(d)) parts.push(`<span class="dot">·</span> posted ${escapeHtml(d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }))}`);
+      }
+      if (ms.permalink) parts.push(`<span class="dot">·</span> <a href="${escapeHtml(ms.permalink)}" target="_blank" rel="noopener">View on Instagram →</a>`);
+    }
+
+    block.innerHTML = parts.join(' ');
+    block.classList.remove('hidden');
+  }
+
+  // ══════════════════════════════════════════════════════════════
   //  Render all panels
   // ══════════════════════════════════════════════════════════════
   function renderAll() {
@@ -1414,6 +1462,7 @@
     const summary = `${np} product${np!==1?'s':''} · ${ns} subject${ns!==1?'s':''} · ${nt} text region${nt!==1?'s':''}` +
                     (state.type === 'video' ? ` · ${ne} entit${ne!==1?'ies':'y'}` : '');
     document.getElementById('detectionSummary').textContent = summary;
+    renderMediaSourceBlock();
 
     document.getElementById('productCount').textContent = `(${np})`;
     document.getElementById('subjectCount').textContent = `(${ns})`;

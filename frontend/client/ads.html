@@ -849,6 +849,13 @@
     }
     .ads-pick-meta .brand { font-weight: 700; color: #fff; }
     .ads-pick-meta .date  { color: #888; font-size: 9px; margin-top: 1px; }
+    .ads-pick-source-pill {
+      position: absolute; top: 6px; left: 6px; z-index: 2;
+      background: rgba(225,48,108,0.92); color: #fff;
+      font-size: 9px; font-weight: 700; letter-spacing: 0.04em;
+      padding: 2px 7px; border-radius: 999px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    }
     .ads-pick-empty {
       flex: 1 1 auto;            /* fill the ribbon when there's nothing else */
       padding: 32px; text-align: center;
@@ -1203,6 +1210,10 @@
         } else {
           card.innerHTML = `<img src="${escapeHtml(m.fileUrl)}" alt="${escapeHtml(m.fileName || "")}" loading="lazy" />`;
         }
+        // Source pill: IG-sourced media gets a colored pill so it's
+        // distinguishable at a glance from manual uploads.
+        const sourcePill = mediaSourcePillHtml(m);
+        if (sourcePill) card.insertAdjacentHTML("afterbegin", sourcePill);
         const date = m.createdAt ? new Date(m.createdAt).toLocaleDateString() : "";
         card.insertAdjacentHTML("beforeend",
           `<div class="ads-pick-meta">` +
@@ -1213,6 +1224,15 @@
         card.addEventListener("click", () => pickMedia(m.mediaId));
         grid.appendChild(card);
       }
+    }
+
+    // Returns a small overlay pill HTML for IG-sourced Media. Manual
+    // uploads return empty string so we don't clutter their cards.
+    function mediaSourcePillHtml(m) {
+      if (m.source !== 'instagram') return '';
+      const isReel = (m.postType || '').toUpperCase() === 'VIDEO' || (m.postType || '').toUpperCase() === 'REEL';
+      const label = isReel ? 'IG Reel' : 'IG Post';
+      return `<span class="ads-pick-source-pill" title="Ingested from Instagram">${escapeHtml(label)}</span>`;
     }
 
     function pickMedia(mediaId) {

@@ -433,6 +433,18 @@
     const colorVal = (hex, key) => isHexColor(hex)
       ? `<span class="tp-brand-swatch" style="background:${hex}"></span><code>${escapeHtml(hex)}</code>${curatedTag(key)}`
       : empty();
+    // Inline pill for the font's provenance — distinguishes a real
+    // brand font (Brandfetch / scraped from the brand's site) from
+    // an approximation (suggested by GPT, or tone-mapped fallback).
+    const fontSourceBadge = (src) => {
+      if (!src || src === 'curated') return '';
+      const label = src === 'brandfetch'   ? 'brandfetch'
+                  : src === 'scraped'      ? 'scraped'
+                  : src === 'suggested'    ? 'suggested'
+                  : src === 'tone-default' ? 'tone-default'
+                  : src;
+      return ` <span class="tp-brand-tag" style="font-size:9px;padding:1px 6px;opacity:0.75;">${escapeHtml(label)}</span>`;
+    };
     const empty = () => '<span class="empty">—</span>';
     const txt = (v, key) => (v == null || v === '')
       ? empty()
@@ -461,7 +473,9 @@
     parts.push(row('primary', colorVal(brand.primaryColor, 'primaryColor')));
     parts.push(row('secondary', colorVal(brand.secondaryColor, 'secondaryColor')));
     parts.push(row('accent', colorVal(brand.accentColor, 'accentColor')));
-    parts.push(row('font', txt(brand.fontFamily, 'fontFamily')));
+    parts.push(row('font', brand.fontFamily
+      ? `${escapeHtml(brand.fontFamily)}${fontSourceBadge(brand.fontSource)}${curatedTag('fontFamily')}`
+      : empty()));
 
     // Voice
     parts.push(sec('Voice'));

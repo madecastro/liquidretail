@@ -302,6 +302,24 @@
       </div>
     </div>
 
+    <!-- Ad Platforms (separate from content integrations above) -->
+    <div id="adPlatformsCard" class="card hidden">
+      <p class="panel-label">Ad platforms</p>
+
+      <div id="metaAdsRow" class="flex items-center gap-3 flex-wrap">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="text-white font-semibold text-sm">Meta Ads</span>
+            <span id="metaAdsStatusPill" class="source-pill source-stub">Not connected</span>
+          </div>
+          <p id="metaAdsDetail" class="text-[#888] text-xs mt-1">Connect a Meta ad account so we can read campaigns and ship rendered creatives back to ad sets.</p>
+        </div>
+        <button id="metaAdsConnectBtn" type="button" class="pill-btn primary">Connect Meta Ads</button>
+      </div>
+      <div id="metaAdsAccountsList" class="hidden mt-3 space-y-2"></div>
+      <p id="metaAdsConfigWarn" class="text-[#facc15] text-xs mt-3 hidden">Server is missing Meta Ads OAuth env vars — add META_ADS_REDIRECT_URI to enable.</p>
+    </div>
+
     <form id="brandForm" class="space-y-6 hidden">
       <!-- Identity -->
       <div class="card">
@@ -450,6 +468,13 @@
     const enrichStatus    = document.getElementById('enrichStatus');
     const enrichStatusText= document.getElementById('enrichStatusText');
     const integrationsCard= document.getElementById('integrationsCard');
+    const adPlatformsCard = document.getElementById('adPlatformsCard');
+    const metaAdsRow      = document.getElementById('metaAdsRow');
+    const metaAdsStatusPill = document.getElementById('metaAdsStatusPill');
+    const metaAdsDetail   = document.getElementById('metaAdsDetail');
+    const metaAdsConnectBtn = document.getElementById('metaAdsConnectBtn');
+    const metaAdsAccountsList = document.getElementById('metaAdsAccountsList');
+    const metaAdsConfigWarn = document.getElementById('metaAdsConfigWarn');
     const igStatusPill    = document.getElementById('igStatusPill');
     const igDetail        = document.getElementById('igDetail');
     const igConnectBtn    = document.getElementById('igConnectBtn');
@@ -544,7 +569,9 @@
         headerContent.classList.remove('hidden');
         form.classList.remove('hidden');
         integrationsCard.classList.remove('hidden');
+        adPlatformsCard.classList.remove('hidden');
         loadIgStatus();
+        loadMetaAdsStatus();
         // Self-drive polling whenever enrichment is active. Covers
         // both "user clicked refresh" and "page loaded mid-enrichment".
         if (currentBrand.enrichmentStage) ensurePolling();
@@ -1495,6 +1522,254 @@
     // Expose for the credential-row Switch button (defined elsewhere
     // in the page) to call without re-querying global state.
     window.openIgPicker = openIgPicker;
+  </script>
+
+  <!-- ── Meta Ads ad-account picker modal ────────────────────────── -->
+  <div id="metaAdsPickerOverlay" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.78);z-index:60;display:flex;align-items:center;justify-content:center;padding:24px;">
+    <div class="card" style="max-width:560px;width:100%;max-height:90vh;overflow:auto;">
+      <div class="flex items-center justify-between mb-4">
+        <p class="panel-label" style="margin:0;">Choose ad account</p>
+        <button id="metaAdsPickerCloseBtn" type="button" class="pill-btn" style="font-size:11px;padding:4px 10px;">Close</button>
+      </div>
+      <p class="text-[#888] text-xs mb-4">Pick which Meta Ads account to bind to this brand. You can switch later. Campaigns + ad sets + ads will sync from this account.</p>
+      <div id="metaAdsPickerLoading" class="text-center text-[#666] text-sm py-6">Loading ad accounts…</div>
+      <div id="metaAdsPickerBody" class="hidden">
+        <div id="metaAdsPickerList" class="space-y-2"></div>
+        <div class="flex items-center gap-2 justify-end mt-4">
+          <span id="metaAdsPickerStatus" class="text-[#888] text-xs flex-1"></span>
+          <button id="metaAdsPickerSaveBtn" type="button" class="pill-btn primary" disabled>Save selection</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── Meta Ads status + account-row rendering ──────────────────
+    async function loadMetaAdsStatus() {
+      try {
+        const res = await fetch('/api/integrations/meta-ads/status');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (!data.configured) {
+          metaAdsConfigWarn.classList.remove('hidden');
+          metaAdsConnectBtn.disabled = true;
+        } else {
+          metaAdsConfigWarn.classList.add('hidden');
+          metaAdsConnectBtn.disabled = false;
+        }
+        const creds = Array.isArray(data.credentials) ? data.credentials : [];
+        if (creds.length) {
+          const n = creds.length;
+          const first = creds[0];
+          metaAdsStatusPill.textContent = n === 1 ? 'Connected' : `${n} accounts`;
+          metaAdsStatusPill.className   = 'source-pill source-curated';
+          metaAdsDetail.textContent = n === 1
+            ? (first.adAccountName || `act_${first.accountIdNumeric || first.adAccountId}`)
+            : `${n} Meta ad accounts connected`;
+          metaAdsConnectBtn.textContent = 'Connect another';
+          metaAdsAccountsList.innerHTML = '';
+          for (const c of creds) metaAdsAccountsList.appendChild(renderMetaAdsRow(c));
+          metaAdsAccountsList.classList.remove('hidden');
+        } else {
+          metaAdsStatusPill.textContent = 'Not connected';
+          metaAdsStatusPill.className   = 'source-pill source-stub';
+          metaAdsDetail.textContent = 'Connect a Meta ad account so we can read campaigns and ship rendered creatives back to ad sets.';
+          metaAdsConnectBtn.textContent = 'Connect Meta Ads';
+          metaAdsAccountsList.classList.add('hidden');
+          metaAdsAccountsList.innerHTML = '';
+        }
+      } catch (err) {
+        metaAdsDetail.textContent = `Failed to load Meta Ads status: ${err.message}`;
+      }
+    }
+
+    function renderMetaAdsRow(c) {
+      const row = document.createElement('div');
+      row.className = 'flex items-center gap-2 flex-wrap text-xs px-3 py-2 rounded-lg bg-[#0f0f0f] border border-[#1f1f1f]';
+      const meta = [];
+      if (c.pending) {
+        meta.push(`<span class="text-[#facc15] font-semibold">Pending setup</span>`);
+        meta.push(`<span class="text-[#888]">pick an ad account to finish</span>`);
+      } else {
+        meta.push(`<span class="text-white font-semibold">${escapeHtml(c.adAccountName || 'Unnamed account')}</span>`);
+        if (c.accountIdNumeric) meta.push(`<span class="text-[#666]">act_${escapeHtml(c.accountIdNumeric)}</span>`);
+        if (c.businessName)     meta.push(`<span class="text-[#888]">${escapeHtml(c.businessName)}</span>`);
+        if (c.currency)         meta.push(`<span class="text-[#666]">${escapeHtml(c.currency)}</span>`);
+      }
+      const setupBtn = c.pending
+        ? `<button type="button" class="pill-btn primary" data-setup="${escapeHtml(c.id)}" style="font-size:10px;padding:4px 10px;">Finish setup</button>`
+        : `<button type="button" class="pill-btn" data-switch="${escapeHtml(c.id)}" style="font-size:10px;padding:4px 10px;">Switch</button>`;
+      row.innerHTML = `<div class="flex-1 flex items-center gap-2 flex-wrap">${meta.join('<span class="text-[#333]">·</span> ')}</div>` +
+                      setupBtn +
+                      `<button type="button" class="pill-btn" data-disconnect="${escapeHtml(c.id)}" style="font-size:10px;padding:4px 10px;">Disconnect</button>`;
+      row.querySelector('[data-disconnect]').addEventListener('click', async (e) => {
+        const id = e.currentTarget.dataset.disconnect;
+        const label = c.pending ? 'this pending connection' : (c.adAccountName || 'this ad account');
+        if (!confirm(`Disconnect ${label}?`)) return;
+        e.currentTarget.disabled = true;
+        try {
+          const res = await fetch(`/api/integrations/meta-ads/${encodeURIComponent(id)}`, { method: 'DELETE' });
+          if (!res.ok) {
+            const d = await res.json().catch(() => ({}));
+            throw new Error(d.error || `HTTP ${res.status}`);
+          }
+          await loadMetaAdsStatus();
+        } catch (err) {
+          alert('Disconnect failed: ' + err.message);
+          e.currentTarget.disabled = false;
+        }
+      });
+      const setupEl = row.querySelector('[data-setup]');
+      if (setupEl) setupEl.addEventListener('click', () => openMetaAdsPicker(c.id));
+      const switchEl = row.querySelector('[data-switch]');
+      if (switchEl) switchEl.addEventListener('click', () => openMetaAdsPicker(c.id));
+      return row;
+    }
+
+    metaAdsConnectBtn.addEventListener('click', async () => {
+      metaAdsConnectBtn.disabled = true;
+      try {
+        const res = await fetch('/api/integrations/meta-ads/connect', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        window.location.href = data.authorizeUrl;
+      } catch (err) {
+        alert('Connect failed: ' + err.message);
+        metaAdsConnectBtn.disabled = false;
+      }
+    });
+
+    // ── Meta Ads ad-account picker modal ─────────────────────────
+    const metaAdsPickerOverlay  = document.getElementById('metaAdsPickerOverlay');
+    const metaAdsPickerCloseBtn = document.getElementById('metaAdsPickerCloseBtn');
+    const metaAdsPickerLoading  = document.getElementById('metaAdsPickerLoading');
+    const metaAdsPickerBody     = document.getElementById('metaAdsPickerBody');
+    const metaAdsPickerList     = document.getElementById('metaAdsPickerList');
+    const metaAdsPickerStatus   = document.getElementById('metaAdsPickerStatus');
+    const metaAdsPickerSaveBtn  = document.getElementById('metaAdsPickerSaveBtn');
+
+    let metaAdsPickerCredId = null;
+    let metaAdsPickerSelection = null;
+
+    async function openMetaAdsPicker(credentialId) {
+      metaAdsPickerCredId = credentialId;
+      metaAdsPickerSelection = null;
+      metaAdsPickerSaveBtn.disabled = true;
+      metaAdsPickerStatus.textContent = '';
+      metaAdsPickerLoading.classList.remove('hidden');
+      metaAdsPickerBody.classList.add('hidden');
+      metaAdsPickerList.innerHTML = '';
+      metaAdsPickerOverlay.classList.remove('hidden');
+      try {
+        const res = await fetch(`/api/integrations/meta-ads/${encodeURIComponent(credentialId)}/options`);
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.error || `HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        if (data.current?.adAccountId) metaAdsPickerSelection = data.current.adAccountId;
+        renderMetaAdsPickerList(data.options?.adAccounts || []);
+        metaAdsPickerLoading.classList.add('hidden');
+        metaAdsPickerBody.classList.remove('hidden');
+      } catch (err) {
+        metaAdsPickerLoading.textContent = `Failed to load: ${err.message}`;
+      }
+    }
+
+    function renderMetaAdsPickerList(accounts) {
+      if (!accounts.length) {
+        metaAdsPickerList.innerHTML = '<p class="empty-block">No ad accounts accessible. Reconnect from a Meta account that has at least one ad account.</p>';
+        return;
+      }
+      for (const a of accounts) {
+        const option = document.createElement('label');
+        option.className = 'flex items-start gap-3 p-3 rounded-lg border border-[#1f1f1f] cursor-pointer hover:border-[#444]';
+        const sub = [];
+        if (a.accountIdNumeric) sub.push(`act_${escapeHtml(a.accountIdNumeric)}`);
+        if (a.business?.name)   sub.push(escapeHtml(a.business.name));
+        if (a.currency)         sub.push(escapeHtml(a.currency));
+        option.innerHTML = `
+          <input type="radio" name="metaAdsPicker" value="${escapeHtml(a.id)}" class="mt-1" />
+          <div class="flex-1 min-w-0">
+            <div class="text-sm text-white font-semibold">${escapeHtml(a.name || a.id)}</div>
+            <div class="text-xs text-[#666] mt-0.5">${sub.join(' · ')}</div>
+          </div>
+        `;
+        const radio = option.querySelector('input');
+        radio.addEventListener('change', () => {
+          metaAdsPickerSelection = a.id;
+          metaAdsPickerSaveBtn.disabled = false;
+        });
+        if (metaAdsPickerSelection === a.id) {
+          radio.checked = true;
+          metaAdsPickerSaveBtn.disabled = false;
+        }
+        metaAdsPickerList.appendChild(option);
+      }
+    }
+
+    metaAdsPickerCloseBtn.addEventListener('click', () => {
+      metaAdsPickerOverlay.classList.add('hidden');
+    });
+
+    metaAdsPickerSaveBtn.addEventListener('click', async () => {
+      if (!metaAdsPickerCredId || !metaAdsPickerSelection) return;
+      metaAdsPickerSaveBtn.disabled = true;
+      metaAdsPickerStatus.textContent = 'Saving…';
+      try {
+        const res = await fetch(`/api/integrations/meta-ads/${encodeURIComponent(metaAdsPickerCredId)}/selection`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ adAccountId: metaAdsPickerSelection })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        metaAdsPickerStatus.textContent = '✓ Saved';
+        if (new URLSearchParams(window.location.search).get('ads_setup')) {
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+        setTimeout(() => {
+          metaAdsPickerOverlay.classList.add('hidden');
+          loadMetaAdsStatus();
+        }, 600);
+      } catch (err) {
+        metaAdsPickerStatus.textContent = `✗ ${err.message}`;
+        metaAdsPickerSaveBtn.disabled = false;
+      }
+    });
+
+    // OAuth bounce — open picker if ?ads_setup is set.
+    (function maybeOpenMetaAdsPickerOnLoad() {
+      const params = new URLSearchParams(window.location.search);
+      const setupId = params.get('ads_setup');
+      if (setupId) {
+        const tryOpen = () => {
+          if (!localStorage.getItem('brand_id')) return setTimeout(tryOpen, 200);
+          openMetaAdsPicker(setupId);
+        };
+        tryOpen();
+      }
+    })();
+
+    // OAuth bounce — show banner for non-pending statuses.
+    (function handleAdsOAuthReturn() {
+      const params = new URLSearchParams(window.location.search);
+      const status = params.get('ads_status');
+      if (!status) return;
+      if (status === 'pending') return;  // picker handles its own UI
+      const msg = params.get('ads_msg') || '';
+      const map = {
+        denied: { color: '#facc15', text: `Meta Ads connect cancelled${msg ? `: ${msg}` : ''}` },
+        error:  { color: '#f87171', text: `Meta Ads connect failed${msg ? `: ${msg}` : ''}` }
+      };
+      const cfg = map[status] || map.error;
+      const banner = document.createElement('div');
+      banner.style.cssText = `position:fixed;top:16px;left:50%;transform:translateX(-50%);background:#111;border:1px solid ${cfg.color};color:${cfg.color};padding:10px 18px;border-radius:10px;font-size:13px;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,0.4);`;
+      banner.textContent = cfg.text;
+      document.body.appendChild(banner);
+      setTimeout(() => banner.remove(), 6000);
+      window.history.replaceState({}, '', window.location.pathname);
+    })();
   </script>
 </body>
 </html>

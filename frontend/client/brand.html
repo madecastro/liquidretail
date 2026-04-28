@@ -878,16 +878,26 @@
       row.className = 'flex items-center gap-2 flex-wrap text-xs px-3 py-2 rounded-lg bg-[#0f0f0f] border border-[#1f1f1f]';
       const expDays = c.expiresAt ? Math.round((new Date(c.expiresAt) - Date.now()) / 86400000) : null;
       const meta = [];
-      if (c.igUsername) meta.push(`<span class="text-white font-semibold">@${escapeHtml(c.igUsername)}</span>`);
-      else              meta.push(`<span class="text-[#888]">${escapeHtml(c.pageName || 'Unknown account')}</span>`);
-      if (c.pageName && c.igUsername) meta.push(`<span class="text-[#888]">${escapeHtml(c.pageName)}</span>`);
-      if (c.catalogId)  meta.push(`<span class="text-[#666]">catalog ${escapeHtml(c.catalogId)}</span>`);
-      if (expDays != null) meta.push(`<span class="text-[#666]">expires in ${expDays}d</span>`);
+      if (c.pending) {
+        meta.push(`<span class="text-[#facc15] font-semibold">Pending setup</span>`);
+        meta.push(`<span class="text-[#888]">token captured · pick a Page + catalog to finish</span>`);
+      } else {
+        if (c.igUsername) meta.push(`<span class="text-white font-semibold">@${escapeHtml(c.igUsername)}</span>`);
+        else              meta.push(`<span class="text-[#888]">${escapeHtml(c.pageName || 'Unknown account')}</span>`);
+        if (c.pageName && c.igUsername) meta.push(`<span class="text-[#888]">${escapeHtml(c.pageName)}</span>`);
+        if (c.catalogId)  meta.push(`<span class="text-[#666]">catalog ${escapeHtml(c.catalogId)}</span>`);
+        if (expDays != null) meta.push(`<span class="text-[#666]">expires in ${expDays}d</span>`);
+      }
+      const setupBtn = c.pending
+        ? `<button type="button" class="pill-btn primary" data-setup="${escapeHtml(c.id)}" style="font-size:10px;padding:4px 10px;">Finish setup</button>`
+        : `<button type="button" class="pill-btn" data-switch="${escapeHtml(c.id)}" style="font-size:10px;padding:4px 10px;">Switch</button>`;
       row.innerHTML = `<div class="flex-1 flex items-center gap-2 flex-wrap">${meta.join('<span class="text-[#333]">·</span> ')}</div>` +
+                      setupBtn +
                       `<button type="button" class="pill-btn" data-disconnect="${escapeHtml(c.id)}" style="font-size:10px;padding:4px 10px;">Disconnect</button>`;
       row.querySelector('[data-disconnect]').addEventListener('click', async (e) => {
         const id = e.currentTarget.dataset.disconnect;
-        if (!confirm(`Disconnect @${c.igUsername || c.pageName || 'this account'}?`)) return;
+        const label = c.pending ? 'this pending connection' : `@${c.igUsername || c.pageName || 'this account'}`;
+        if (!confirm(`Disconnect ${label}?`)) return;
         e.currentTarget.disabled = true;
         try {
           const res = await fetch(`/api/integrations/instagram/${encodeURIComponent(id)}`, { method: 'DELETE' });
@@ -901,6 +911,10 @@
           e.currentTarget.disabled = false;
         }
       });
+      const setupEl = row.querySelector('[data-setup]');
+      if (setupEl) setupEl.addEventListener('click', () => window.openIgPicker(c.id));
+      const switchEl = row.querySelector('[data-switch]');
+      if (switchEl) switchEl.addEventListener('click', () => window.openIgPicker(c.id));
       return row;
     }
 
@@ -1268,6 +1282,9 @@
       const params = new URLSearchParams(window.location.search);
       const status = params.get('ig_status');
       if (!status) return;
+      // pending = the picker modal is about to open; don't double-up
+      // with a banner. The new ig_setup param drives the modal.
+      if (status === 'pending') return;
       const msg = params.get('ig_msg') || '';
       const map = {
         connected: { color: '#34d399', text: `Instagram connected${msg ? ` (${msg})` : ''}` },
@@ -1285,6 +1302,199 @@
     })();
 
     load();
+  </script>
+
+  <!-- ── IG account picker modal (V2.5) ─────────────────────────── -->
+  <div id="igPickerOverlay" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.78);z-index:60;display:flex;align-items:center;justify-content:center;padding:24px;">
+    <div class="card" style="max-width:640px;width:100%;max-height:90vh;overflow:auto;">
+      <div class="flex items-center justify-between mb-4">
+        <p class="panel-label" style="margin:0;">Choose Instagram account &amp; catalog</p>
+        <button id="igPickerCloseBtn" type="button" class="pill-btn" style="font-size:11px;padding:4px 10px;">Close</button>
+      </div>
+      <p class="text-[#888] text-xs mb-4">Pick which Page (and its IG Business account) and which product catalog to bind to this brand. You can switch later.</p>
+      <div id="igPickerLoading" class="text-center text-[#666] text-sm py-6">Loading options…</div>
+      <div id="igPickerBody" class="hidden">
+        <div class="mb-4">
+          <p class="panel-label">Page &amp; Instagram account</p>
+          <div id="igPickerPages" class="space-y-2 mt-2"></div>
+        </div>
+        <div class="mb-4">
+          <p class="panel-label">Catalog <span class="text-[#555] font-normal normal-case">(optional)</span></p>
+          <div id="igPickerCatalogs" class="space-y-2 mt-2"></div>
+        </div>
+        <div class="flex items-center gap-2 justify-end mt-4">
+          <span id="igPickerStatus" class="text-[#888] text-xs flex-1"></span>
+          <button id="igPickerSaveBtn" type="button" class="pill-btn primary" disabled>Save selection</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── IG picker controller ─────────────────────────────────────
+    const igPickerOverlay  = document.getElementById('igPickerOverlay');
+    const igPickerCloseBtn = document.getElementById('igPickerCloseBtn');
+    const igPickerLoading  = document.getElementById('igPickerLoading');
+    const igPickerBody     = document.getElementById('igPickerBody');
+    const igPickerPages    = document.getElementById('igPickerPages');
+    const igPickerCatalogs = document.getElementById('igPickerCatalogs');
+    const igPickerSaveBtn  = document.getElementById('igPickerSaveBtn');
+    const igPickerStatus   = document.getElementById('igPickerStatus');
+
+    let pickerCredId = null;
+    let pickerSelection = { pageId: null, igUserId: null, catalogId: null };
+
+    async function openIgPicker(credentialId) {
+      pickerCredId = credentialId;
+      pickerSelection = { pageId: null, igUserId: null, catalogId: null };
+      igPickerSaveBtn.disabled = true;
+      igPickerStatus.textContent = '';
+      igPickerLoading.classList.remove('hidden');
+      igPickerBody.classList.add('hidden');
+      igPickerPages.innerHTML = '';
+      igPickerCatalogs.innerHTML = '';
+      igPickerOverlay.classList.remove('hidden');
+      try {
+        const res = await fetch(`/api/integrations/instagram/${encodeURIComponent(credentialId)}/options`);
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.error || `HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        // Pre-select current values (Switch flow).
+        if (data.current) pickerSelection = { ...pickerSelection, ...data.current };
+        renderPickerOptions(data.options || { pages: [], catalogs: [] });
+        igPickerLoading.classList.add('hidden');
+        igPickerBody.classList.remove('hidden');
+      } catch (err) {
+        igPickerLoading.textContent = `Failed to load options: ${err.message}`;
+      }
+    }
+
+    function renderPickerOptions(opts) {
+      // Pages — picking a Page also auto-picks its IG business account
+      // (you can have a Page without an IG account, in which case posts
+      // won't sync but catalog still can).
+      if (!opts.pages.length) {
+        igPickerPages.innerHTML = '<p class="empty-block">No Pages accessible. Reconnect from a Meta account that owns at least one Facebook Page.</p>';
+      } else {
+        for (const p of opts.pages) {
+          const option = document.createElement('label');
+          option.className = 'flex items-start gap-3 p-3 rounded-lg border border-[#1f1f1f] cursor-pointer hover:border-[#444]';
+          const igInfo = p.igBusinessAccount
+            ? `<span class="text-[#34d399]">@${escapeHtml(p.igBusinessAccount.username || p.igBusinessAccount.id)}</span>`
+            : '<span class="text-[#666]">no IG Business account linked — posts won\'t sync</span>';
+          option.innerHTML = `
+            <input type="radio" name="igPickerPage" value="${escapeHtml(p.id)}" data-ig-user-id="${escapeHtml(p.igBusinessAccount?.id || '')}" class="mt-1" />
+            <div class="flex-1 min-w-0">
+              <div class="text-sm text-white font-semibold">${escapeHtml(p.name || p.id)}</div>
+              <div class="text-xs mt-0.5">${igInfo}</div>
+            </div>
+          `;
+          const radio = option.querySelector('input');
+          radio.addEventListener('change', () => {
+            pickerSelection.pageId   = p.id;
+            pickerSelection.igUserId = p.igBusinessAccount?.id || null;
+            updatePickerSaveState();
+          });
+          if (pickerSelection.pageId === p.id) radio.checked = true;
+          igPickerPages.appendChild(option);
+        }
+      }
+
+      // Catalogs — including a "no catalog" option so the user can
+      // intentionally connect for posts only.
+      const noneOpt = document.createElement('label');
+      noneOpt.className = 'flex items-start gap-3 p-3 rounded-lg border border-[#1f1f1f] cursor-pointer hover:border-[#444]';
+      noneOpt.innerHTML = `
+        <input type="radio" name="igPickerCatalog" value="" class="mt-1" />
+        <div class="flex-1"><div class="text-sm text-[#888]">No catalog</div><div class="text-xs text-[#555] mt-0.5">Skip catalog sync; only pull posts.</div></div>
+      `;
+      noneOpt.querySelector('input').addEventListener('change', () => {
+        pickerSelection.catalogId = null;
+        updatePickerSaveState();
+      });
+      if (!pickerSelection.catalogId) noneOpt.querySelector('input').checked = true;
+      igPickerCatalogs.appendChild(noneOpt);
+
+      for (const c of opts.catalogs) {
+        const option = document.createElement('label');
+        option.className = 'flex items-start gap-3 p-3 rounded-lg border border-[#1f1f1f] cursor-pointer hover:border-[#444]';
+        const meta = [];
+        if (c.businessName)         meta.push(escapeHtml(c.businessName));
+        if (c.productCount != null) meta.push(`${c.productCount.toLocaleString()} items`);
+        option.innerHTML = `
+          <input type="radio" name="igPickerCatalog" value="${escapeHtml(c.id)}" class="mt-1" />
+          <div class="flex-1 min-w-0">
+            <div class="text-sm text-white font-semibold">${escapeHtml(c.name || c.id)}</div>
+            <div class="text-xs text-[#666] mt-0.5">${meta.join(' · ')}</div>
+          </div>
+        `;
+        option.querySelector('input').addEventListener('change', () => {
+          pickerSelection.catalogId = c.id;
+          updatePickerSaveState();
+        });
+        if (pickerSelection.catalogId === c.id) option.querySelector('input').checked = true;
+        igPickerCatalogs.appendChild(option);
+      }
+      updatePickerSaveState();
+    }
+
+    function updatePickerSaveState() {
+      igPickerSaveBtn.disabled = !pickerSelection.pageId;
+    }
+
+    igPickerCloseBtn.addEventListener('click', () => {
+      igPickerOverlay.classList.add('hidden');
+    });
+
+    igPickerSaveBtn.addEventListener('click', async () => {
+      if (!pickerCredId || !pickerSelection.pageId) return;
+      igPickerSaveBtn.disabled = true;
+      igPickerStatus.textContent = 'Saving…';
+      try {
+        const res = await fetch(`/api/integrations/instagram/${encodeURIComponent(pickerCredId)}/selection`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(pickerSelection)
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        igPickerStatus.textContent = '✓ Saved';
+        // Clear the ig_setup query param so a page refresh doesn't
+        // reopen the picker for an already-finalized credential.
+        if (new URLSearchParams(window.location.search).get('ig_setup')) {
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+        setTimeout(() => {
+          igPickerOverlay.classList.add('hidden');
+          loadIgStatus();
+        }, 600);
+      } catch (err) {
+        igPickerStatus.textContent = `✗ ${err.message}`;
+        igPickerSaveBtn.disabled = false;
+      }
+    });
+
+    // If we landed here from an OAuth bounce with ig_setup=<credId>, open the picker.
+    (function maybeOpenPickerOnLoad() {
+      const params = new URLSearchParams(window.location.search);
+      const setupId = params.get('ig_setup');
+      if (setupId) {
+        // Wait until brand load resolves so brandId header is set.
+        const tryOpen = () => {
+          if (!localStorage.getItem('brand_id')) {
+            return setTimeout(tryOpen, 200);
+          }
+          openIgPicker(setupId);
+        };
+        tryOpen();
+      }
+    })();
+
+    // Expose for the credential-row Switch button (defined elsewhere
+    // in the page) to call without re-querying global state.
+    window.openIgPicker = openIgPicker;
   </script>
 </body>
 </html>

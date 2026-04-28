@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Flood QRF — Brand</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="auth.js"></script>
+  <script src="brandPicker.js" defer></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    * { font-family: 'Inter', system-ui, sans-serif; }
+    body { background: #0a0a0a; color: #f0f0f0; min-height: 100vh; }
+    nav  { background: #111; border-bottom: 1px solid #1f1f1f; }
+
+    .card { background: #111; border: 1.5px solid #1f1f1f; border-radius: 18px; padding: 24px; }
+    .panel-label  { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: #555; margin-bottom: 14px; }
+
+    .field-input {
+      width: 100%; background: #161616; border: 1px solid #2a2a2a; color: #f0f0f0;
+      border-radius: 10px; padding: 10px 12px; font-size: 14px;
+    }
+    .field-input::placeholder { color: #555; }
+    .field-input:focus { border-color: #C8102E; outline: none; }
+    .field-input[readonly] { background: #0e0e0e; color: #888; cursor: not-allowed; }
+    textarea.field-input { resize: vertical; font-family: inherit; }
+    .field-label { display: block; font-size: 0.72rem; font-weight: 600; color: #666;
+                   text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 5px; }
+    .field-help  { font-size: 11px; color: #555; margin-top: 4px; line-height: 1.4; }
+
+    /* Color picker row — native input + hex display + clear button */
+    .color-row {
+      display: grid; grid-template-columns: 44px 1fr 70px;
+      gap: 8px; align-items: center;
+    }
+    .color-swatch-input {
+      width: 44px; height: 36px; border: 1px solid #2a2a2a;
+      border-radius: 8px; cursor: pointer; padding: 0;
+      background: #161616;
+    }
+
+    /* Logo preview thumb */
+    .logo-thumb {
+      width: 64px; height: 64px;
+      background: #161616; border: 1px solid #2a2a2a;
+      border-radius: 10px;
+      background-size: contain; background-position: center; background-repeat: no-repeat;
+    }
+
+    .source-pill {
+      display: inline-block; font-size: 9px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      padding: 2px 8px; border-radius: 999px;
+      vertical-align: middle; margin-left: 6px;
+    }
+    .source-stub      { background: #2a2a2a; color: #888; }
+    .source-enriched  { background: rgba(59,130,246,0.18); color: #93c5fd; }
+    .source-curated   { background: rgba(52,211,153,0.18); color: #34d399; }
+
+    .font-source-pill {
+      display: inline-block; font-size: 9px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.05em;
+      padding: 2px 7px; border-radius: 999px;
+      background: #1f1f1f; color: #888; margin-left: 6px;
+    }
+
+    .persona-card, .review-quote {
+      padding: 10px 12px; border-radius: 8px;
+      background: #0f0f0f; border: 1px solid #1f1f1f; margin-top: 8px;
+    }
+    .persona-name { font-weight: 700; color: #ccc; font-size: 13px; }
+    .persona-desc { color: #888; font-size: 11px; margin-top: 3px; line-height: 1.4; }
+    .review-text { color: #ccc; font-size: 12px; font-style: italic; line-height: 1.4; }
+    .review-meta { color: #666; font-size: 10px; margin-top: 4px; }
+
+    .empty-block { color: #555; font-size: 11px; padding: 12px; text-align: center; font-style: italic; }
+
+    .save-bar {
+      position: sticky; bottom: 16px;
+      background: #0a0a0a; border-top: 1px solid #1f1f1f;
+      padding: 12px 16px; display: flex; gap: 10px; align-items: center;
+      border-radius: 12px;
+      box-shadow: 0 -8px 16px rgba(0,0,0,0.4);
+      z-index: 30;
+    }
+    .save-bar .save-status { font-size: 11px; color: #555; flex: 1; }
+    .save-bar .save-status.dirty { color: #facc15; }
+    .save-bar .save-status.ok    { color: #34d399; }
+    .save-bar .save-status.err   { color: #f87171; }
+
+    .pill-btn {
+      font-size: 12px; font-weight: 600; padding: 7px 14px; border-radius: 999px;
+      background: #161616; border: 1px solid #2a2a2a; color: #ccc;
+      cursor: pointer; transition: all 0.12s; white-space: nowrap;
+    }
+    .pill-btn:hover { border-color: #444; color: #fff; }
+    .pill-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .pill-btn.primary { background: #C8102E; border-color: #C8102E; color: #fff; }
+    .pill-btn.primary:hover { background: #a00d24; border-color: #a00d24; }
+    .pill-btn.ghost { background: transparent; }
+  </style>
+</head>
+<body class="min-h-screen">
+
+  <!-- ── Navbar ─────────────────────────────────────────────────────── -->
+  <nav class="sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <img src="assets/logo.png" alt="Flood QRF" class="w-9 h-9 object-contain" />
+        <div class="leading-tight">
+          <div class="font-bold text-white tracking-wide text-sm">FLOOD QRF</div>
+          <div class="text-[10px] text-[#555] uppercase tracking-widest hidden sm:block">Brand</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-5">
+        <a href="index.html"   class="text-[#555] hover:text-white text-sm transition-colors">Inventory</a>
+        <a href="detect.html"  class="text-[#555] hover:text-white text-sm transition-colors">Detection</a>
+        <a href="ads.html"     class="text-[#555] hover:text-white text-sm transition-colors">Ad Generation</a>
+        <a href="brand.html"   class="text-white text-sm font-semibold">Brand</a>
+        <a href="members.html" class="text-[#555] hover:text-white text-sm transition-colors">Members</a>
+        <div id="brandPickerSlot"></div>
+        <button onclick="logout()" class="text-[#555] hover:text-white text-sm transition-colors">Sign out</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+
+    <!-- Header card -->
+    <div id="headerCard" class="card">
+      <div id="headerLoading" class="text-center text-[#666] text-sm py-8">Loading…</div>
+      <div id="headerEmpty"   class="hidden text-center py-8">
+        <p class="text-[#888] mb-2">No brand selected.</p>
+        <p class="text-[#555] text-xs">Pick or create a brand from the picker in the nav.</p>
+      </div>
+      <div id="headerContent" class="hidden">
+        <div class="flex items-center gap-4 flex-wrap">
+          <div id="headerLogo" class="logo-thumb"></div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center flex-wrap gap-2">
+              <h1 id="headerName" class="text-2xl font-semibold text-white">…</h1>
+              <span id="headerSource" class="source-pill"></span>
+            </div>
+            <p id="headerSlug" class="text-[#666] text-xs mt-1 font-mono"></p>
+            <p id="headerWebsite" class="text-[#888] text-sm mt-1"></p>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap justify-end">
+            <a href="ads.html" class="pill-btn">Ad Generation →</a>
+            <button id="refreshBtn" type="button" class="pill-btn">Refresh enrichment</button>
+          </div>
+        </div>
+        <p id="headerEnrichmentSources" class="text-[10px] text-[#555] mt-3 font-mono"></p>
+      </div>
+    </div>
+
+    <form id="brandForm" class="space-y-6 hidden">
+      <!-- Identity -->
+      <div class="card">
+        <p class="panel-label">Identity</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="field-label">Name</label>
+            <input type="text" name="name" class="field-input" required />
+          </div>
+          <div>
+            <label class="field-label">Website</label>
+            <input type="url" name="websiteUrl" class="field-input" placeholder="https://example.com" />
+            <p class="field-help">Changing this re-runs enrichment against the new domain.</p>
+          </div>
+          <div class="sm:col-span-2">
+            <label class="field-label">Tagline <span class="text-[#555] font-normal normal-case">(≤ 12 words)</span></label>
+            <input type="text" name="tagline" class="field-input" />
+          </div>
+          <div class="sm:col-span-2">
+            <label class="field-label">Summary <span class="text-[#555] font-normal normal-case">(2-4 sentences)</span></label>
+            <textarea name="summary" rows="4" class="field-input" placeholder="What the brand makes, who it serves, what makes it distinct."></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Visual -->
+      <div class="card">
+        <p class="panel-label">Visual</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="sm:col-span-2">
+            <label class="field-label">Logo URL</label>
+            <div class="grid grid-cols-[64px_1fr] gap-3 items-start">
+              <div id="logoPreview" class="logo-thumb"></div>
+              <input type="url" name="logoUrl" class="field-input" placeholder="https://cdn.example.com/logo.png" />
+            </div>
+            <p class="field-help">Replace via the brand-logo upload on Detection (creates a Cloudinary URL automatically).</p>
+          </div>
+
+          <div>
+            <label class="field-label">Primary color</label>
+            <div class="color-row">
+              <input type="color" name="primaryColorPicker" class="color-swatch-input" />
+              <input type="text"  name="primaryColor"       class="field-input" placeholder="#0a2540" />
+              <button type="button" data-clear="primaryColor" class="pill-btn ghost text-[#666]" style="font-size:10px;padding:4px 8px;">Clear</button>
+            </div>
+          </div>
+          <div>
+            <label class="field-label">Secondary color</label>
+            <div class="color-row">
+              <input type="color" name="secondaryColorPicker" class="color-swatch-input" />
+              <input type="text"  name="secondaryColor"       class="field-input" placeholder="#102a4d" />
+              <button type="button" data-clear="secondaryColor" class="pill-btn ghost text-[#666]" style="font-size:10px;padding:4px 8px;">Clear</button>
+            </div>
+          </div>
+          <div>
+            <label class="field-label">Accent color</label>
+            <div class="color-row">
+              <input type="color" name="accentColorPicker" class="color-swatch-input" />
+              <input type="text"  name="accentColor"       class="field-input" placeholder="#ef4444" />
+              <button type="button" data-clear="accentColor" class="pill-btn ghost text-[#666]" style="font-size:10px;padding:4px 8px;">Clear</button>
+            </div>
+          </div>
+          <div>
+            <label class="field-label">Font family <span id="fontSourceBadge" class="font-source-pill hidden"></span></label>
+            <input type="text" name="fontFamily" class="field-input" placeholder="Inter" />
+            <p class="field-help">Any Google Fonts family name. Loads automatically in the preview.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Voice -->
+      <div class="card">
+        <p class="panel-label">Voice</p>
+        <div class="grid grid-cols-1 gap-4">
+          <div>
+            <label class="field-label">Tone <span class="text-[#555] font-normal normal-case">(comma-separated)</span></label>
+            <input type="text" name="tone" class="field-input" placeholder="rugged, technical, practical" />
+          </div>
+          <div>
+            <label class="field-label">Hashtags <span class="text-[#555] font-normal normal-case">(comma-separated, # auto-prepended)</span></label>
+            <input type="text" name="hashtags" class="field-input" placeholder="#pelagic, #offshore, #anglerlife" />
+          </div>
+          <div>
+            <label class="field-label">Tags <span class="text-[#555] font-normal normal-case">(comma-separated)</span></label>
+            <input type="text" name="tags" class="field-input" placeholder="fishing, performance, apparel" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Demographics (read-only) -->
+      <div class="card">
+        <p class="panel-label">Demographics <span id="demoCount" class="text-[#444] font-normal normal-case ml-1"></span></p>
+        <p class="field-help" style="margin-top:-8px;margin-bottom:12px;">Generated from the brand's own positioning during enrichment. Read-only here — refresh enrichment to regenerate.</p>
+        <div id="demosList"><p class="empty-block">No personas yet</p></div>
+      </div>
+
+      <!-- Brand reviews (read-only) -->
+      <div class="card">
+        <p class="panel-label">Brand reviews <span id="reviewMeta" class="text-[#444] font-normal normal-case ml-1"></span></p>
+        <p class="field-help" style="margin-top:-8px;margin-bottom:12px;">Cached snapshot from Gemini grounded search. Used in brand-only ad creative. Refresh enrichment for fresh quotes.</p>
+        <p id="reviewSummary" class="text-[#aaa] text-sm italic mb-3 hidden"></p>
+        <div id="reviewsList"><p class="empty-block">No reviews yet</p></div>
+      </div>
+
+      <!-- Sticky save bar -->
+      <div class="save-bar">
+        <span id="saveStatus" class="save-status">No changes</span>
+        <button type="button" id="discardBtn" class="pill-btn">Discard</button>
+        <button type="submit" id="saveBtn" class="pill-btn primary">Save changes</button>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    const headerCard      = document.getElementById('headerCard');
+    const headerLoading   = document.getElementById('headerLoading');
+    const headerEmpty     = document.getElementById('headerEmpty');
+    const headerContent   = document.getElementById('headerContent');
+    const headerName      = document.getElementById('headerName');
+    const headerSource    = document.getElementById('headerSource');
+    const headerSlug      = document.getElementById('headerSlug');
+    const headerWebsite   = document.getElementById('headerWebsite');
+    const headerLogo      = document.getElementById('headerLogo');
+    const headerEnrichmentSources = document.getElementById('headerEnrichmentSources');
+    const refreshBtn      = document.getElementById('refreshBtn');
+    const form            = document.getElementById('brandForm');
+    const saveStatus      = document.getElementById('saveStatus');
+    const saveBtn         = document.getElementById('saveBtn');
+    const discardBtn      = document.getElementById('discardBtn');
+    const logoPreview     = document.getElementById('logoPreview');
+    const fontSourceBadge = document.getElementById('fontSourceBadge');
+    const demosList       = document.getElementById('demosList');
+    const demoCount       = document.getElementById('demoCount');
+    const reviewSummary   = document.getElementById('reviewSummary');
+    const reviewsList     = document.getElementById('reviewsList');
+    const reviewMeta      = document.getElementById('reviewMeta');
+
+    let currentBrand = null;
+    let dirty = false;
+
+    function escapeHtml(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function setStatus(kind, text) {
+      saveStatus.className = 'save-status ' + kind;
+      saveStatus.textContent = text;
+    }
+    function markDirty() {
+      if (!dirty) { dirty = true; setStatus('dirty', 'Unsaved changes'); }
+    }
+
+    async function load() {
+      const id = localStorage.getItem('brand_id');
+      if (!id) {
+        headerLoading.classList.add('hidden');
+        headerEmpty.classList.remove('hidden');
+        return;
+      }
+      try {
+        const res = await fetch(`/api/brand/${encodeURIComponent(id)}`);
+        if (res.status === 404) {
+          // Active brand was deleted or doesn't belong to this advertiser.
+          localStorage.removeItem('brand_id');
+          localStorage.removeItem('brand_name');
+          headerLoading.classList.add('hidden');
+          headerEmpty.classList.remove('hidden');
+          return;
+        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        currentBrand = data.brand;
+        renderHeader();
+        populateForm();
+        renderDemos();
+        renderReviews();
+        headerLoading.classList.add('hidden');
+        headerContent.classList.remove('hidden');
+        form.classList.remove('hidden');
+      } catch (err) {
+        headerLoading.innerHTML = `<p class="text-[#f87171] text-sm">Failed to load: ${escapeHtml(err.message)}</p>`;
+      }
+    }
+
+    function renderHeader() {
+      const b = currentBrand;
+      headerName.textContent = b.name || '(unnamed)';
+      headerSource.textContent = b.source || 'stub';
+      headerSource.className = 'source-pill source-' + (b.source || 'stub');
+      headerSlug.textContent = b.nameNormalized;
+      if (b.websiteUrl) {
+        headerWebsite.innerHTML = `<a href="${escapeHtml(b.websiteUrl)}" target="_blank" rel="noopener" class="text-[#93c5fd] hover:underline">${escapeHtml(b.websiteUrl)}</a>`;
+      } else {
+        headerWebsite.textContent = '';
+      }
+      headerLogo.style.backgroundImage = b.logoUrl ? `url(${b.logoUrl})` : '';
+      headerEnrichmentSources.textContent = (b.enrichmentSources || []).length
+        ? `enriched via: ${b.enrichmentSources.join(' + ')}`
+        : '';
+    }
+
+    function populateForm() {
+      const b = currentBrand;
+      const set = (n, v) => { const el = form.elements[n]; if (el) el.value = v == null ? '' : v; };
+      set('name', b.name);
+      set('websiteUrl', b.websiteUrl);
+      set('tagline', b.tagline);
+      set('summary', b.summary);
+      set('logoUrl', b.logoUrl);
+      set('primaryColor', b.primaryColor);
+      set('secondaryColor', b.secondaryColor);
+      set('accentColor', b.accentColor);
+      set('fontFamily', b.fontFamily);
+      set('tone', (b.tone || []).join(', '));
+      set('hashtags', (b.hashtags || []).join(', '));
+      set('tags', (b.tags || []).join(', '));
+      // Sync pickers from hex values.
+      syncPicker('primaryColor');
+      syncPicker('secondaryColor');
+      syncPicker('accentColor');
+      // Font source badge.
+      if (b.fontSource && b.fontSource !== 'curated') {
+        fontSourceBadge.textContent = b.fontSource;
+        fontSourceBadge.classList.remove('hidden');
+      } else {
+        fontSourceBadge.classList.add('hidden');
+      }
+      logoPreview.style.backgroundImage = b.logoUrl ? `url(${b.logoUrl})` : '';
+      dirty = false;
+      setStatus('', 'No changes');
+    }
+
+    function syncPicker(name) {
+      const hex = (form.elements[name].value || '').trim();
+      const picker = form.elements[name + 'Picker'];
+      if (!picker) return;
+      if (/^#[0-9a-f]{6}$/i.test(hex)) picker.value = hex;
+      else picker.value = '#000000';
+    }
+
+    function renderDemos() {
+      const demos = (currentBrand && currentBrand.demographics) || [];
+      demoCount.textContent = demos.length ? `(${demos.length})` : '';
+      if (!demos.length) {
+        demosList.innerHTML = '<p class="empty-block">No personas yet</p>';
+        return;
+      }
+      demosList.innerHTML = demos.map(d => `
+        <div class="persona-card">
+          <div class="persona-name">${escapeHtml(d.name || 'unnamed')}</div>
+          ${d.description ? `<div class="persona-desc">${escapeHtml(d.description)}</div>` : ''}
+          ${Array.isArray(d.interests) && d.interests.length ? `<div class="persona-desc"><strong>likes:</strong> ${d.interests.map(escapeHtml).join(', ')}</div>` : ''}
+          ${Array.isArray(d.painPoints) && d.painPoints.length ? `<div class="persona-desc"><strong>worries:</strong> ${d.painPoints.map(escapeHtml).join(', ')}</div>` : ''}
+        </div>
+      `).join('');
+    }
+
+    function renderReviews() {
+      const r = currentBrand && currentBrand.brandReviews;
+      const meta = [];
+      if (r && typeof r.rating === 'number')      meta.push(`${r.rating.toFixed(1)}★`);
+      if (r && typeof r.reviewCount === 'number') meta.push(`${r.reviewCount.toLocaleString()} reviews`);
+      reviewMeta.textContent = meta.length ? `(${meta.join(' · ')})` : '';
+      if (r && r.summary) {
+        reviewSummary.textContent = r.summary;
+        reviewSummary.classList.remove('hidden');
+      } else {
+        reviewSummary.classList.add('hidden');
+      }
+      const quotes = (r && Array.isArray(r.quotes)) ? r.quotes : [];
+      if (!quotes.length) {
+        reviewsList.innerHTML = '<p class="empty-block">No brand reviews cached yet</p>';
+        return;
+      }
+      reviewsList.innerHTML = quotes.map(q => `
+        <div class="review-quote">
+          <div class="review-text">"${escapeHtml(q.text)}"</div>
+          ${(q.author || q.source) ? `<div class="review-meta">— ${escapeHtml(q.author || 'unknown')}${q.source ? ` · ${escapeHtml(q.source)}` : ''}</div>` : ''}
+        </div>
+      `).join('');
+    }
+
+    // Wire color pickers ↔ text fields.
+    ['primaryColor', 'secondaryColor', 'accentColor'].forEach(name => {
+      const picker = form.elements[name + 'Picker'];
+      const text   = form.elements[name];
+      picker.addEventListener('input', () => { text.value = picker.value; markDirty(); });
+      text.addEventListener('input', () => { syncPicker(name); markDirty(); });
+    });
+    document.querySelectorAll('[data-clear]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        form.elements[btn.dataset.clear].value = '';
+        syncPicker(btn.dataset.clear);
+        markDirty();
+      });
+    });
+
+    // Mark dirty on any other field change.
+    form.addEventListener('input', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+        markDirty();
+      }
+      // Live logo preview.
+      if (e.target.name === 'logoUrl') {
+        const v = e.target.value.trim();
+        logoPreview.style.backgroundImage = v ? `url(${v})` : '';
+      }
+    });
+
+    // Save.
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      saveBtn.disabled = true;
+      setStatus('', 'Saving…');
+      const fd = new FormData(form);
+      const splitCsv = (s) => String(s || '').split(',').map(t => t.trim()).filter(Boolean);
+      const body = {
+        name:           (fd.get('name') || '').toString().trim(),
+        websiteUrl:     (fd.get('websiteUrl') || '').toString().trim() || null,
+        tagline:        (fd.get('tagline') || '').toString().trim() || null,
+        summary:        (fd.get('summary') || '').toString().trim() || null,
+        logoUrl:        (fd.get('logoUrl') || '').toString().trim() || null,
+        primaryColor:   (fd.get('primaryColor') || '').toString().trim() || null,
+        secondaryColor: (fd.get('secondaryColor') || '').toString().trim() || null,
+        accentColor:    (fd.get('accentColor') || '').toString().trim() || null,
+        fontFamily:     (fd.get('fontFamily') || '').toString().trim() || null,
+        tone:           splitCsv(fd.get('tone')),
+        hashtags:       splitCsv(fd.get('hashtags')),
+        tags:           splitCsv(fd.get('tags'))
+      };
+      try {
+        const res = await fetch(`/api/brand/${encodeURIComponent(currentBrand._id)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        currentBrand = data.brand;
+        renderHeader();
+        populateForm();
+        renderDemos();
+        renderReviews();
+        // Refresh nav picker so the renamed brand updates everywhere.
+        if (window.brandPicker) window.brandPicker.refresh();
+        // Update active brand name in localStorage if name changed.
+        if (currentBrand.name) localStorage.setItem('brand_name', currentBrand.name);
+        setStatus('ok', '✓ Saved');
+        setTimeout(() => { if (!dirty) setStatus('', 'No changes'); }, 1500);
+      } catch (err) {
+        setStatus('err', '✗ ' + err.message);
+      } finally {
+        saveBtn.disabled = false;
+      }
+    });
+
+    // Discard reverts the form to currentBrand.
+    discardBtn.addEventListener('click', () => {
+      if (!dirty) return;
+      if (!confirm('Discard your changes?')) return;
+      populateForm();
+      renderDemos();
+      renderReviews();
+    });
+
+    // Refresh enrichment.
+    refreshBtn.addEventListener('click', async () => {
+      if (!currentBrand) return;
+      if (!confirm('Re-run enrichment? Existing curated fields are preserved; everything else may change.')) return;
+      const prev = refreshBtn.textContent;
+      refreshBtn.disabled = true;
+      refreshBtn.textContent = 'Refreshing…';
+      try {
+        const res = await fetch(`/api/brand/${encodeURIComponent(currentBrand._id)}/refresh-enrichment`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        refreshBtn.textContent = 'Queued ✓';
+        setTimeout(async () => {
+          // Re-fetch after a moment so the user sees fresh data trickle in.
+          await load();
+          refreshBtn.disabled = false;
+          refreshBtn.textContent = prev;
+        }, 2500);
+      } catch (err) {
+        alert('Refresh failed: ' + err.message);
+        refreshBtn.disabled = false;
+        refreshBtn.textContent = prev;
+      }
+    });
+
+    // React to brand-picker switches: reload to show the newly active brand.
+    window.addEventListener('brand:change', () => {
+      if (dirty && !confirm('You have unsaved changes. Switch brand and lose them?')) return;
+      window.location.reload();
+    });
+
+    // Warn on navigate-away with dirty state.
+    window.addEventListener('beforeunload', (e) => {
+      if (dirty) { e.preventDefault(); e.returnValue = ''; }
+    });
+
+    load();
+  </script>
+</body>
+</html>

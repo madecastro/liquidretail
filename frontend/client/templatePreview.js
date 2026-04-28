@@ -1230,7 +1230,10 @@
 
   function renderOverlayProductMeta(wrap, el, input) {
     wrap.style.padding = '0.4em 0.6em';
-    wrap.style.display = 'flex'; wrap.style.flexDirection = 'column'; wrap.style.justifyContent = 'center';
+    wrap.style.display = 'flex'; wrap.style.flexDirection = 'column';
+    // Top-align so when fitTextToBox shrinks the font (content < container)
+    // we don't get equal empty space top + bottom from centering.
+    wrap.style.justifyContent = 'flex-start';
     // Stacked column variant gets a smaller base — it has more lines to fill.
     const baseEm = el.variant === 'stacked' ? 0.82 : 0.95;
     wrap.style.fontSize = `${(baseEm * (el.fontScale || 1)).toFixed(3)}em`;
@@ -1245,11 +1248,13 @@
     const isStacked = el.layout === 'stack';
 
     if (isStacked) {
-      // Stacked column: name, price, then stars + rating + review-count
-      // CONDENSED to one line so the column stays readable in narrow
-      // side-rail rects without clipping the bottom row.
+      // Stacked column: name (clamped to 2 lines max so price + stars
+      // always have room), price, then stars + rating + review-count
+      // CONDENSED to one line. Without the line-clamp, a long name
+      // wraps to 4-5 lines and pushes everything below out of the
+      // container with no signal to fitTextToBox to shrink.
       if (name) parts.push(
-        `<div style="font-weight:800;line-height:1.15;">${escapeHtml(name)}</div>`
+        `<div style="font-weight:800;line-height:1.15;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${escapeHtml(name)}</div>`
       );
       if (price != null) parts.push(
         `<div style="opacity:0.88;font-weight:600;margin-top:0.15em;">${escapeHtml(String(price))}</div>`
@@ -1339,7 +1344,11 @@
     wrap.style.boxShadow = '0 2px 10px rgba(0,0,0,0.35)';
     wrap.style.display = 'flex';
     wrap.style.flexDirection = 'column';
-    wrap.style.justifyContent = 'center';
+    // Top-align so when fitTextToBox shrinks the font (content < container)
+    // we don't end up with equal empty space top + bottom from
+    // justify-content:center. Padding still controls the visual breathing
+    // room around the text block.
+    wrap.style.justifyContent = 'flex-start';
     // Scrim is dark → white italic text; scrim light → dark text. (The
     // base wrap.color was already set from el.textColor in renderPlacedElement;
     // we re-read here so we cover the no-scrim branch above too.)
@@ -1395,8 +1404,13 @@
     if (!baseFontPx) return;
     let scale = 1.0;
     let attempts = 14;
+    // Measure overflow on the WRAP — that's the element with the real
+    // height constraint (overflow: hidden + fixed pixel size from the
+    // placement rect). The inner .tp-overlay-content div has no height
+    // bound and grows to fit its children, so its scrollHeight always
+    // equals its clientHeight regardless of overflow.
     while (scale > minScale && attempts-- > 0) {
-      if (content.scrollWidth <= content.clientWidth + 1 && content.scrollHeight <= content.clientHeight + 1) break;
+      if (wrap.scrollWidth <= wrap.clientWidth + 1 && wrap.scrollHeight <= wrap.clientHeight + 1) break;
       scale -= 0.05;
       wrap.style.fontSize = `${baseFontPx * scale}px`;
     }

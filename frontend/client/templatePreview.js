@@ -568,7 +568,9 @@
       parts.push('<div class="tp-match-card"><div class="tp-match-card-meta">no reasoner identification</div></div>');
     }
 
-    // ── Brand-category fallback (only when outcome === 'category') ──
+    // ── Brand collection page (filled for product_category outcomes
+    //    AND every product_match outcome — every identified product
+    //    knows which brand collection it belongs to). ──
     if (match.brandCategory && (match.brandCategory.url || match.brandCategory.breadcrumb)) {
       parts.push(sec('Brand collection (category fallback)'));
       const bc = match.brandCategory;
@@ -585,7 +587,7 @@
       );
     }
 
-    // ── Brand reviews (only when outcome === 'branding') ──
+    // ── Brand reviews (only when outcome === 'brand_match') ──
     if (match.brandReviews && Array.isArray(match.brandReviews.quotes) && match.brandReviews.quotes.length) {
       const br = match.brandReviews;
       const meta = [];

@@ -107,6 +107,10 @@
       }
       .bp-empty { color: #666; font-size: 11px; padding: 12px; text-align: center; font-style: italic; }
       .bp-divider { height: 1px; background: #1f1f1f; margin: 6px 0; }
+      .bp-section-label {
+        font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+        color: #555; padding: 6px 10px 4px;
+      }
       .bp-create { display: flex; gap: 6px; padding: 4px; }
       .bp-input {
         flex: 1; background: #161616; border: 1px solid #2a2a2a; color: #f0f0f0;
@@ -190,36 +194,78 @@
       }
       const data = await res.json();
       const brands = data.brands || [];
+      const memberships = data.memberships || [];
+      const activeAdvertiser = data.advertiser || null;
       const activeId = localStorage.getItem('brand_id') || '';
+
+      // Workspace section — only renders when the user has more
+      // than one Advertiser membership (agency / multi-tenant case).
+      // Switching writes localStorage.advertiser_id and reloads so
+      // /api/me, brand list, and every other call re-resolve under
+      // the new tenant.
+      let workspaceHtml = '';
+      if (memberships.length > 1) {
+        workspaceHtml = `
+          <div class="bp-section-label">Workspace</div>
+          <div class="bp-list" style="max-height:140px;">
+            ${memberships.map(m => `
+              <div class="bp-row${m.isActive ? ' active' : ''}" data-advertiser-id="${escape(m.advertiserId)}">
+                <span class="bp-row-name">${escape(m.name)} <span style="opacity:0.5;font-size:10px;">(${escape(m.role)})</span></span>
+                ${m.isActive ? '<span class="bp-check">✓</span>' : ''}
+              </div>
+            `).join('')}
+          </div>
+          <div class="bp-divider"></div>
+          <div class="bp-section-label">Brand</div>
+        `;
+      }
+
+      let brandsHtml;
       if (!brands.length) {
-        list.innerHTML = `<p class="bp-empty">No brands yet — create one below</p>`;
-        // Clear stale active brand.
+        brandsHtml = `<p class="bp-empty">No brands yet — create one below</p>`;
         if (activeId) clearActive();
-        updateActiveLabel('No brand');
-        return;
-      }
-      // Auto-pick the first brand if none active OR active doesn't exist.
-      let resolvedActive = brands.find(b => b.id === activeId);
-      if (!resolvedActive) {
-        resolvedActive = brands[0];
-        setActive(resolvedActive.id, resolvedActive.name, /* silent= */ true);
+        updateActiveLabel(memberships.length > 1 ? activeAdvertiser?.name || 'No brand' : 'No brand');
       } else {
-        updateActiveLabel(resolvedActive.name);
+        // Auto-pick first brand if none active OR active brand isn't in this tenant's list.
+        let resolvedActive = brands.find(b => b.id === activeId);
+        if (!resolvedActive) {
+          resolvedActive = brands[0];
+          setActive(resolvedActive.id, resolvedActive.name, /* silent= */ true);
+        } else {
+          updateActiveLabel(resolvedActive.name);
+        }
+        brandsHtml = brands.map(b => `
+          <div class="bp-row${b.id === resolvedActive.id ? ' active' : ''}" data-brand-id="${escape(b.id)}" data-brand-name="${escape(b.name)}">
+            <div class="bp-row-thumb" ${b.logoUrl ? `style="background-image:url(${escape(b.logoUrl)})"` : ''}></div>
+            <span class="bp-row-name">${escape(b.name)}</span>
+            ${b.id === resolvedActive.id ? '<span class="bp-check">✓</span>' : ''}
+          </div>
+        `).join('');
       }
-      list.innerHTML = brands.map(b => `
-        <div class="bp-row${b.id === resolvedActive.id ? ' active' : ''}" data-brand-id="${escape(b.id)}" data-brand-name="${escape(b.name)}">
-          <div class="bp-row-thumb" ${b.logoUrl ? `style="background-image:url(${escape(b.logoUrl)})"` : ''}></div>
-          <span class="bp-row-name">${escape(b.name)}</span>
-          ${b.id === resolvedActive.id ? '<span class="bp-check">✓</span>' : ''}
-        </div>
-      `).join('');
-      list.querySelectorAll('.bp-row').forEach(row => {
+
+      list.innerHTML = workspaceHtml + brandsHtml;
+
+      // Brand row click → switch active brand.
+      list.querySelectorAll('.bp-row[data-brand-id]').forEach(row => {
         row.addEventListener('click', () => {
           const id   = row.dataset.brandId;
           const name = row.dataset.brandName;
           if (id === (localStorage.getItem('brand_id') || '')) return;
           setActive(id, name);
           refreshFromServer();
+        });
+      });
+
+      // Workspace row click → switch active advertiser, reload page.
+      list.querySelectorAll('.bp-row[data-advertiser-id]').forEach(row => {
+        row.addEventListener('click', () => {
+          const advertiserId = row.dataset.advertiserId;
+          if (advertiserId === (localStorage.getItem('advertiser_id') || '')) return;
+          localStorage.setItem('advertiser_id', advertiserId);
+          // Clear brand selection so the next tenant's first brand auto-selects.
+          localStorage.removeItem('brand_id');
+          localStorage.removeItem('brand_name');
+          window.location.reload();
         });
       });
     } catch (err) {

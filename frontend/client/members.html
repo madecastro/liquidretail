@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Flood QRF — Members</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="auth.js"></script>
+  <script src="brandPicker.js" defer></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    * { font-family: 'Inter', system-ui, sans-serif; }
+    body { background: #0a0a0a; color: #f0f0f0; }
+    nav  { background: #111; border-bottom: 1px solid #1f1f1f; }
+    .section-card { background: #111; border: 1.5px solid #1f1f1f; border-radius: 18px; padding: 24px; }
+    .panel-label  { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: #555; margin-bottom: 12px; }
+
+    .field-input {
+      width: 100%; background: #161616; border: 1px solid #2a2a2a; color: #f0f0f0;
+      border-radius: 10px; padding: 10px 12px; font-size: 14px;
+    }
+    .field-input::placeholder { color: #555; }
+    .field-input:focus { border-color: #C8102E; outline: none; }
+    .field-label { display: block; font-size: 0.72rem; font-weight: 600; color: #666;
+                   text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 5px; }
+
+    .row {
+      display: grid; gap: 12px; align-items: center;
+      padding: 12px 14px; border-radius: 10px;
+      background: #141414; border: 1px solid #1f1f1f;
+    }
+    .row + .row { margin-top: 6px; }
+    .row.member { grid-template-columns: 36px 1fr 110px 90px 80px; }
+    .row.invite { grid-template-columns: 1fr 110px 110px 80px 70px; }
+
+    .role-pill {
+      display: inline-block; font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      padding: 3px 9px; border-radius: 999px;
+    }
+    .role-pill.owner  { background: rgba(248,113,113,0.18); color: #f87171; }
+    .role-pill.admin  { background: rgba(167,139,250,0.18); color: #a78bfa; }
+    .role-pill.editor { background: rgba(59,130,246,0.18);  color: #93c5fd; }
+    .role-pill.viewer { background: rgba(148,163,184,0.22); color: #94a3b8; }
+
+    .avatar {
+      width: 36px; height: 36px; border-radius: 999px;
+      background: #1f1f1f; display: flex; align-items: center; justify-content: center;
+      color: #888; font-weight: 700; font-size: 14px;
+      background-size: cover; background-position: center;
+    }
+
+    .member-name { font-weight: 600; color: #fff; font-size: 13px; line-height: 1.2; }
+    .member-email { color: #888; font-size: 11px; margin-top: 2px; }
+    .meta { font-size: 11px; color: #666; }
+
+    .pill-btn {
+      font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 999px;
+      background: #161616; border: 1px solid #2a2a2a; color: #888;
+      cursor: pointer; transition: all 0.12s; white-space: nowrap;
+    }
+    .pill-btn:hover { color: #ccc; border-color: #444; }
+    .pill-btn.danger { color: #f87171; border-color: rgba(239,68,68,0.4); }
+    .pill-btn.danger:hover { background: rgba(239,68,68,0.12); border-color: #f87171; }
+    .pill-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .role-select {
+      font-size: 12px; padding: 5px 8px; border-radius: 8px;
+      background: #161616; border: 1px solid #2a2a2a; color: #ccc;
+    }
+
+    .empty { color: #555; font-size: 12px; padding: 20px; text-align: center; font-style: italic; }
+    .status { font-size: 11px; padding: 6px 10px; }
+    .status.ok  { color: #34d399; }
+    .status.err { color: #f87171; }
+
+    .invite-row-token {
+      font-family: 'Courier New', monospace; font-size: 11px;
+      color: #93c5fd; max-width: 260px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+  </style>
+</head>
+<body class="min-h-screen">
+  <!-- ── Navbar ─────────────────────────────────────────────────────── -->
+  <nav class="sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <img src="assets/logo.png" alt="Flood QRF" class="w-9 h-9 object-contain" />
+        <div class="leading-tight">
+          <div class="font-bold text-white tracking-wide text-sm">FLOOD QRF</div>
+          <div class="text-[10px] text-[#555] uppercase tracking-widest hidden sm:block">Members</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-5">
+        <a href="index.html"  class="text-[#555] hover:text-white text-sm transition-colors">Inventory</a>
+        <a href="detect.html" class="text-[#555] hover:text-white text-sm transition-colors">Detection</a>
+        <a href="ads.html"    class="text-[#555] hover:text-white text-sm transition-colors">Ad Generation</a>
+        <a href="members.html" class="text-white text-sm font-semibold">Members</a>
+        <div id="brandPickerSlot"></div>
+        <button onclick="logout()" class="text-[#555] hover:text-white text-sm transition-colors">Sign out</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+
+    <!-- Invite form -->
+    <div class="section-card">
+      <p class="panel-label">Invite someone</p>
+      <form id="inviteForm" class="grid grid-cols-1 sm:grid-cols-[1fr_140px_120px] gap-3 items-end">
+        <div>
+          <label class="field-label">Email</label>
+          <input type="email" name="email" required placeholder="teammate@company.com" class="field-input" />
+        </div>
+        <div>
+          <label class="field-label">Role</label>
+          <select name="role" class="field-input">
+            <option value="editor">editor</option>
+            <option value="admin">admin</option>
+            <option value="viewer">viewer</option>
+          </select>
+        </div>
+        <button type="submit" id="inviteBtn"
+                class="bg-red-600 hover:bg-red-700 active:scale-[0.99] disabled:opacity-50
+                       text-white font-semibold py-2.5 rounded-xl transition-all text-sm">
+          Send invite
+        </button>
+      </form>
+      <p id="inviteStatus" class="status hidden"></p>
+    </div>
+
+    <!-- Pending invitations -->
+    <div class="section-card">
+      <div class="flex items-center justify-between mb-3">
+        <p class="panel-label" style="margin:0;">Pending invitations <span id="pendingCount" class="text-[#444] font-normal normal-case ml-1"></span></p>
+      </div>
+      <div id="pendingList"><p class="empty">No pending invitations</p></div>
+    </div>
+
+    <!-- Members -->
+    <div class="section-card">
+      <div class="flex items-center justify-between mb-3">
+        <p class="panel-label" style="margin:0;">Members <span id="memberCount" class="text-[#444] font-normal normal-case ml-1"></span></p>
+      </div>
+      <div id="membersList"><p class="empty">Loading…</p></div>
+    </div>
+
+  </div>
+
+  <script>
+    const inviteForm    = document.getElementById('inviteForm');
+    const inviteBtn     = document.getElementById('inviteBtn');
+    const inviteStatus  = document.getElementById('inviteStatus');
+    const pendingList   = document.getElementById('pendingList');
+    const pendingCount  = document.getElementById('pendingCount');
+    const membersList   = document.getElementById('membersList');
+    const memberCount   = document.getElementById('memberCount');
+
+    function escapeHtml(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+    function inviteUrl(token) {
+      return `${window.location.origin}/invite.html?token=${encodeURIComponent(token)}`;
+    }
+    function setStatus(el, kind, text) {
+      el.className = `status ${kind}`;
+      el.textContent = text;
+      el.classList.remove('hidden');
+    }
+
+    inviteForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      inviteBtn.disabled = true;
+      inviteBtn.textContent = 'Sending…';
+      inviteStatus.classList.add('hidden');
+      const fd = new FormData(inviteForm);
+      try {
+        const res = await fetch('/api/invitations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: fd.get('email'),
+            role:  fd.get('role')
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        setStatus(inviteStatus, 'ok', `✓ Invited ${data.invitation.email} as ${data.invitation.role}`);
+        inviteForm.reset();
+        await Promise.all([loadPending(), loadMembers()]);
+      } catch (err) {
+        setStatus(inviteStatus, 'err', '✗ ' + (err.message || 'failed'));
+      } finally {
+        inviteBtn.disabled = false;
+        inviteBtn.textContent = 'Send invite';
+      }
+    });
+
+    async function loadPending() {
+      try {
+        const res = await fetch('/api/invitations');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const invites = data.invitations || [];
+        pendingCount.textContent = invites.length ? `(${invites.length})` : '';
+        if (!invites.length) {
+          pendingList.innerHTML = '<p class="empty">No pending invitations</p>';
+          return;
+        }
+        pendingList.innerHTML = invites.map(i => {
+          const url = inviteUrl(i.token);
+          return `
+            <div class="row invite" data-id="${escapeHtml(i.id)}">
+              <div>
+                <div class="member-name">${escapeHtml(i.email)}</div>
+                <div class="invite-row-token" title="${escapeHtml(url)}">${escapeHtml(url)}</div>
+              </div>
+              <div><span class="role-pill ${escapeHtml(i.role)}">${escapeHtml(i.role)}</span></div>
+              <div class="meta">${new Date(i.invitedAt).toLocaleDateString()}</div>
+              <button type="button" class="pill-btn copy-btn" data-url="${escapeHtml(url)}">Copy URL</button>
+              <button type="button" class="pill-btn danger revoke-btn">Revoke</button>
+            </div>
+          `;
+        }).join('');
+        pendingList.querySelectorAll('.copy-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            try {
+              await navigator.clipboard.writeText(btn.dataset.url);
+              const orig = btn.textContent;
+              btn.textContent = 'Copied ✓';
+              setTimeout(() => { btn.textContent = orig; }, 1200);
+            } catch (_) { /* ignore */ }
+          });
+        });
+        pendingList.querySelectorAll('.revoke-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const row = btn.closest('.row');
+            const id = row.dataset.id;
+            if (!confirm('Revoke this invitation?')) return;
+            btn.disabled = true;
+            btn.textContent = 'Revoking…';
+            try {
+              const res = await fetch(`/api/invitations/${encodeURIComponent(id)}`, { method: 'DELETE' });
+              if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data.error || `HTTP ${res.status}`);
+              }
+              await loadPending();
+            } catch (err) {
+              alert('Revoke failed: ' + err.message);
+              btn.disabled = false;
+              btn.textContent = 'Revoke';
+            }
+          });
+        });
+      } catch (err) {
+        pendingList.innerHTML = `<p class="empty" style="color:#f87171;">Failed to load: ${escapeHtml(err.message)}</p>`;
+      }
+    }
+
+    async function loadMembers() {
+      try {
+        const res = await fetch('/api/members');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const members = data.members || [];
+        memberCount.textContent = members.length ? `(${members.length})` : '';
+        if (!members.length) {
+          membersList.innerHTML = '<p class="empty">No members yet</p>';
+          return;
+        }
+        membersList.innerHTML = members.map(m => {
+          const initial = (m.name || m.email || '?').trim().charAt(0).toUpperCase();
+          const avatar = m.photoUrl
+            ? `<div class="avatar" style="background-image:url(${escapeHtml(m.photoUrl)})"></div>`
+            : `<div class="avatar">${escapeHtml(initial)}</div>`;
+          const lastLogin = m.lastLoginAt ? new Date(m.lastLoginAt).toLocaleDateString() : '—';
+          return `
+            <div class="row member" data-user-id="${escapeHtml(m.userId)}">
+              ${avatar}
+              <div>
+                <div class="member-name">${escapeHtml(m.name)}${m.isYou ? ' <span class="text-[#555] text-xs font-normal">(you)</span>' : ''}</div>
+                <div class="member-email">${escapeHtml(m.email)}</div>
+              </div>
+              <select class="role-select" data-original="${escapeHtml(m.role)}">
+                <option value="owner"  ${m.role === 'owner'  ? 'selected' : ''}>owner</option>
+                <option value="admin"  ${m.role === 'admin'  ? 'selected' : ''}>admin</option>
+                <option value="editor" ${m.role === 'editor' ? 'selected' : ''}>editor</option>
+                <option value="viewer" ${m.role === 'viewer' ? 'selected' : ''}>viewer</option>
+              </select>
+              <div class="meta">last seen<br>${lastLogin}</div>
+              <button type="button" class="pill-btn danger remove-btn">${m.isYou ? 'Resign' : 'Remove'}</button>
+            </div>
+          `;
+        }).join('');
+
+        membersList.querySelectorAll('.role-select').forEach(sel => {
+          sel.addEventListener('change', async () => {
+            const row = sel.closest('.row');
+            const userId = row.dataset.userId;
+            const original = sel.dataset.original;
+            const newRole  = sel.value;
+            if (newRole === original) return;
+            try {
+              const res = await fetch(`/api/members/${encodeURIComponent(userId)}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ role: newRole })
+              });
+              const data = await res.json();
+              if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+              sel.dataset.original = newRole;
+            } catch (err) {
+              alert('Role change failed: ' + err.message);
+              sel.value = original;
+            }
+          });
+        });
+
+        membersList.querySelectorAll('.remove-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const row = btn.closest('.row');
+            const userId = row.dataset.userId;
+            const isYou  = btn.textContent.trim() === 'Resign';
+            const msg = isYou
+              ? 'Resign your membership? You will lose access to this account.'
+              : 'Remove this member?';
+            if (!confirm(msg)) return;
+            btn.disabled = true;
+            btn.textContent = '…';
+            try {
+              const res = await fetch(`/api/members/${encodeURIComponent(userId)}`, { method: 'DELETE' });
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+              if (isYou) {
+                // Resigned from current advertiser — back to signin.
+                logout();
+              } else {
+                await loadMembers();
+              }
+            } catch (err) {
+              alert('Remove failed: ' + err.message);
+              btn.disabled = false;
+              btn.textContent = isYou ? 'Resign' : 'Remove';
+            }
+          });
+        });
+      } catch (err) {
+        membersList.innerHTML = `<p class="empty" style="color:#f87171;">Failed to load: ${escapeHtml(err.message)}</p>`;
+      }
+    }
+
+    loadPending();
+    loadMembers();
+  </script>
+</body>
+</html>

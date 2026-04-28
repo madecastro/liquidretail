@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Flood QRF — Accept invite</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Note: NOT loading auth.js — invite.html must work whether the
+       user is signed in or not. We do auth detection inline so the
+       global redirect-to-login behavior of auth.js doesn't interfere. -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    * { font-family: 'Inter', system-ui, sans-serif; }
+    body { background: #0a0a0a; color: #f0f0f0; min-height: 100vh; }
+    .card { background: #111; border: 1.5px solid #1f1f1f; border-radius: 18px; padding: 32px; }
+    .role-pill {
+      display: inline-block; font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      padding: 3px 10px; border-radius: 999px;
+    }
+    .role-pill.owner  { background: rgba(248,113,113,0.18); color: #f87171; }
+    .role-pill.admin  { background: rgba(167,139,250,0.18); color: #a78bfa; }
+    .role-pill.editor { background: rgba(59,130,246,0.18);  color: #93c5fd; }
+    .role-pill.viewer { background: rgba(148,163,184,0.22); color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <div class="max-w-xl mx-auto px-4 sm:px-6 py-16">
+    <div class="flex items-center gap-3 mb-8">
+      <img src="assets/logo.png" alt="Flood QRF" class="w-10 h-10 object-contain" />
+      <div class="leading-tight">
+        <div class="font-bold text-white tracking-wide">FLOOD QRF</div>
+        <div class="text-[10px] text-[#555] uppercase tracking-widest">Team invitation</div>
+      </div>
+    </div>
+
+    <div id="loadingCard" class="card text-center text-[#666] text-sm">Loading invitation…</div>
+
+    <div id="missingTokenCard" class="card hidden">
+      <h1 class="text-lg font-semibold text-white mb-2">No invitation token</h1>
+      <p class="text-[#888] text-sm">This page expects a <code class="text-[#93c5fd]">?token=…</code> query parameter from the invitation link.</p>
+    </div>
+
+    <div id="errorCard" class="card hidden">
+      <h1 class="text-lg font-semibold text-white mb-2">Couldn't load invitation</h1>
+      <p id="errorMsg" class="text-[#f87171] text-sm"></p>
+      <p class="text-[#666] text-xs mt-3">If the invite was already accepted or revoked, ask the inviter to send a new one.</p>
+    </div>
+
+    <div id="previewCard" class="card hidden">
+      <p class="text-[#555] text-xs uppercase tracking-widest font-semibold mb-3">You've been invited</p>
+      <h1 class="text-2xl font-semibold text-white mb-2">
+        Join <span id="advertiserName">…</span>
+      </h1>
+      <p class="text-[#888] text-sm mb-5">
+        <span id="invitedByLine"></span>
+        as a <span id="rolePillSlot"></span>.
+      </p>
+
+      <div class="border-t border-[#1f1f1f] pt-5 mb-5"></div>
+
+      <div id="loggedOutBlock" class="hidden">
+        <p class="text-[#ccc] text-sm mb-4">Sign in to accept this invitation.</p>
+        <button id="signInBtn"
+                class="w-full bg-white text-black hover:bg-[#eee] active:scale-[0.99]
+                       font-semibold py-3 rounded-xl transition-all flex items-center justify-center gap-3 text-sm">
+          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="" class="w-4 h-4" />
+          Sign in with Google
+        </button>
+        <p class="text-[#555] text-xs text-center mt-3">
+          You'll need to sign in with the email this invitation was sent to:
+          <span id="invitedEmail" class="text-[#93c5fd] font-mono"></span>
+        </p>
+      </div>
+
+      <div id="loggedInBlock" class="hidden">
+        <p class="text-[#ccc] text-sm mb-4">
+          Signed in as <span id="currentUserEmail" class="text-white font-medium"></span>.
+        </p>
+        <button id="acceptBtn"
+                class="w-full bg-red-600 hover:bg-red-700 active:scale-[0.99] disabled:opacity-50
+                       text-white font-semibold py-3 rounded-xl transition-all text-sm">
+          Accept invitation
+        </button>
+        <p id="acceptStatus" class="text-xs text-center mt-3 hidden"></p>
+        <p class="text-[#555] text-xs text-center mt-3">
+          Wrong account?
+          <button onclick="signOutAndReturn()" class="text-[#93c5fd] hover:underline">Sign out and use a different one</button>
+        </p>
+      </div>
+
+      <div id="emailMismatchBlock" class="hidden mt-3 p-3 rounded-lg" style="background:rgba(239,68,68,0.10);border:1px solid rgba(239,68,68,0.3);">
+        <p class="text-[#f87171] text-xs">
+          ⚠ Email mismatch. This invitation was sent to <span id="mismatchInviteEmail" class="font-mono"></span>
+          but you're signed in as <span id="mismatchCurrentEmail" class="font-mono"></span>.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function escapeHtml(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function show(id) {
+      document.querySelectorAll('.card').forEach(c => c.classList.add('hidden'));
+      document.getElementById(id).classList.remove('hidden');
+    }
+
+    // Pull token from URL OR from localStorage (set right before the
+    // login redirect so we can pick it up on return).
+    const urlParams = new URLSearchParams(window.location.search);
+    let token = urlParams.get('token');
+    if (!token) {
+      // Tail of an OAuth round-trip? Recover from localStorage.
+      token = localStorage.getItem('pending_invite_token');
+      if (token) {
+        // Put it back on the URL so subsequent reloads work.
+        const u = new URL(window.location.href);
+        u.searchParams.set('token', token);
+        window.history.replaceState(null, '', u.toString());
+      }
+    }
+    if (!token) {
+      show('missingTokenCard');
+    } else {
+      loadInvite(token);
+    }
+
+    async function loadInvite(token) {
+      try {
+        const res = await fetch(`/api/invitations/by-token/${encodeURIComponent(token)}`);
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          renderError(data.error || `HTTP ${res.status}`);
+          return;
+        }
+        const data = await res.json();
+        renderPreview(token, data.invitation);
+      } catch (err) {
+        renderError(err.message || 'Network error');
+      }
+    }
+
+    function renderError(msg) {
+      document.getElementById('errorMsg').textContent = '✗ ' + msg;
+      show('errorCard');
+    }
+
+    function renderPreview(token, inv) {
+      document.getElementById('advertiserName').textContent = inv.advertiser.name;
+      document.getElementById('rolePillSlot').innerHTML =
+        `<span class="role-pill ${escapeHtml(inv.role)}">${escapeHtml(inv.role)}</span>`;
+      const inviter = inv.invitedByName ? `Invited by ${escapeHtml(inv.invitedByName)} ` : '';
+      document.getElementById('invitedByLine').innerHTML = inviter;
+      document.getElementById('invitedEmail').textContent = inv.email;
+
+      const authToken = localStorage.getItem('auth_token');
+      const currentEmail = localStorage.getItem('auth_email') || '';
+
+      if (!authToken) {
+        document.getElementById('loggedOutBlock').classList.remove('hidden');
+        document.getElementById('signInBtn').addEventListener('click', () => {
+          // Persist token across the OAuth round-trip.
+          localStorage.setItem('pending_invite_token', token);
+          // Send through OAuth.
+          window.location.href = '/api/auth/google';
+        });
+      } else {
+        document.getElementById('loggedInBlock').classList.remove('hidden');
+        document.getElementById('currentUserEmail').textContent = currentEmail || '(unknown)';
+        document.getElementById('acceptBtn').addEventListener('click', () => acceptInvite(token, inv));
+      }
+      show('previewCard');
+    }
+
+    async function acceptInvite(token, inv) {
+      const btn = document.getElementById('acceptBtn');
+      const status = document.getElementById('acceptStatus');
+      btn.disabled = true;
+      btn.textContent = 'Accepting…';
+      status.classList.add('hidden');
+      try {
+        const res = await fetch(`/api/invitations/by-token/${encodeURIComponent(token)}/accept`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + localStorage.getItem('auth_token') }
+        });
+        const data = await res.json();
+        if (res.status === 403 && data.code === 'INVITE_EMAIL_MISMATCH') {
+          renderEmailMismatch(inv.email, localStorage.getItem('auth_email') || '?');
+          btn.disabled = false;
+          btn.textContent = 'Accept invitation';
+          return;
+        }
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        // Set this advertiser as active for future requests.
+        localStorage.setItem('advertiser_id', data.advertiserId);
+        // Clear the pending invite token now that we're done.
+        localStorage.removeItem('pending_invite_token');
+        // Clear active brand so the brand picker auto-picks the new advertiser's first brand.
+        localStorage.removeItem('brand_id');
+        localStorage.removeItem('brand_name');
+        status.className = 'text-xs text-center mt-3 text-[#34d399]';
+        status.textContent = '✓ Invitation accepted — taking you to inventory…';
+        status.classList.remove('hidden');
+        setTimeout(() => { window.location.href = '/index.html'; }, 700);
+      } catch (err) {
+        status.className = 'text-xs text-center mt-3 text-[#f87171]';
+        status.textContent = '✗ ' + err.message;
+        status.classList.remove('hidden');
+        btn.disabled = false;
+        btn.textContent = 'Accept invitation';
+      }
+    }
+
+    function renderEmailMismatch(inviteEmail, currentEmail) {
+      document.getElementById('mismatchInviteEmail').textContent  = inviteEmail;
+      document.getElementById('mismatchCurrentEmail').textContent = currentEmail;
+      document.getElementById('emailMismatchBlock').classList.remove('hidden');
+    }
+
+    function signOutAndReturn() {
+      // Preserve the token so we can resume the invite flow after login.
+      localStorage.setItem('pending_invite_token', token);
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('auth_user');
+      localStorage.removeItem('auth_email');
+      window.location.href = '/api/auth/google';
+    }
+  </script>
+</body>
+</html>

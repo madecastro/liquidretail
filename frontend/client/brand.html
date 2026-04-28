@@ -521,24 +521,41 @@
       renderReviews();
     });
 
-    // Refresh enrichment.
+    // Refresh enrichment. The server fires-and-forgets the enrichment
+    // job, so we poll the brand endpoint every 2s until enrichedAt
+    // advances past the value it had when we queued (= job finished).
+    // Cap at ~40s to cover the slowest realistic run (Brandfetch +
+    // scrape + GPT + Gemini grounded search ≈ 15-25s typical).
     refreshBtn.addEventListener('click', async () => {
       if (!currentBrand) return;
       if (!confirm('Re-run enrichment? Existing curated fields are preserved; everything else may change.')) return;
       const prev = refreshBtn.textContent;
+      const startedEnrichedAt = currentBrand.enrichedAt || null;
       refreshBtn.disabled = true;
       refreshBtn.textContent = 'Refreshing…';
       try {
         const res = await fetch(`/api/brand/${encodeURIComponent(currentBrand._id)}/refresh-enrichment`, { method: 'POST' });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-        refreshBtn.textContent = 'Queued ✓';
-        setTimeout(async () => {
-          // Re-fetch after a moment so the user sees fresh data trickle in.
+        refreshBtn.textContent = 'Refreshing…';
+
+        const startTs = Date.now();
+        const MAX_MS  = 40000;
+        const TICK_MS = 2000;
+        const tick = async () => {
           await load();
-          refreshBtn.disabled = false;
-          refreshBtn.textContent = prev;
-        }, 2500);
+          const finished = currentBrand && currentBrand.enrichedAt
+                        && currentBrand.enrichedAt !== startedEnrichedAt;
+          const timedOut = Date.now() - startTs > MAX_MS;
+          if (finished || timedOut) {
+            refreshBtn.disabled = false;
+            refreshBtn.textContent = finished ? 'Refreshed ✓' : 'Timed out';
+            setTimeout(() => { refreshBtn.textContent = prev; }, 2500);
+            return;
+          }
+          setTimeout(tick, TICK_MS);
+        };
+        setTimeout(tick, TICK_MS);
       } catch (err) {
         alert('Refresh failed: ' + err.message);
         refreshBtn.disabled = false;

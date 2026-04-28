@@ -111,6 +111,17 @@
     .cb-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .cb-btn.primary { background: #1f2937; border-color: #1f2937; color: #93c5fd; }
 
+    /* Picker modal overlays — selector beats Tailwind's .hidden by
+       specificity (.picker-overlay.hidden vs .hidden), so adding the
+       hidden class actually hides them. */
+    .picker-overlay {
+      position: fixed; inset: 0; z-index: 60;
+      display: flex; align-items: center; justify-content: center;
+      padding: 24px;
+      background: rgba(0,0,0,0.78);
+    }
+    .picker-overlay.hidden { display: none; }
+
     .save-bar {
       position: sticky; bottom: 16px;
       background: #0a0a0a; border-top: 1px solid #1f1f1f;
@@ -1383,7 +1394,7 @@
   </script>
 
   <!-- ── IG account picker modal (V2.5) ─────────────────────────── -->
-  <div id="igPickerOverlay" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.78);z-index:60;display:flex;align-items:center;justify-content:center;padding:24px;">
+  <div id="igPickerOverlay" class="picker-overlay hidden">
     <div class="card" style="max-width:640px;width:100%;max-height:90vh;overflow:auto;">
       <div class="flex items-center justify-between mb-4">
         <p class="panel-label" style="margin:0;">Choose Instagram account &amp; catalog</p>
@@ -1576,7 +1587,7 @@
   </script>
 
   <!-- ── Meta Ads ad-account picker modal ────────────────────────── -->
-  <div id="metaAdsPickerOverlay" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.78);z-index:60;display:flex;align-items:center;justify-content:center;padding:24px;">
+  <div id="metaAdsPickerOverlay" class="picker-overlay hidden">
     <div class="card" style="max-width:560px;width:100%;max-height:90vh;overflow:auto;">
       <div class="flex items-center justify-between mb-4">
         <p class="panel-label" style="margin:0;">Choose ad account</p>
@@ -1830,7 +1841,7 @@
   </script>
 
   <!-- ── Google Ads customer picker modal ────────────────────────── -->
-  <div id="googleAdsPickerOverlay" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.78);z-index:60;display:flex;align-items:center;justify-content:center;padding:24px;">
+  <div id="googleAdsPickerOverlay" class="picker-overlay hidden">
     <div class="card" style="max-width:560px;width:100%;max-height:90vh;overflow:auto;">
       <div class="flex items-center justify-between mb-4">
         <p class="panel-label" style="margin:0;">Choose Google Ads customer</p>

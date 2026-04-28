@@ -446,6 +446,9 @@
     parts.push(sec('Identity'));
     parts.push(row('name', txt(brand.name, 'name')));
     parts.push(row('tagline', txt(brand.tagline, 'tagline')));
+    parts.push(row('summary', brand.summary
+      ? `<div style="white-space:pre-wrap;">${escapeHtml(brand.summary)}</div>${curatedTag('summary')}`
+      : empty()));
     parts.push(row('websiteUrl', brand.websiteUrl
       ? `<a href="${escapeHtml(brand.websiteUrl)}" target="_blank" rel="noopener" style="color:#93c5fd;">${escapeHtml(brand.websiteUrl)}</a>`
       : empty()));
@@ -465,6 +468,14 @@
     const tones = Array.isArray(brand.tone) ? brand.tone : [];
     parts.push(row('tone', tones.length
       ? tones.map(t => `<span class="tp-brand-tag">${escapeHtml(t)}</span>`).join('') + curatedTag('tone')
+      : empty()));
+    const hashtags = Array.isArray(brand.hashtags) ? brand.hashtags : [];
+    parts.push(row('hashtags', hashtags.length
+      ? hashtags.map(h => `<span class="tp-brand-tag">${escapeHtml(h)}</span>`).join('') + curatedTag('hashtags')
+      : empty()));
+    const tags = Array.isArray(brand.tags) ? brand.tags : [];
+    parts.push(row('tags', tags.length
+      ? tags.map(t => `<span class="tp-brand-tag">${escapeHtml(t)}</span>`).join('') + curatedTag('tags')
       : empty()));
 
     // Demographics

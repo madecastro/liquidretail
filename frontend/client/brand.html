@@ -195,6 +195,17 @@
         </div>
         <button id="catalogSyncBtn" type="button" class="pill-btn">Sync catalog</button>
       </div>
+
+      <div id="postsRow" class="hidden mt-4 pt-4 border-t border-[#1f1f1f] flex items-center gap-3 flex-wrap">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="text-white font-semibold text-sm">Posts &amp; Reels</span>
+            <span id="postsCountPill" class="source-pill source-stub">0 ingested</span>
+          </div>
+          <p id="postsDetail" class="text-[#888] text-xs mt-1">Pull recent IG posts and reels — each new one is mirrored to storage and queued for the detect pipeline.</p>
+        </div>
+        <button id="postsSyncBtn" type="button" class="pill-btn">Pull recent posts</button>
+      </div>
     </div>
 
     <form id="brandForm" class="space-y-6 hidden">
@@ -354,6 +365,10 @@
     const catalogCountPill= document.getElementById('catalogCountPill');
     const catalogDetail   = document.getElementById('catalogDetail');
     const catalogSyncBtn  = document.getElementById('catalogSyncBtn');
+    const postsRow        = document.getElementById('postsRow');
+    const postsCountPill  = document.getElementById('postsCountPill');
+    const postsDetail     = document.getElementById('postsDetail');
+    const postsSyncBtn    = document.getElementById('postsSyncBtn');
 
     const ENRICH_STAGE_LABELS = {
       'brandfetch':    'Fetching brand kit (Brandfetch)',
@@ -703,12 +718,19 @@
           igConnectBtn.textContent = 'Reconnect';
           igDisconnectBtn.classList.remove('hidden');
           catalogRow.classList.remove('hidden');
+          postsRow.classList.remove('hidden');
           // Sync button is meaningful only when a catalog was selected.
           catalogSyncBtn.disabled = !c.catalogId;
           if (!c.catalogId) {
             catalogDetail.textContent = 'No catalog selected during connect — reconnect Instagram from a Meta account that owns a product catalog.';
           }
+          // Posts pull needs an IG Business account on the connected Page.
+          postsSyncBtn.disabled = !c.igUserId;
+          if (!c.igUserId) {
+            postsDetail.textContent = 'Connected Page has no IG Business account — reconnect from a Page linked to an IG Business/Creator profile.';
+          }
           loadCatalogStatus();
+          loadPostsStatus();
         } else {
           igStatusPill.textContent = 'Not connected';
           igStatusPill.className   = 'source-pill source-stub';
@@ -716,6 +738,7 @@
           igConnectBtn.textContent = 'Connect Instagram';
           igDisconnectBtn.classList.add('hidden');
           catalogRow.classList.add('hidden');
+          postsRow.classList.add('hidden');
         }
       } catch (err) {
         igDetail.textContent = `Failed to load IG status: ${err.message}`;
@@ -764,6 +787,43 @@
       } finally {
         catalogSyncBtn.disabled = false;
         catalogSyncBtn.textContent = prev;
+      }
+    });
+
+    async function loadPostsStatus() {
+      try {
+        const res = await fetch('/api/integrations/instagram/posts-status');
+        if (!res.ok) return;
+        const s = await res.json();
+        postsCountPill.textContent = `${s.postCount.toLocaleString()} ingested`;
+        postsCountPill.className   = 'source-pill ' + (s.postCount > 0 ? 'source-curated' : 'source-stub');
+        if (s.lastIngestedAt) {
+          postsDetail.textContent = `Last pull ${fmtAgo(s.lastIngestedAt)}` +
+                                    (s.igUsername ? ` · @${s.igUsername}` : '');
+        }
+      } catch (_) { /* non-fatal */ }
+    }
+
+    postsSyncBtn.addEventListener('click', async () => {
+      postsSyncBtn.disabled = true;
+      const prev = postsSyncBtn.textContent;
+      postsSyncBtn.textContent = 'Pulling…';
+      try {
+        const res = await fetch('/api/integrations/instagram/sync-posts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ limit: 25 })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || data.reason || `HTTP ${res.status}`);
+        const queued = data.queuedRunIds?.length || 0;
+        postsDetail.textContent = `Pulled ${data.fetched} post(s): ${data.ingested} new, ${data.skipped} already ingested, ${queued} detect run(s) queued`;
+        await loadPostsStatus();
+      } catch (err) {
+        alert('Post pull failed: ' + err.message);
+      } finally {
+        postsSyncBtn.disabled = false;
+        postsSyncBtn.textContent = prev;
       }
     });
 

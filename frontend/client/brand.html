@@ -184,6 +184,17 @@
         <button id="igDisconnectBtn" type="button" class="pill-btn hidden">Disconnect</button>
       </div>
       <p id="igConfigWarn" class="text-[#facc15] text-xs mt-3 hidden">Server is missing Meta OAuth env vars — add META_APP_ID / META_APP_SECRET / META_REDIRECT_URI / INTEGRATION_ENCRYPTION_KEY to enable.</p>
+
+      <div id="catalogRow" class="hidden mt-4 pt-4 border-t border-[#1f1f1f] flex items-center gap-3 flex-wrap">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="text-white font-semibold text-sm">Catalog</span>
+            <span id="catalogCountPill" class="source-pill source-stub">0 items</span>
+          </div>
+          <p id="catalogDetail" class="text-[#888] text-xs mt-1">No sync yet. Pull the brand's Meta product catalog to enable local product matching during detect.</p>
+        </div>
+        <button id="catalogSyncBtn" type="button" class="pill-btn">Sync catalog</button>
+      </div>
     </div>
 
     <form id="brandForm" class="space-y-6 hidden">
@@ -339,6 +350,10 @@
     const igConnectBtn    = document.getElementById('igConnectBtn');
     const igDisconnectBtn = document.getElementById('igDisconnectBtn');
     const igConfigWarn    = document.getElementById('igConfigWarn');
+    const catalogRow      = document.getElementById('catalogRow');
+    const catalogCountPill= document.getElementById('catalogCountPill');
+    const catalogDetail   = document.getElementById('catalogDetail');
+    const catalogSyncBtn  = document.getElementById('catalogSyncBtn');
 
     const ENRICH_STAGE_LABELS = {
       'brandfetch':    'Fetching brand kit (Brandfetch)',
@@ -687,17 +702,70 @@
           igDetail.textContent = parts.join(' · ') || 'Connected';
           igConnectBtn.textContent = 'Reconnect';
           igDisconnectBtn.classList.remove('hidden');
+          catalogRow.classList.remove('hidden');
+          // Sync button is meaningful only when a catalog was selected.
+          catalogSyncBtn.disabled = !c.catalogId;
+          if (!c.catalogId) {
+            catalogDetail.textContent = 'No catalog selected during connect — reconnect Instagram from a Meta account that owns a product catalog.';
+          }
+          loadCatalogStatus();
         } else {
           igStatusPill.textContent = 'Not connected';
           igStatusPill.className   = 'source-pill source-stub';
           igDetail.textContent = 'Connect to sync product catalog and pull recent posts/reels into the detect pipeline.';
           igConnectBtn.textContent = 'Connect Instagram';
           igDisconnectBtn.classList.add('hidden');
+          catalogRow.classList.add('hidden');
         }
       } catch (err) {
         igDetail.textContent = `Failed to load IG status: ${err.message}`;
       }
     }
+
+    function fmtAgo(ts) {
+      if (!ts) return 'never';
+      const ms = Date.now() - new Date(ts).getTime();
+      const m = Math.round(ms / 60000);
+      if (m < 1)   return 'just now';
+      if (m < 60)  return `${m}m ago`;
+      const h = Math.round(m / 60);
+      if (h < 24)  return `${h}h ago`;
+      const d = Math.round(h / 24);
+      return `${d}d ago`;
+    }
+
+    async function loadCatalogStatus() {
+      try {
+        const res = await fetch('/api/integrations/instagram/catalog-status');
+        if (!res.ok) return;
+        const s = await res.json();
+        catalogCountPill.textContent = `${s.itemCount.toLocaleString()} item${s.itemCount === 1 ? '' : 's'}`;
+        catalogCountPill.className   = 'source-pill ' + (s.itemCount > 0 ? 'source-curated' : 'source-stub');
+        if (s.lastSyncedAt) {
+          catalogDetail.textContent = `Last synced ${fmtAgo(s.lastSyncedAt)}` +
+                                      (s.catalogId ? ` · catalog ${s.catalogId}` : '');
+        }
+      } catch (_) { /* non-fatal */ }
+    }
+
+    catalogSyncBtn.addEventListener('click', async () => {
+      catalogSyncBtn.disabled = true;
+      const prev = catalogSyncBtn.textContent;
+      catalogSyncBtn.textContent = 'Syncing…';
+      try {
+        const res = await fetch('/api/integrations/instagram/sync-catalog', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || data.reason || `HTTP ${res.status}`);
+        const cap = data.cappedAt ? ` (capped at ${data.cappedAt} — V2 background sync needed for full)` : '';
+        catalogDetail.textContent = `Synced ${data.fetched} item(s): ${data.added} new, ${data.updated} updated${cap}`;
+        await loadCatalogStatus();
+      } catch (err) {
+        alert('Catalog sync failed: ' + err.message);
+      } finally {
+        catalogSyncBtn.disabled = false;
+        catalogSyncBtn.textContent = prev;
+      }
+    });
 
     igConnectBtn.addEventListener('click', async () => {
       igConnectBtn.disabled = true;

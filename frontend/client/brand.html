@@ -225,6 +225,29 @@
         <button id="catalogSyncBtn" type="button" class="pill-btn">Sync catalog</button>
       </div>
 
+      <div id="commentReplyRow" class="hidden mt-4 pt-4 border-t border-[#1f1f1f]">
+        <div class="flex items-center gap-3 flex-wrap mb-3">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="text-white font-semibold text-sm">Auto-reply on matches</span>
+              <span id="crStatusPill" class="source-pill source-stub">Off</span>
+            </div>
+            <p class="text-[#888] text-xs mt-1">Post a reply comment on the original IG post when detect produces a confident product match with a destination URL. Daily cap protects against spam.</p>
+          </div>
+          <button id="crToggleBtn" type="button" class="pill-btn">Enable</button>
+        </div>
+        <div id="crConfig" class="hidden grid grid-cols-1 sm:grid-cols-[1fr_100px] gap-2 items-start">
+          <div>
+            <label class="field-label">Template <span class="text-[#555] font-normal normal-case">{productUrl}, {productName}, {brandName}</span></label>
+            <input id="crTemplate" type="text" class="field-input" maxlength="280" />
+          </div>
+          <div>
+            <label class="field-label">Daily cap</label>
+            <input id="crDailyCap" type="number" min="0" max="500" step="5" class="field-input" />
+          </div>
+        </div>
+      </div>
+
       <div id="catalogBrowserRow" class="hidden mt-4 pt-4 border-t border-[#1f1f1f]">
         <div class="flex items-center gap-2 mb-3 flex-wrap">
           <span class="text-white font-semibold text-sm">Catalog browser</span>
@@ -445,6 +468,12 @@
     const postsCountPill  = document.getElementById('postsCountPill');
     const postsDetail     = document.getElementById('postsDetail');
     const postsSyncBtn    = document.getElementById('postsSyncBtn');
+    const commentReplyRow = document.getElementById('commentReplyRow');
+    const crStatusPill    = document.getElementById('crStatusPill');
+    const crToggleBtn     = document.getElementById('crToggleBtn');
+    const crConfig        = document.getElementById('crConfig');
+    const crTemplate      = document.getElementById('crTemplate');
+    const crDailyCap      = document.getElementById('crDailyCap');
     const catalogBrowserRow    = document.getElementById('catalogBrowserRow');
     const catalogBrowserToggle = document.getElementById('catalogBrowserToggle');
     const catalogBrowserBody   = document.getElementById('catalogBrowserBody');
@@ -812,7 +841,9 @@
           postsRow.classList.remove('hidden');
           autoSyncRow.classList.remove('hidden');
           catalogBrowserRow.classList.remove('hidden');
+          commentReplyRow.classList.remove('hidden');
           loadAutoSyncSettings();
+          loadCommentReplySettings();
           // Sync buttons: enabled if AT LEAST ONE credential supports the action.
           catalogSyncBtn.disabled = !anyCatalog;
           if (!anyCatalog) {
@@ -835,6 +866,7 @@
           postsRow.classList.add('hidden');
           autoSyncRow.classList.add('hidden');
           catalogBrowserRow.classList.add('hidden');
+          commentReplyRow.classList.add('hidden');
         }
       } catch (err) {
         igDetail.textContent = `Failed to load IG status: ${err.message}`;
@@ -982,6 +1014,64 @@
       const v = Number(autoSyncCap.value);
       if (!Number.isFinite(v) || v < 0) { autoSyncCap.value = autoSyncState.dailyDetectRunCap ?? 50; return; }
       try { await patchAutoSync({ dailyDetectRunCap: v }); }
+      catch (err) { alert('Cap update failed: ' + err.message); }
+    });
+
+    // ── Comment-reply settings (V3 #3) ───────────────────────────────
+    let crState = { enabled: false, template: 'Shop this look: {productUrl}', dailyCap: 25 };
+
+    async function loadCommentReplySettings() {
+      try {
+        const res = await fetch('/api/integrations/instagram/comment-reply');
+        if (!res.ok) return;
+        const data = await res.json();
+        crState = data.commentReply || crState;
+        renderCommentReply();
+      } catch (_) { /* non-fatal */ }
+    }
+
+    function renderCommentReply() {
+      const on = !!crState.enabled;
+      crStatusPill.textContent = on ? 'On' : 'Off';
+      crStatusPill.className   = 'source-pill ' + (on ? 'source-curated' : 'source-stub');
+      crToggleBtn.textContent  = on ? 'Disable' : 'Enable';
+      crConfig.classList.toggle('hidden', !on);
+      crTemplate.value = crState.template || '';
+      crDailyCap.value = crState.dailyCap ?? 25;
+    }
+
+    async function patchCommentReply(body) {
+      const res = await fetch('/api/integrations/instagram/comment-reply', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      crState = data.commentReply;
+      renderCommentReply();
+    }
+
+    crToggleBtn.addEventListener('click', async () => {
+      crToggleBtn.disabled = true;
+      try {
+        await patchCommentReply({ enabled: !crState.enabled });
+      } catch (err) {
+        alert('Comment-reply toggle failed: ' + err.message);
+      } finally {
+        crToggleBtn.disabled = false;
+      }
+    });
+
+    crTemplate.addEventListener('change', async () => {
+      try { await patchCommentReply({ template: crTemplate.value }); }
+      catch (err) { alert('Template update failed: ' + err.message); }
+    });
+
+    crDailyCap.addEventListener('change', async () => {
+      const v = Number(crDailyCap.value);
+      if (!Number.isFinite(v) || v < 0) { crDailyCap.value = crState.dailyCap ?? 25; return; }
+      try { await patchCommentReply({ dailyCap: v }); }
       catch (err) { alert('Cap update failed: ' + err.message); }
     });
 

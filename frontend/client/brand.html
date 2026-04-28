@@ -199,16 +199,18 @@
     <!-- Integrations (Instagram for now; TikTok/YouTube to follow) -->
     <div id="integrationsCard" class="card hidden">
       <p class="panel-label">Integrations</p>
-      <div id="igRow" class="flex items-center gap-3 flex-wrap">
-        <div class="flex-1 min-w-0">
-          <div class="flex items-center gap-2">
-            <span class="text-white font-semibold text-sm">Instagram</span>
-            <span id="igStatusPill" class="source-pill source-stub">Not connected</span>
+      <div id="igRow">
+        <div class="flex items-center gap-3 flex-wrap">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="text-white font-semibold text-sm">Instagram</span>
+              <span id="igStatusPill" class="source-pill source-stub">Not connected</span>
+            </div>
+            <p id="igDetail" class="text-[#888] text-xs mt-1">Connect to sync product catalog and pull recent posts/reels into the detect pipeline.</p>
           </div>
-          <p id="igDetail" class="text-[#888] text-xs mt-1">Connect to sync product catalog and pull recent posts/reels into the detect pipeline.</p>
+          <button id="igConnectBtn" type="button" class="pill-btn primary">Connect Instagram</button>
         </div>
-        <button id="igConnectBtn"    type="button" class="pill-btn primary">Connect Instagram</button>
-        <button id="igDisconnectBtn" type="button" class="pill-btn hidden">Disconnect</button>
+        <div id="igAccountsList" class="hidden mt-3 space-y-2"></div>
       </div>
       <p id="igConfigWarn" class="text-[#facc15] text-xs mt-3 hidden">Server is missing Meta OAuth env vars — add META_APP_ID / META_APP_SECRET / META_REDIRECT_URI / INTEGRATION_ENCRYPTION_KEY to enable.</p>
 
@@ -428,7 +430,7 @@
     const igStatusPill    = document.getElementById('igStatusPill');
     const igDetail        = document.getElementById('igDetail');
     const igConnectBtn    = document.getElementById('igConnectBtn');
-    const igDisconnectBtn = document.getElementById('igDisconnectBtn');
+    const igAccountsList  = document.getElementById('igAccountsList');
     const igConfigWarn    = document.getElementById('igConfigWarn');
     const catalogRow      = document.getElementById('catalogRow');
     const catalogCountPill= document.getElementById('catalogCountPill');
@@ -787,35 +789,38 @@
           igConfigWarn.classList.add('hidden');
           igConnectBtn.disabled = false;
         }
-        const c = data.credential;
-        if (c) {
-          igStatusPill.textContent = 'Connected';
+        const creds = Array.isArray(data.credentials) ? data.credentials
+                    : (data.credential ? [data.credential] : []);
+        const anyCatalog = creds.some(c => c.catalogId);
+        const anyIgUser  = creds.some(c => c.igUserId);
+
+        if (creds.length) {
+          const n = creds.length;
+          const first = creds[0];
+          igStatusPill.textContent = n === 1 ? 'Connected' : `${n} accounts`;
           igStatusPill.className   = 'source-pill source-curated';
-          const parts = [];
-          if (c.igUsername) parts.push(`@${c.igUsername}`);
-          if (c.pageName)   parts.push(`Page: ${c.pageName}`);
-          if (c.catalogId)  parts.push(`Catalog: ${c.catalogId}`);
-          if (c.expiresAt) {
-            const days = Math.round((new Date(c.expiresAt) - Date.now()) / 86400000);
-            parts.push(`expires in ${days}d`);
-          }
-          igDetail.textContent = parts.join(' · ') || 'Connected';
-          igConnectBtn.textContent = 'Reconnect';
-          igDisconnectBtn.classList.remove('hidden');
+          igDetail.textContent = n === 1
+            ? `@${first.igUsername || '?'}${first.pageName ? ' · ' + first.pageName : ''}`
+            : `${n} Instagram accounts connected`;
+          igConnectBtn.textContent = 'Connect another';
+
+          igAccountsList.innerHTML = '';
+          for (const c of creds) igAccountsList.appendChild(renderIgAccountRow(c));
+          igAccountsList.classList.remove('hidden');
+
           catalogRow.classList.remove('hidden');
           postsRow.classList.remove('hidden');
           autoSyncRow.classList.remove('hidden');
           catalogBrowserRow.classList.remove('hidden');
           loadAutoSyncSettings();
-          // Sync button is meaningful only when a catalog was selected.
-          catalogSyncBtn.disabled = !c.catalogId;
-          if (!c.catalogId) {
-            catalogDetail.textContent = 'No catalog selected during connect — reconnect Instagram from a Meta account that owns a product catalog.';
+          // Sync buttons: enabled if AT LEAST ONE credential supports the action.
+          catalogSyncBtn.disabled = !anyCatalog;
+          if (!anyCatalog) {
+            catalogDetail.textContent = 'No connected account owns a product catalog — reconnect a Meta account that does.';
           }
-          // Posts pull needs an IG Business account on the connected Page.
-          postsSyncBtn.disabled = !c.igUserId;
-          if (!c.igUserId) {
-            postsDetail.textContent = 'Connected Page has no IG Business account — reconnect from a Page linked to an IG Business/Creator profile.';
+          postsSyncBtn.disabled = !anyIgUser;
+          if (!anyIgUser) {
+            postsDetail.textContent = 'No connected Page has an IG Business account — reconnect from a Page linked to an IG Business/Creator profile.';
           }
           loadCatalogStatus();
           loadPostsStatus();
@@ -824,7 +829,8 @@
           igStatusPill.className   = 'source-pill source-stub';
           igDetail.textContent = 'Connect to sync product catalog and pull recent posts/reels into the detect pipeline.';
           igConnectBtn.textContent = 'Connect Instagram';
-          igDisconnectBtn.classList.add('hidden');
+          igAccountsList.classList.add('hidden');
+          igAccountsList.innerHTML = '';
           catalogRow.classList.add('hidden');
           postsRow.classList.add('hidden');
           autoSyncRow.classList.add('hidden');
@@ -833,6 +839,37 @@
       } catch (err) {
         igDetail.textContent = `Failed to load IG status: ${err.message}`;
       }
+    }
+
+    function renderIgAccountRow(c) {
+      const row = document.createElement('div');
+      row.className = 'flex items-center gap-2 flex-wrap text-xs px-3 py-2 rounded-lg bg-[#0f0f0f] border border-[#1f1f1f]';
+      const expDays = c.expiresAt ? Math.round((new Date(c.expiresAt) - Date.now()) / 86400000) : null;
+      const meta = [];
+      if (c.igUsername) meta.push(`<span class="text-white font-semibold">@${escapeHtml(c.igUsername)}</span>`);
+      else              meta.push(`<span class="text-[#888]">${escapeHtml(c.pageName || 'Unknown account')}</span>`);
+      if (c.pageName && c.igUsername) meta.push(`<span class="text-[#888]">${escapeHtml(c.pageName)}</span>`);
+      if (c.catalogId)  meta.push(`<span class="text-[#666]">catalog ${escapeHtml(c.catalogId)}</span>`);
+      if (expDays != null) meta.push(`<span class="text-[#666]">expires in ${expDays}d</span>`);
+      row.innerHTML = `<div class="flex-1 flex items-center gap-2 flex-wrap">${meta.join('<span class="text-[#333]">·</span> ')}</div>` +
+                      `<button type="button" class="pill-btn" data-disconnect="${escapeHtml(c.id)}" style="font-size:10px;padding:4px 10px;">Disconnect</button>`;
+      row.querySelector('[data-disconnect]').addEventListener('click', async (e) => {
+        const id = e.currentTarget.dataset.disconnect;
+        if (!confirm(`Disconnect @${c.igUsername || c.pageName || 'this account'}?`)) return;
+        e.currentTarget.disabled = true;
+        try {
+          const res = await fetch(`/api/integrations/instagram/${encodeURIComponent(id)}`, { method: 'DELETE' });
+          if (!res.ok) {
+            const d = await res.json().catch(() => ({}));
+            throw new Error(d.error || `HTTP ${res.status}`);
+          }
+          await loadIgStatus();
+        } catch (err) {
+          alert('Disconnect failed: ' + err.message);
+          e.currentTarget.disabled = false;
+        }
+      });
+      return row;
     }
 
     function fmtAgo(ts) {
@@ -1132,22 +1169,9 @@
       }
     });
 
-    igDisconnectBtn.addEventListener('click', async () => {
-      if (!confirm('Disconnect Instagram from this brand? Re-connecting requires going through Meta consent again.')) return;
-      igDisconnectBtn.disabled = true;
-      try {
-        const res = await fetch('/api/integrations/instagram', { method: 'DELETE' });
-        if (!res.ok) {
-          const d = await res.json().catch(() => ({}));
-          throw new Error(d.error || `HTTP ${res.status}`);
-        }
-        await loadIgStatus();
-      } catch (err) {
-        alert('Disconnect failed: ' + err.message);
-      } finally {
-        igDisconnectBtn.disabled = false;
-      }
-    });
+    // (Per-credential disconnect lives on each row in renderIgAccountRow.
+    //  The bulk-disconnect-all DELETE /instagram endpoint stays available
+    //  for API consumers but the UI now disconnects one account at a time.)
 
     // Show a one-shot banner when Meta bounces us back from OAuth.
     (function handleOAuthReturn() {

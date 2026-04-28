@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Flood QRF — Set up your account</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="auth.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    * { font-family: 'Inter', system-ui, sans-serif; }
+    body { background: #0a0a0a; color: #f0f0f0; min-height: 100vh; }
+    .card {
+      background: #111; border: 1.5px solid #1f1f1f; border-radius: 18px;
+      padding: 32px;
+    }
+    .field-input {
+      width: 100%; background: #161616; border: 1px solid #2a2a2a; color: #f0f0f0;
+      border-radius: 10px; padding: 10px 12px; font-size: 14px;
+    }
+    .field-input::placeholder { color: #555; }
+    .field-input:focus { border-color: #C8102E; outline: none; }
+    .field-label { display: block; font-size: 0.72rem; font-weight: 600; color: #666;
+                   text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 5px; }
+    .step-pill {
+      display: inline-block; font-size: 9px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      padding: 3px 10px; border-radius: 999px;
+      background: rgba(248,113,113,0.15); color: #f87171; margin-bottom: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="max-w-xl mx-auto px-4 sm:px-6 py-16">
+    <div class="flex items-center gap-3 mb-8">
+      <img src="assets/logo.png" alt="Flood QRF" class="w-10 h-10 object-contain" />
+      <div class="leading-tight">
+        <div class="font-bold text-white tracking-wide">FLOOD QRF</div>
+        <div class="text-[10px] text-[#555] uppercase tracking-widest">Account setup</div>
+      </div>
+    </div>
+
+    <div class="card fade-up">
+      <p class="step-pill">One-time setup</p>
+      <h1 class="text-xl font-semibold text-white mb-2">Welcome — let's set up your workspace.</h1>
+      <p class="text-[#888] text-sm mb-6">An <span class="text-white font-medium">advertiser</span> is your account. A <span class="text-white font-medium">brand</span> is what you're advertising. You can add more brands later.</p>
+
+      <form id="onboardingForm" class="space-y-4">
+        <div>
+          <label class="field-label">Account name <span class="text-red-500">*</span></label>
+          <input type="text" name="name" required placeholder="e.g. Acme Co. or Bristol Agency"
+                 class="field-input" autocomplete="organization" />
+          <p class="text-[#555] text-xs mt-1">Your company or agency name. Used as the top-level container for everything else.</p>
+        </div>
+
+        <div class="border-t border-[#1f1f1f] pt-4 mt-4"></div>
+
+        <div>
+          <label class="field-label">First brand <span class="text-[#555] font-normal normal-case">(optional)</span></label>
+          <input type="text" name="brandName" placeholder="e.g. Pelagic"
+                 class="field-input" />
+          <p class="text-[#555] text-xs mt-1">If you skip this, you can create your first brand from the inventory page.</p>
+        </div>
+
+        <div>
+          <label class="field-label">Brand website <span class="text-[#555] font-normal normal-case">(optional)</span></label>
+          <input type="url" name="brandWebsiteUrl" placeholder="https://example.com"
+                 class="field-input" />
+          <p class="text-[#555] text-xs mt-1">Seeds brand enrichment (logo, colors, fonts, voice).</p>
+        </div>
+
+        <div class="pt-2">
+          <button type="submit" id="submitBtn"
+                  class="w-full bg-red-600 hover:bg-red-700 active:scale-[0.99] disabled:opacity-50
+                         text-white font-semibold py-3 rounded-xl transition-all text-sm">
+            Create account
+          </button>
+        </div>
+
+        <p id="onboardingStatus" class="text-xs text-center hidden"></p>
+      </form>
+    </div>
+
+    <div class="text-center mt-6">
+      <button onclick="logout()" class="text-[#555] hover:text-white text-xs transition-colors">
+        Sign out and use a different account
+      </button>
+    </div>
+  </div>
+
+  <script>
+    const form   = document.getElementById('onboardingForm');
+    const btn    = document.getElementById('submitBtn');
+    const status = document.getElementById('onboardingStatus');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      btn.disabled = true;
+      btn.textContent = 'Creating…';
+      status.className = 'text-xs text-center text-[#888]';
+      status.classList.remove('hidden');
+      status.textContent = '';
+
+      const fd = new FormData(form);
+      const body = {
+        name:            fd.get('name')?.toString().trim(),
+        brandName:       fd.get('brandName')?.toString().trim() || undefined,
+        brandWebsiteUrl: fd.get('brandWebsiteUrl')?.toString().trim() || undefined
+      };
+
+      try {
+        const res = await fetch('/api/onboarding/advertiser', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || `HTTP ${res.status}`);
+        }
+        // Persist the new brand as active so the rest of the app
+        // immediately picks it up.
+        if (data.brand && data.brand.id) {
+          localStorage.setItem('brand_id', data.brand.id);
+          localStorage.setItem('brand_name', data.brand.name);
+        }
+        status.className = 'text-xs text-center text-[#34d399]';
+        status.textContent = '✓ Account created — taking you to inventory…';
+        setTimeout(() => { window.location.href = '/index.html'; }, 600);
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = 'Create account';
+        status.className = 'text-xs text-center text-[#f87171]';
+        status.textContent = '✗ ' + (err.message || 'Failed to create account');
+      }
+    });
+  </script>
+</body>
+</html>

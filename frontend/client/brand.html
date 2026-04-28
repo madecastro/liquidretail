@@ -827,7 +827,7 @@
         tags:           splitCsv(fd.get('tags'))
       };
       try {
-        const res = await fetch(`/api/brand/${encodeURIComponent(currentBrand._id)}`, {
+        const res = await fetch(`/api/brand/${encodeURIComponent((currentBrand._id || currentBrand.id))}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body)
@@ -870,7 +870,7 @@
       if (!confirm('Re-run enrichment? Existing curated fields are preserved; everything else may change.')) return;
       refreshBtn.disabled = true;
       try {
-        const res = await fetch(`/api/brand/${encodeURIComponent(currentBrand._id)}/refresh-enrichment`, { method: 'POST' });
+        const res = await fetch(`/api/brand/${encodeURIComponent((currentBrand._id || currentBrand.id))}/refresh-enrichment`, { method: 'POST' });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
         // Reload so we pick up the just-set enrichmentStage and the

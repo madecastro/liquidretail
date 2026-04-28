@@ -319,6 +319,17 @@
       <div id="metaAdsAccountsList" class="hidden mt-3 space-y-2"></div>
       <p id="metaAdsConfigWarn" class="text-[#facc15] text-xs mt-3 hidden">Server is missing Meta Ads OAuth env vars — add META_ADS_REDIRECT_URI to enable.</p>
 
+      <div id="metaAdsCampaignsRow" class="hidden mt-3 pt-3 border-t border-[#1f1f1f] flex items-center gap-3 flex-wrap">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="text-[#888] text-xs uppercase tracking-wider">Campaigns</span>
+            <span id="metaAdsCampaignPill" class="source-pill source-stub">0 synced</span>
+          </div>
+          <p id="metaAdsCampaignDetail" class="text-[#666] text-xs mt-1">Sync to pull campaigns + ad sets + ads from this account.</p>
+        </div>
+        <button id="metaAdsSyncCampaignsBtn" type="button" class="pill-btn">Sync campaigns</button>
+      </div>
+
       <div id="googleAdsRow" class="mt-4 pt-4 border-t border-[#1f1f1f] flex items-center gap-3 flex-wrap">
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-2">
@@ -332,6 +343,17 @@
       <div id="googleAdsAccountsList" class="hidden mt-3 space-y-2"></div>
       <p id="googleAdsConfigWarn" class="text-[#facc15] text-xs mt-3 hidden">Server is missing Google Ads OAuth env vars — add GOOGLE_ADS_REDIRECT_URI to enable.</p>
       <p id="googleAdsDevTokenWarn" class="text-[#facc15] text-xs mt-2 hidden">Server is missing GOOGLE_ADS_DEVELOPER_TOKEN — apply at ads.google.com/aw/apicenter and set the env var to enable customer enumeration.</p>
+
+      <div id="googleAdsCampaignsRow" class="hidden mt-3 pt-3 border-t border-[#1f1f1f] flex items-center gap-3 flex-wrap">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="text-[#888] text-xs uppercase tracking-wider">Campaigns</span>
+            <span id="googleAdsCampaignPill" class="source-pill source-stub">0 synced</span>
+          </div>
+          <p id="googleAdsCampaignDetail" class="text-[#666] text-xs mt-1">Sync to pull campaigns + ad groups + ads from this customer.</p>
+        </div>
+        <button id="googleAdsSyncCampaignsBtn" type="button" class="pill-btn">Sync campaigns</button>
+      </div>
     </div>
 
     <form id="brandForm" class="space-y-6 hidden">
@@ -495,6 +517,14 @@
     const googleAdsAccountsList = document.getElementById('googleAdsAccountsList');
     const googleAdsConfigWarn   = document.getElementById('googleAdsConfigWarn');
     const googleAdsDevTokenWarn = document.getElementById('googleAdsDevTokenWarn');
+    const metaAdsCampaignsRow   = document.getElementById('metaAdsCampaignsRow');
+    const metaAdsCampaignPill   = document.getElementById('metaAdsCampaignPill');
+    const metaAdsCampaignDetail = document.getElementById('metaAdsCampaignDetail');
+    const metaAdsSyncCampaignsBtn = document.getElementById('metaAdsSyncCampaignsBtn');
+    const googleAdsCampaignsRow   = document.getElementById('googleAdsCampaignsRow');
+    const googleAdsCampaignPill   = document.getElementById('googleAdsCampaignPill');
+    const googleAdsCampaignDetail = document.getElementById('googleAdsCampaignDetail');
+    const googleAdsSyncCampaignsBtn = document.getElementById('googleAdsSyncCampaignsBtn');
     const igStatusPill    = document.getElementById('igStatusPill');
     const igDetail        = document.getElementById('igDetail');
     const igConnectBtn    = document.getElementById('igConnectBtn');
@@ -1591,6 +1621,11 @@
           metaAdsAccountsList.innerHTML = '';
           for (const c of creds) metaAdsAccountsList.appendChild(renderMetaAdsRow(c));
           metaAdsAccountsList.classList.remove('hidden');
+          // Campaigns sub-row visible only when at least one account
+          // has finalized (non-pending) selection.
+          const anyActive = creds.some(c => !c.pending);
+          metaAdsCampaignsRow.classList.toggle('hidden', !anyActive);
+          if (anyActive) loadCampaignStatus('meta-ads');
         } else {
           metaAdsStatusPill.textContent = 'Not connected';
           metaAdsStatusPill.className   = 'source-pill source-stub';
@@ -1598,6 +1633,7 @@
           metaAdsConnectBtn.textContent = 'Connect Meta Ads';
           metaAdsAccountsList.classList.add('hidden');
           metaAdsAccountsList.innerHTML = '';
+          metaAdsCampaignsRow.classList.add('hidden');
         }
       } catch (err) {
         metaAdsDetail.textContent = `Failed to load Meta Ads status: ${err.message}`;
@@ -1839,6 +1875,9 @@
           googleAdsAccountsList.innerHTML = '';
           for (const c of creds) googleAdsAccountsList.appendChild(renderGoogleAdsRow(c));
           googleAdsAccountsList.classList.remove('hidden');
+          const anyActive = creds.some(c => !c.pending);
+          googleAdsCampaignsRow.classList.toggle('hidden', !anyActive);
+          if (anyActive) loadCampaignStatus('google-ads');
         } else {
           googleAdsStatusPill.textContent = 'Not connected';
           googleAdsStatusPill.className   = 'source-pill source-stub';
@@ -1846,6 +1885,7 @@
           googleAdsConnectBtn.textContent = 'Connect Google Ads';
           googleAdsAccountsList.classList.add('hidden');
           googleAdsAccountsList.innerHTML = '';
+          googleAdsCampaignsRow.classList.add('hidden');
         }
       } catch (err) {
         googleAdsDetail.textContent = `Failed to load Google Ads status: ${err.message}`;
@@ -2020,6 +2060,48 @@
         tryOpen();
       }
     })();
+
+    // ── Campaign sync (Phase B-4) ───────────────────────────────
+    const CAMPAIGN_PILL_BY_PLATFORM = {
+      'meta-ads':   { pill: metaAdsCampaignPill,   detail: metaAdsCampaignDetail,   btn: metaAdsSyncCampaignsBtn },
+      'google-ads': { pill: googleAdsCampaignPill, detail: googleAdsCampaignDetail, btn: googleAdsSyncCampaignsBtn }
+    };
+
+    async function loadCampaignStatus(platform) {
+      const ui = CAMPAIGN_PILL_BY_PLATFORM[platform];
+      if (!ui) return;
+      try {
+        const res = await fetch(`/api/integrations/${platform}/campaign-status`);
+        if (!res.ok) return;
+        const s = await res.json();
+        ui.pill.textContent = `${(s.count || 0).toLocaleString()} synced`;
+        ui.pill.className = 'source-pill ' + ((s.count || 0) > 0 ? 'source-curated' : 'source-stub');
+        if (s.lastSyncedAt) ui.detail.textContent = `Last sync ${fmtAgo(s.lastSyncedAt)}`;
+      } catch (_) { /* non-fatal */ }
+    }
+
+    function wireCampaignSyncButton(platform) {
+      const ui = CAMPAIGN_PILL_BY_PLATFORM[platform];
+      ui.btn.addEventListener('click', async () => {
+        ui.btn.disabled = true;
+        const prev = ui.btn.textContent;
+        ui.btn.textContent = 'Syncing…';
+        try {
+          const res = await fetch(`/api/integrations/${platform}/sync-campaigns`, { method: 'POST' });
+          const data = await res.json();
+          if (!res.ok || !data.ok) throw new Error(data.error || data.reason || `HTTP ${res.status}`);
+          ui.detail.textContent = `Synced ${data.totalUpserted || 0} campaign(s) across ${(data.perCredential || []).length} account(s); ${data.totalErrors || 0} error(s)`;
+          await loadCampaignStatus(platform);
+        } catch (err) {
+          alert(`${platform} campaign sync failed: ${err.message}`);
+        } finally {
+          ui.btn.disabled = false;
+          ui.btn.textContent = prev;
+        }
+      });
+    }
+    wireCampaignSyncButton('meta-ads');
+    wireCampaignSyncButton('google-ads');
 
     // OAuth bounce — banner for non-pending statuses.
     (function handleGoogleAdsOAuthReturn() {

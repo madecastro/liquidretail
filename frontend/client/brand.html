@@ -53,6 +53,15 @@
       padding: 2px 8px; border-radius: 999px;
       vertical-align: middle; margin-left: 6px;
     }
+
+    .enrich-status {
+      display: flex; align-items: center; gap: 8px;
+      margin-top: 12px; padding: 10px 14px;
+      background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.25);
+      border-radius: 10px; color: #93c5fd; font-size: 13px;
+    }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .spinner { animation: spin 0.8s linear infinite; }
     .source-stub      { background: #2a2a2a; color: #888; }
     .source-enriched  { background: rgba(59,130,246,0.18); color: #93c5fd; }
     .source-curated   { background: rgba(52,211,153,0.18); color: #34d399; }
@@ -150,6 +159,13 @@
           </div>
         </div>
         <p id="headerEnrichmentSources" class="text-[10px] text-[#555] mt-3 font-mono"></p>
+        <div id="enrichStatus" class="enrich-status hidden">
+          <svg class="w-4 h-4 spinner flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>
+          </svg>
+          <span id="enrichStatusText">Working…</span>
+        </div>
       </div>
     </div>
 
@@ -289,9 +305,20 @@
     const reviewSummary   = document.getElementById('reviewSummary');
     const reviewsList     = document.getElementById('reviewsList');
     const reviewMeta      = document.getElementById('reviewMeta');
+    const enrichStatus    = document.getElementById('enrichStatus');
+    const enrichStatusText= document.getElementById('enrichStatusText');
+
+    const ENRICH_STAGE_LABELS = {
+      'brandfetch':    'Fetching brand kit (Brandfetch)',
+      'scraped':       'Scraping homepage HTML',
+      'gpt':           'Analyzing with GPT-4.1 (tagline, summary, tone, personas)',
+      'brand-reviews': 'Searching brand reviews (Gemini grounded search)'
+    };
 
     let currentBrand = null;
     let dirty = false;
+    let pollTimer = null;        // active enrichment-stage polling timer
+    let pollStartedAt = 0;       // ms — when current poll cycle began
 
     function escapeHtml(s) {
       return String(s == null ? '' : s)
@@ -329,15 +356,47 @@
         const data = await res.json();
         currentBrand = data.brand;
         renderHeader();
-        populateForm();
+        // Don't blow away unsaved edits while enrichment writes land —
+        // mid-refresh, the user might be typing. populateForm only
+        // reruns when the form isn't dirty.
+        if (!dirty) populateForm();
         renderDemos();
         renderReviews();
         headerLoading.classList.add('hidden');
         headerContent.classList.remove('hidden');
         form.classList.remove('hidden');
+        // Self-drive polling whenever enrichment is active. Covers
+        // both "user clicked refresh" and "page loaded mid-enrichment".
+        if (currentBrand.enrichmentStage) ensurePolling();
+        else                              stopPolling();
       } catch (err) {
         headerLoading.innerHTML = `<p class="text-[#f87171] text-sm">Failed to load: ${escapeHtml(err.message)}</p>`;
       }
+    }
+
+    function ensurePolling() {
+      if (pollTimer) return;
+      pollStartedAt = Date.now();
+      const MAX_MS  = 60000;
+      const TICK_MS = 2000;
+      const tick = async () => {
+        pollTimer = null;
+        if (Date.now() - pollStartedAt > MAX_MS) {
+          // Hard timeout — server shouldn't take this long. Stop polling
+          // but leave the status visible so the user sees something is off.
+          enrichStatusText.textContent = 'Enrichment taking longer than expected…';
+          return;
+        }
+        await load();
+        if (currentBrand && currentBrand.enrichmentStage) {
+          pollTimer = setTimeout(tick, TICK_MS);
+        }
+      };
+      pollTimer = setTimeout(tick, TICK_MS);
+    }
+
+    function stopPolling() {
+      if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
     }
 
     function renderHeader() {
@@ -355,6 +414,15 @@
       headerEnrichmentSources.textContent = (b.enrichmentSources || []).length
         ? `enriched via: ${b.enrichmentSources.join(' + ')}`
         : '';
+      // Live enrichment progress — visible whenever the server has set
+      // enrichmentStage. Whether we got here via a button click or a
+      // page load mid-run, the user sees what's happening right now.
+      if (b.enrichmentStage) {
+        enrichStatusText.textContent = ENRICH_STAGE_LABELS[b.enrichmentStage] || `Working (${b.enrichmentStage})…`;
+        enrichStatus.classList.remove('hidden');
+      } else {
+        enrichStatus.classList.add('hidden');
+      }
     }
 
     function populateForm() {
@@ -521,45 +589,25 @@
       renderReviews();
     });
 
-    // Refresh enrichment. The server fires-and-forgets the enrichment
-    // job, so we poll the brand endpoint every 2s until enrichedAt
-    // advances past the value it had when we queued (= job finished).
-    // Cap at ~40s to cover the slowest realistic run (Brandfetch +
-    // scrape + GPT + Gemini grounded search ≈ 15-25s typical).
+    // Refresh enrichment. Server fires-and-forgets the job and writes
+    // enrichmentStage as it progresses. The polling started by load()
+    // re-fetches every 2s until the stage clears, and renderHeader
+    // shows the live label with spinner.
     refreshBtn.addEventListener('click', async () => {
       if (!currentBrand) return;
       if (!confirm('Re-run enrichment? Existing curated fields are preserved; everything else may change.')) return;
-      const prev = refreshBtn.textContent;
-      const startedEnrichedAt = currentBrand.enrichedAt || null;
       refreshBtn.disabled = true;
-      refreshBtn.textContent = 'Refreshing…';
       try {
         const res = await fetch(`/api/brand/${encodeURIComponent(currentBrand._id)}/refresh-enrichment`, { method: 'POST' });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-        refreshBtn.textContent = 'Refreshing…';
-
-        const startTs = Date.now();
-        const MAX_MS  = 40000;
-        const TICK_MS = 2000;
-        const tick = async () => {
-          await load();
-          const finished = currentBrand && currentBrand.enrichedAt
-                        && currentBrand.enrichedAt !== startedEnrichedAt;
-          const timedOut = Date.now() - startTs > MAX_MS;
-          if (finished || timedOut) {
-            refreshBtn.disabled = false;
-            refreshBtn.textContent = finished ? 'Refreshed ✓' : 'Timed out';
-            setTimeout(() => { refreshBtn.textContent = prev; }, 2500);
-            return;
-          }
-          setTimeout(tick, TICK_MS);
-        };
-        setTimeout(tick, TICK_MS);
+        // Reload so we pick up the just-set enrichmentStage and the
+        // load() function spins up the polling loop.
+        await load();
       } catch (err) {
         alert('Refresh failed: ' + err.message);
+      } finally {
         refreshBtn.disabled = false;
-        refreshBtn.textContent = prev;
       }
     });
 

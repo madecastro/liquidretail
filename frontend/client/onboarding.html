@@ -115,6 +115,15 @@
           body: JSON.stringify(body)
         });
         const data = await res.json();
+        // 409 — user already has an advertiser. Likely arrived here
+        // because an old session lacked a membership row. Forward
+        // them home; the next /api/me call will self-heal.
+        if (res.status === 409) {
+          status.className = 'text-xs text-center text-[#34d399]';
+          status.textContent = '✓ Account already exists — taking you to inventory…';
+          setTimeout(() => { window.location.href = '/index.html'; }, 600);
+          return;
+        }
         if (!res.ok) {
           throw new Error(data.error || `HTTP ${res.status}`);
         }

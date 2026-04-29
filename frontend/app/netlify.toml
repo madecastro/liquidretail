@@ -1,0 +1,36 @@
+# Netlify config for the Reach Social SPA dev deploy.
+#
+# Connect a separate Netlify site to this repo with:
+#   Base directory:    frontend/app
+#   Build command:     npm run build
+#   Publish directory: frontend/app/dist
+#
+# The `redirects` rule below makes client-side routing work — every
+# unmatched path serves index.html so react-router can handle it.
+# Asset URLs (anything under /assets/) are served as-is from dist/.
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# SPA fallback — every route falls through to index.html so
+# /brand, /upload, /detect, /ads, etc. all hydrate the React app.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# API + auth pass-through to the Render backend so the dev SPA
+# doesn't need CORS exemptions. Adjust the target if your dev
+# backend lives elsewhere.
+[[redirects]]
+  from = "/api/*"
+  to = "https://liquidretail-backend.onrender.com/api/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/auth/*"
+  to = "https://liquidretail-backend.onrender.com/auth/:splat"
+  status = 200
+  force = true

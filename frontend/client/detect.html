@@ -968,6 +968,14 @@
           <button id="timingsBtn" class="text-xs px-3 py-1.5 rounded-lg bg-[#161616] border border-[#2a2a2a] text-[#888] hover:text-white transition-colors" onclick="toggleTimings()">⏱ Timings</button>
           <button id="approveAllBtn" class="text-xs px-3 py-1.5 rounded-lg bg-emerald-900/40 border border-emerald-700/30 text-emerald-400 hover:bg-emerald-900/70 transition-colors">Approve All</button>
           <button id="rejectAllBtn"  class="text-xs px-3 py-1.5 rounded-lg bg-red-900/40 border border-red-700/30 text-red-400 hover:bg-red-900/70 transition-colors">Reject All</button>
+          <!-- Cascade-deletes this Media + every artifact tied to it
+               (DetectRun, detection / crops / extended / matches /
+               overlay zones / layout inputs) plus the Cloudinary
+               asset. Confirmation prompt inline; no type-to-confirm
+               since the blast radius is one Media, not a brand. -->
+          <button id="deleteMediaBtn" class="text-xs px-3 py-1.5 rounded-lg bg-[#161616] border border-[#2a2a2a] text-[#888] hover:text-red-400 hover:border-red-700/50 transition-colors">
+            🗑 Delete media
+          </button>
         </div>
       </div>
 
@@ -3110,6 +3118,32 @@
   });
   document.getElementById('rejectAllBtn').addEventListener('click', () => {
     state.products.forEach(p => setProductState(p.id, 'rejected'));
+  });
+
+  // Cascade-delete this Media + everything bound to it. Plain confirm()
+  // is enough — single-Media blast radius, easy to recover by re-uploading.
+  document.getElementById('deleteMediaBtn').addEventListener('click', async () => {
+    if (!state.mediaId) {
+      alert('No media loaded.');
+      return;
+    }
+    if (!confirm('Delete this media and every artifact tied to it (detect runs, crops, matches, overlay zones, layout inputs)? Cloudinary asset will also be removed. Cannot be undone.')) return;
+    const btn = document.getElementById('deleteMediaBtn');
+    btn.disabled = true;
+    const orig = btn.textContent;
+    btn.textContent = 'Deleting…';
+    try {
+      const res = await fetch(`/api/media/${encodeURIComponent(state.mediaId)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      btn.textContent = '✓ Deleted';
+      // Bounce back to upload — there's nothing meaningful left to view.
+      setTimeout(() => { window.location.href = 'upload.html'; }, 600);
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = orig;
+      alert('Delete failed: ' + err.message);
+    }
   });
 
   function updateApprovedCount() {

@@ -512,6 +512,23 @@
         <div id="reviewsList"><p class="empty-block">No reviews yet</p></div>
       </div>
 
+      <!-- Danger zone -->
+      <div class="card" style="border-color: rgba(248,113,113,0.25);">
+        <p class="panel-label" style="color: #f87171;">Danger zone</p>
+        <div class="flex items-center gap-3 flex-wrap">
+          <div class="flex-1 min-w-0">
+            <p class="text-white font-semibold text-sm">Delete this brand</p>
+            <p class="text-[#888] text-xs mt-1">
+              Permanently removes the brand and every media, catalog product, integration credential, campaign, and detect artifact tied to it. Cloudinary assets get cleaned up too. Cannot be undone.
+            </p>
+          </div>
+          <button id="deleteBrandBtn" type="button" class="pill-btn"
+                  style="background:rgba(248,113,113,0.10);border-color:rgba(248,113,113,0.35);color:#f87171;">
+            Delete brand…
+          </button>
+        </div>
+      </div>
+
       <!-- Sticky save bar -->
       <div class="save-bar">
         <span id="saveStatus" class="save-status">No changes</span>
@@ -2321,6 +2338,89 @@
       setTimeout(() => banner.remove(), 6000);
       window.history.replaceState({}, '', window.location.pathname);
     })();
+  </script>
+
+  <!-- ── Delete-brand confirmation modal ─────────────────────────── -->
+  <div id="deleteBrandOverlay" class="picker-overlay hidden">
+    <div class="card" style="max-width:520px;width:100%;">
+      <div class="flex items-center justify-between mb-4">
+        <p class="panel-label" style="margin:0;color:#f87171;">Delete brand</p>
+        <button id="deleteBrandCloseBtn" type="button" class="pill-btn" style="font-size:11px;padding:4px 10px;">Cancel</button>
+      </div>
+      <p class="text-[#ccc] text-sm mb-3">
+        This permanently deletes <span id="deleteBrandName" class="text-white font-bold">brand</span> and every:
+      </p>
+      <ul class="text-[#888] text-xs mb-5" style="list-style: disc; padding-left: 20px; line-height: 1.7;">
+        <li>Media + every detect artifact (detection, crops, extended crops, matches, overlay zones, layout inputs)</li>
+        <li>Catalog product (manual + IG-synced + detect-identified drafts)</li>
+        <li>Integration credential (Instagram, Meta Ads, Google Ads)</li>
+        <li>Campaign synced from Meta or Google</li>
+        <li>Cloudinary asset uploaded under this brand</li>
+      </ul>
+      <p class="text-[#888] text-xs mb-2">Type the brand name to confirm:</p>
+      <input id="deleteBrandConfirm" type="text" class="field-input" autocomplete="off" />
+      <div class="flex items-center gap-2 justify-end mt-4">
+        <span id="deleteBrandStatus" class="text-[#888] text-xs flex-1"></span>
+        <button id="deleteBrandSubmitBtn" type="button" class="pill-btn"
+                style="background:rgba(248,113,113,0.20);border-color:rgba(248,113,113,0.50);color:#f87171;" disabled>
+          Delete forever
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── Delete brand wiring ────────────────────────────────────────
+    const deleteBrandBtn        = document.getElementById('deleteBrandBtn');
+    const deleteBrandOverlay    = document.getElementById('deleteBrandOverlay');
+    const deleteBrandCloseBtn   = document.getElementById('deleteBrandCloseBtn');
+    const deleteBrandName       = document.getElementById('deleteBrandName');
+    const deleteBrandConfirm    = document.getElementById('deleteBrandConfirm');
+    const deleteBrandStatus     = document.getElementById('deleteBrandStatus');
+    const deleteBrandSubmitBtn  = document.getElementById('deleteBrandSubmitBtn');
+
+    deleteBrandBtn?.addEventListener('click', () => {
+      if (!currentBrand) return;
+      deleteBrandName.textContent = currentBrand.name;
+      deleteBrandConfirm.value = '';
+      deleteBrandSubmitBtn.disabled = true;
+      deleteBrandStatus.textContent = '';
+      deleteBrandOverlay.classList.remove('hidden');
+      setTimeout(() => deleteBrandConfirm.focus(), 50);
+    });
+
+    deleteBrandCloseBtn?.addEventListener('click', () => {
+      deleteBrandOverlay.classList.add('hidden');
+    });
+
+    deleteBrandConfirm?.addEventListener('input', () => {
+      const match = currentBrand && deleteBrandConfirm.value.trim() === currentBrand.name;
+      deleteBrandSubmitBtn.disabled = !match;
+    });
+
+    deleteBrandSubmitBtn?.addEventListener('click', async () => {
+      if (!currentBrand) return;
+      const id = (currentBrand._id || currentBrand.id);
+      deleteBrandSubmitBtn.disabled = true;
+      deleteBrandStatus.textContent = 'Deleting…';
+      try {
+        const res = await fetch(`/api/brand/${encodeURIComponent(id)}`, {
+          method:  'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ confirmName: currentBrand.name })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        deleteBrandStatus.textContent = '✓ Deleted';
+        // Drop active brand from localStorage and bounce to upload.
+        localStorage.removeItem('brand_id');
+        localStorage.removeItem('brand_name');
+        setTimeout(() => { window.location.href = 'upload.html'; }, 600);
+      } catch (err) {
+        deleteBrandStatus.textContent = '✗ ' + err.message;
+        deleteBrandSubmitBtn.disabled = false;
+      }
+    });
   </script>
 </body>
 </html>

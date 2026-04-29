@@ -830,15 +830,25 @@
 
   <div class="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
 
-    <!-- ── Upload Section ─────────────────────────────────────────── -->
-    <div id="uploadSection" class="section-card fade-up">
-      <div class="flex items-center gap-2 mb-6">
+    <!-- Detection Review = results-only. Uploads happen on /upload.html. -->
+    <div id="emptyState" class="section-card fade-up hidden">
+      <div class="flex items-center gap-2 mb-3">
         <svg class="w-4 h-4 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 3.75H6A2.25 2.25 0 003.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
         </svg>
-        <h2 class="text-sm font-semibold text-white uppercase tracking-wider">Upload for Detection</h2>
+        <h2 class="text-sm font-semibold text-white uppercase tracking-wider">Detection Review</h2>
       </div>
+      <p class="text-[#888] text-sm mb-4">No active detection run. Upload a social post or reel to start one.</p>
+      <a href="upload.html" class="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-2 rounded-lg text-sm transition-colors">
+        Go to Upload →
+      </a>
+    </div>
 
+    <div id="uploadStatus" class="hidden mt-4 rounded-xl px-4 py-3 text-sm flex items-center gap-3"></div>
+
+    <!-- (Legacy form removed — uploads now live on /upload.html;
+         /detect.html is results-only, entered via ?runId from upload.) -->
+    <div id="legacyFormContainer" class="hidden">
       <form id="detectForm" enctype="multipart/form-data">
         <div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
 
@@ -929,7 +939,6 @@
             </div>
           </div>
         </div>
-        <div id="uploadStatus" class="hidden mt-4 rounded-xl px-4 py-3 text-sm flex items-center gap-3"></div>
       </form>
     </div>
 
@@ -1421,16 +1430,19 @@
   }
 
   // ?runId handoff — when upload.html posts to /api/detect and bounces
-  // here with the runId, skip the in-page form and pick up where the
-  // server left off. Lets /upload.html serve as the unified entry
-  // point while detect.html stays the canonical results view.
+  // here with the runId, pick up where the server left off and poll
+  // through to render. Without a runId we show an empty state with a
+  // CTA to /upload.html since detect.html is now results-only.
   (async function maybeResumeFromRunId() {
     const params = new URLSearchParams(window.location.search);
     const runId = params.get('runId');
-    if (!runId) return;
-    // Hide the upload form — the user already submitted on upload.html.
-    const form = document.getElementById('detectForm');
-    if (form) form.classList.add('hidden');
+    if (!runId) {
+      // No active run — show the empty state. The legacy upload form
+      // stays hidden via legacyFormContainer.
+      const empty = document.getElementById('emptyState');
+      if (empty) empty.classList.remove('hidden');
+      return;
+    }
     setStatus('uploadStatus', 'info', SPIN + ' Resuming from upload…');
     try {
       const result = await pollJobStatus(runId, onPollTick);

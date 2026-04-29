@@ -807,7 +807,7 @@
         </div>
       </div>
       <div class="flex items-center gap-5">
-        <a href="index.html"  class="text-[#555] hover:text-white text-sm transition-colors">Inventory</a>
+        <a href="upload.html" class="text-[#555] hover:text-white text-sm transition-colors">Upload</a>
         <a href="detect.html" class="text-white text-sm font-semibold">Detection</a>
         <a href="ads.html"    class="text-[#555] hover:text-white text-sm transition-colors">Ad Generation</a>
         <a href="brand.html"   class="text-[#555] hover:text-white text-sm transition-colors">Brand</a>
@@ -1356,53 +1356,81 @@
       const jobId = data.jobId;
       setStatus('uploadStatus', 'info', SPIN + ' ' + STAGE_LABELS.queued);
 
-      const result = await pollJobStatus(jobId, (job) => {
-        const label = STAGE_LABELS[job.stage] || `Working (${job.stage || '...'})`;
-        setStatus('uploadStatus', 'info', SPIN + ' ' + label);
-      });
-
-      if (result.status === 'failed') {
-        throw new Error(`Pipeline failed at stage "${result.errorStage || 'unknown'}": ${result.error || 'unknown error'}`);
-      }
-
-      const d = result.result || {};
-      state.type      = d.type     || 'image';
-      state.imageUrl  = d.imageUrl || '';
-      state.videoUrl  = d.videoUrl || '';
-      state.imgW      = d.width    || 1024;
-      state.imgH      = d.height   || 768;
-      state.products  = (d.products || []).map(p => ({ ...p, state: 'pending' }));
-      state.subjects  = d.subjects || [];
-      state.text      = d.text     || [];
-      state.crops     = d.crops    || {};
-      state.judge     = d.judge    || null;
-      state.transcript= d.transcript || null;
-      state.safeRect  = d.safeRect || null;
-      state.extendedCrops = d.extendedCrops || {};
-      state.extendedErrors= d.extendedErrors || {};
-      state.extendedJudge = d.extendedJudge || {};
-      state.productMatches = d.productMatches || null;
-      state.overlayZones  = d.overlayZones || {};
-      state.background    = d.background || null;
-      state.primarySubjectDesc = d.primarySubjectDesc || null;
-      state.rights        = d.rights || { approved: false };
-      state.mediaId       = result.mediaId || null;
-      state.heroFrameSec  = d.heroFrameSec ?? null;
-      state.heroReason    = d.heroReason || null;
-      state.videoDurationSec = d.videoDurationSec ?? null;
-      state.stageTimings  = d.stageTimings || {};
-      state.mediaSource   = d.mediaSource || null;
-      state.selectedRatio  = '5:4';
-      state.selectedCropId = null;
-
-      document.getElementById('uploadStatus').classList.add('hidden');
-      renderAll();
+      const result = await pollJobStatus(jobId, onPollTick);
+      applyDetectResult(result);
     } catch (err) {
       setStatus('uploadStatus', 'error', '✕ ' + err.message);
     } finally {
       btn.disabled = false;
     }
   });
+
+  // Shared post-poll result handler — used both by the in-page form
+  // submit and by the on-load ?runId=... handoff from upload.html.
+  function onPollTick(job) {
+    const label = STAGE_LABELS[job.stage] || `Working (${job.stage || '...'})`;
+    setStatus('uploadStatus', 'info', SPIN + ' ' + label);
+  }
+
+  function applyDetectResult(result) {
+    if (result.status === 'failed') {
+      throw new Error(`Pipeline failed at stage "${result.errorStage || 'unknown'}": ${result.error || 'unknown error'}`);
+    }
+    const d = result.result || {};
+    state.type      = d.type     || 'image';
+    state.imageUrl  = d.imageUrl || '';
+    state.videoUrl  = d.videoUrl || '';
+    state.imgW      = d.width    || 1024;
+    state.imgH      = d.height   || 768;
+    state.products  = (d.products || []).map(p => ({ ...p, state: 'pending' }));
+    state.subjects  = d.subjects || [];
+    state.text      = d.text     || [];
+    state.crops     = d.crops    || {};
+    state.judge     = d.judge    || null;
+    state.transcript= d.transcript || null;
+    state.safeRect  = d.safeRect || null;
+    state.extendedCrops = d.extendedCrops || {};
+    state.extendedErrors= d.extendedErrors || {};
+    state.extendedJudge = d.extendedJudge || {};
+    state.productMatches = d.productMatches || null;
+    state.overlayZones  = d.overlayZones || {};
+    state.background    = d.background || null;
+    state.primarySubjectDesc = d.primarySubjectDesc || null;
+    state.rights        = d.rights || { approved: false };
+    state.mediaId       = result.mediaId || null;
+    state.heroFrameSec  = d.heroFrameSec ?? null;
+    state.heroReason    = d.heroReason || null;
+    state.videoDurationSec = d.videoDurationSec ?? null;
+    state.stageTimings  = d.stageTimings || {};
+    state.mediaSource   = d.mediaSource || null;
+    state.selectedRatio  = '5:4';
+    state.selectedCropId = null;
+
+    document.getElementById('uploadStatus').classList.add('hidden');
+    renderAll();
+  }
+
+  // ?runId handoff — when upload.html posts to /api/detect and bounces
+  // here with the runId, skip the in-page form and pick up where the
+  // server left off. Lets /upload.html serve as the unified entry
+  // point while detect.html stays the canonical results view.
+  (async function maybeResumeFromRunId() {
+    const params = new URLSearchParams(window.location.search);
+    const runId = params.get('runId');
+    if (!runId) return;
+    // Hide the upload form — the user already submitted on upload.html.
+    const form = document.getElementById('detectForm');
+    if (form) form.classList.add('hidden');
+    setStatus('uploadStatus', 'info', SPIN + ' Resuming from upload…');
+    try {
+      const result = await pollJobStatus(runId, onPollTick);
+      applyDetectResult(result);
+      // Strip the param so a refresh doesn't re-poll a completed run.
+      window.history.replaceState({}, '', window.location.pathname);
+    } catch (err) {
+      setStatus('uploadStatus', 'error', '✕ ' + err.message);
+    }
+  })();
 
   async function pollJobStatus(jobId, onTick) {
     const startedAt = Date.now();

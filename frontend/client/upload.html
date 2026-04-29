@@ -2,56 +2,369 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Upload Product Photos</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Flood QRF — Upload</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="auth.js"></script>
+  <script src="brandPicker.js" defer></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    * { font-family: 'Inter', system-ui, sans-serif; }
+    body { background: #0a0a0a; color: #f0f0f0; min-height: 100vh; }
+    nav  { background: #111; border-bottom: 1px solid #1f1f1f; }
+
+    .card { background: #111; border: 1.5px solid #1f1f1f; border-radius: 18px; padding: 24px; }
+    .panel-label  { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: #555; margin-bottom: 14px; }
+
+    .field-input {
+      width: 100%; background: #161616; border: 1px solid #2a2a2a; color: #f0f0f0;
+      border-radius: 10px; padding: 10px 12px; font-size: 14px;
+    }
+    .field-input::placeholder { color: #555; }
+    .field-input:focus { border-color: #C8102E; outline: none; }
+    textarea.field-input { resize: vertical; font-family: inherit; }
+    .field-label { display: block; font-size: 0.72rem; font-weight: 600; color: #666;
+                   text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 5px; }
+    .field-help  { font-size: 11px; color: #555; margin-top: 4px; line-height: 1.4; }
+
+    /* Type picker */
+    .type-picker {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+    }
+    .type-tile {
+      border: 1.5px solid #1f1f1f; background: #0f0f0f;
+      border-radius: 14px; padding: 18px 16px; text-align: left;
+      cursor: pointer; transition: border-color 0.15s, background 0.15s;
+    }
+    .type-tile:hover { border-color: #2a2a2a; background: #131313; }
+    .type-tile.active { border-color: #C8102E; background: rgba(200,16,46,0.06); }
+    .type-tile .label { color: #fff; font-weight: 700; font-size: 14px; }
+    .type-tile .hint  { color: #888; font-size: 12px; margin-top: 4px; line-height: 1.4; }
+
+    /* Drop zone */
+    .drop-zone {
+      border: 2px dashed #2a2a2a; border-radius: 12px;
+      background: #0f0f0f; padding: 28px;
+      cursor: pointer; transition: border-color 0.15s, background 0.15s;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 8px; min-height: 180px;
+    }
+    .drop-zone:hover    { border-color: #444; background: #141414; }
+    .drop-zone.dragging { border-color: #C8102E; background: rgba(200,16,46,0.08); }
+    .drop-zone .preview {
+      width: 100%; max-height: 220px; aspect-ratio: 4/3;
+      background: #161616 center/contain no-repeat;
+      border-radius: 8px;
+    }
+    .drop-placeholder { color: #555; font-size: 13px; text-align: center; }
+    .drop-placeholder .browse { color: #ef4444; font-weight: 600; }
+    .file-name { font-size: 11px; color: #888; max-width: 100%; overflow: hidden;
+                 text-overflow: ellipsis; white-space: nowrap; padding: 0 8px; }
+
+    .pill-btn {
+      font-size: 12px; font-weight: 600; padding: 7px 14px; border-radius: 999px;
+      background: #161616; border: 1px solid #2a2a2a; color: #ccc;
+      cursor: pointer; transition: all 0.12s; white-space: nowrap;
+    }
+    .pill-btn:hover { border-color: #444; color: #fff; }
+
+    .submit-btn {
+      width: 100%; background: #C8102E; color: #fff; font-weight: 600;
+      padding: 12px 18px; border-radius: 12px; font-size: 14px;
+      transition: all 0.12s;
+    }
+    .submit-btn:hover:not(:disabled)  { background: #a00d24; transform: translateY(-1px); }
+    .submit-btn:disabled              { opacity: 0.5; cursor: not-allowed; }
+
+    .status-line {
+      display: flex; align-items: center; gap: 8px;
+      margin-top: 14px; padding: 10px 14px;
+      border-radius: 10px; font-size: 13px;
+    }
+    .status-line.info  { background: rgba(59,130,246,0.10); border: 1px solid rgba(59,130,246,0.25); color: #93c5fd; }
+    .status-line.ok    { background: rgba(52,211,153,0.10); border: 1px solid rgba(52,211,153,0.25); color: #34d399; }
+    .status-line.error { background: rgba(248,113,113,0.10); border: 1px solid rgba(248,113,113,0.25); color: #f87171; }
+  </style>
 </head>
-<body class="bg-gray-100 min-h-screen">
-  <nav class="bg-blue-900 text-white px-6 py-3 mb-6">
-    <div class="max-w-5xl mx-auto flex justify-between items-center">
-      <span class="font-bold text-lg">LiquidRetail</span>
-      <a href="products.html" class="text-white hover:underline">📦 View Products</a>
+<body class="min-h-screen">
+
+  <nav class="sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <img src="assets/logo.png" alt="Flood QRF" class="w-9 h-9 object-contain" />
+        <div class="leading-tight">
+          <div class="font-bold text-white tracking-wide text-sm">FLOOD QRF</div>
+          <div class="text-[10px] text-[#555] uppercase tracking-widest hidden sm:block">Upload</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-5">
+        <a href="upload.html"  class="text-white text-sm font-semibold">Upload</a>
+        <a href="detect.html"  class="text-[#555] hover:text-white text-sm transition-colors">Detection</a>
+        <a href="ads.html"     class="text-[#555] hover:text-white text-sm transition-colors">Ad Generation</a>
+        <a href="brand.html"   class="text-[#555] hover:text-white text-sm transition-colors">Brand</a>
+        <a href="members.html" class="text-[#555] hover:text-white text-sm transition-colors">Members</a>
+        <div id="brandPickerSlot"></div>
+        <button onclick="logout()" class="text-[#555] hover:text-white text-sm transition-colors">Sign out</button>
+      </div>
     </div>
   </nav>
 
-  <div class="max-w-xl mx-auto bg-white p-6 rounded shadow">
-    <h2 class="text-xl font-semibold mb-4">Upload Product Photos</h2>
-    <form id="uploadForm" enctype="multipart/form-data" class="space-y-4">
-      <input type="file" name="photo" accept="image/*" required class="w-full" />
-      <input type="text" name="truck_number" placeholder="Truck Number" class="w-full border p-2 rounded" />
-      <input type="number" name="price" placeholder="Price" class="w-full border p-2 rounded" />
-      <input type="date" name="delivery_date" class="w-full border p-2 rounded" />
-      <input type="time" name="delivery_time" class="w-full border p-2 rounded" />
-      <input type="text" name="delivery_location" placeholder="Location" class="w-full border p-2 rounded" />
-      <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded">Upload</button>
+  <div class="max-w-3xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+
+    <div class="card">
+      <p class="panel-label">What are you uploading?</p>
+      <div class="type-picker">
+        <button class="type-tile active" data-type="product" type="button">
+          <div class="label">Product</div>
+          <div class="hint">A SKU for the brand catalog. Image + title required; price &amp; URL optional (drafts get filed for completion).</div>
+        </button>
+        <button class="type-tile" data-type="media" type="button">
+          <div class="label">Social Post / Reel</div>
+          <div class="hint">Run the full detect pipeline against UGC. YOLO + crops + product matching land on the Detection Review page.</div>
+        </button>
+      </div>
+    </div>
+
+    <!-- Product upload form -->
+    <form id="productForm" class="card">
+      <p class="panel-label">Add product to catalog</p>
+      <p class="text-[#888] text-xs mb-4">Title and image required. Add price + URL now to land a complete row, or just title + image to land a draft you can finish later in the catalog browser.</p>
+
+      <div class="grid grid-cols-1 sm:grid-cols-[200px_1fr] gap-5">
+        <div id="productDropZone" class="drop-zone">
+          <div id="productPreview" class="preview hidden"></div>
+          <div id="productDropPlaceholder" class="drop-placeholder">
+            <div>Drop image here</div>
+            <div class="browse">or browse</div>
+            <div class="text-[#444] text-[10px] mt-1">JPG / PNG / WebP — max 25 MB</div>
+          </div>
+          <p id="productFileName" class="file-name hidden"></p>
+          <input id="productImageInput" type="file" name="image" accept="image/*" class="hidden" required />
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="sm:col-span-2">
+            <label class="field-label">Title</label>
+            <input type="text" name="title" class="field-input" placeholder="e.g. Solar Long Sleeve Performance Shirt" required />
+          </div>
+          <div>
+            <label class="field-label">Price</label>
+            <input type="number" step="0.01" min="0" name="price" class="field-input" placeholder="59.00" />
+          </div>
+          <div>
+            <label class="field-label">Currency</label>
+            <input type="text" name="currency" class="field-input" placeholder="USD" maxlength="3" />
+          </div>
+          <div class="sm:col-span-2">
+            <label class="field-label">Product URL</label>
+            <input type="url" name="productUrl" class="field-input" placeholder="https://yourbrand.com/products/..." />
+          </div>
+          <div>
+            <label class="field-label">Category <span class="text-[#555] font-normal normal-case">(optional)</span></label>
+            <input type="text" name="category" class="field-input" placeholder="Apparel" />
+          </div>
+          <div>
+            <label class="field-label">GTIN / UPC <span class="text-[#555] font-normal normal-case">(optional)</span></label>
+            <input type="text" name="gtin" class="field-input" placeholder="0123456789012" />
+          </div>
+          <div class="sm:col-span-2">
+            <label class="field-label">Description <span class="text-[#555] font-normal normal-case">(optional)</span></label>
+            <textarea name="description" rows="3" class="field-input" placeholder="One or two sentences for the catalog row."></textarea>
+          </div>
+        </div>
+      </div>
+
+      <button type="submit" id="productSubmitBtn" class="submit-btn mt-5">Add product</button>
+      <div id="productStatus" class="status-line hidden"></div>
     </form>
-    <div id="statusMessage" class="mt-4 text-sm"></div>
-    <pre id="responseBox" class="bg-gray-100 mt-4 p-4 text-sm rounded overflow-x-auto"></pre>
+
+    <!-- Media upload form (full detect pipeline) -->
+    <form id="mediaForm" class="card hidden" enctype="multipart/form-data">
+      <p class="panel-label">Run detection on a social post</p>
+      <p class="text-[#888] text-xs mb-4">Photo or video gets uploaded and queued through the full detect pipeline (YOLO, GPT-4.1, smart crops, product matching). You'll bounce to Detection Review when the run is queued.</p>
+
+      <div class="grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-5">
+        <div id="mediaDropZone" class="drop-zone">
+          <div id="mediaPreview" class="preview hidden"></div>
+          <div id="mediaDropPlaceholder" class="drop-placeholder">
+            <div>Drop photo or video here</div>
+            <div class="browse">or browse</div>
+            <div class="text-[#444] text-[10px] mt-1">JPG / PNG / MP4 / MOV — max 100 MB</div>
+          </div>
+          <p id="mediaFileName" class="file-name hidden"></p>
+          <input id="mediaPhotoInput" type="file" name="photo" accept="image/*,video/mp4,video/quicktime,video/webm" class="hidden" required />
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="sm:col-span-2">
+            <label class="field-label">Brand <span class="text-[#555] font-normal normal-case">(uses active brand if blank)</span></label>
+            <input type="text" name="brand" class="field-input" placeholder="e.g. Pelagic" />
+          </div>
+          <div class="sm:col-span-2">
+            <label class="field-label">Brand URL <span class="text-[#555] font-normal normal-case">(optional)</span></label>
+            <input type="url" name="brandUrl" class="field-input" placeholder="https://example.com" />
+          </div>
+          <div class="sm:col-span-2">
+            <label class="field-label">Category</label>
+            <select name="category" class="field-input" required>
+              <option value="">Select a category…</option>
+              <option>Beauty &amp; Personal Care</option>
+              <option>Apparel &amp; Fashion</option>
+              <option>Footwear</option>
+              <option>Accessories &amp; Jewelry</option>
+              <option>Home &amp; Garden</option>
+              <option>Electronics</option>
+              <option>Food &amp; Beverage</option>
+              <option>Sports &amp; Outdoors</option>
+              <option>Toys &amp; Games</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div class="sm:col-span-2">
+            <label class="field-label">Caption <span class="text-[#555] font-normal normal-case">(optional)</span></label>
+            <textarea name="caption" rows="3" class="field-input" placeholder="What the creator said…"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <button type="submit" id="mediaSubmitBtn" class="submit-btn mt-5">Run detection →</button>
+      <div id="mediaStatus" class="status-line hidden"></div>
+    </form>
+
   </div>
 
   <script>
-    const form = document.getElementById('uploadForm');
-    const responseBox = document.getElementById('responseBox');
-    const statusMessage = document.getElementById('statusMessage');
+    // ── Type picker ─────────────────────────────────────────────────
+    const productForm = document.getElementById('productForm');
+    const mediaForm   = document.getElementById('mediaForm');
+    document.querySelectorAll('.type-tile').forEach(tile => {
+      tile.addEventListener('click', () => {
+        document.querySelectorAll('.type-tile').forEach(t => t.classList.remove('active'));
+        tile.classList.add('active');
+        const t = tile.dataset.type;
+        productForm.classList.toggle('hidden', t !== 'product');
+        mediaForm.classList.toggle('hidden',   t !== 'media');
+      });
+    });
 
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      statusMessage.textContent = "⏳ Uploading...";
-      const formData = new FormData(form);
-      try {
-        const res = await fetch('/api/upload', {
-          method: 'POST',
-          body: formData
-        });
-        const data = await res.json();
-        if (res.ok) {
-          statusMessage.textContent = "✅ Upload successful!";
+    // ── Drop-zone helper (shared for both forms) ────────────────────
+    function wireDropZone({ zoneId, inputId, previewId, placeholderId, fileNameId, isImageOnly }) {
+      const zone        = document.getElementById(zoneId);
+      const input       = document.getElementById(inputId);
+      const preview     = document.getElementById(previewId);
+      const placeholder = document.getElementById(placeholderId);
+      const fileName    = document.getElementById(fileNameId);
+
+      zone.addEventListener('click', () => input.click());
+      ['dragenter', 'dragover'].forEach(e => zone.addEventListener(e, ev => {
+        ev.preventDefault(); zone.classList.add('dragging');
+      }));
+      ['dragleave', 'drop'].forEach(e => zone.addEventListener(e, ev => {
+        ev.preventDefault(); zone.classList.remove('dragging');
+      }));
+      zone.addEventListener('drop', ev => {
+        const f = ev.dataTransfer?.files?.[0];
+        if (!f) return;
+        if (isImageOnly && !f.type.startsWith('image/')) return;
+        input.files = ev.dataTransfer.files;
+        showPreview(f);
+      });
+      input.addEventListener('change', () => {
+        const f = input.files?.[0];
+        if (f) showPreview(f);
+      });
+
+      function showPreview(file) {
+        fileName.textContent = file.name;
+        fileName.classList.remove('hidden');
+        if (file.type.startsWith('image/')) {
+          const reader = new FileReader();
+          reader.onload = e => {
+            preview.style.backgroundImage = `url('${e.target.result}')`;
+            preview.classList.remove('hidden');
+            placeholder.classList.add('hidden');
+          };
+          reader.readAsDataURL(file);
         } else {
-          statusMessage.textContent = "❌ Upload failed: " + (data.error || 'Unknown error');
+          preview.classList.add('hidden');
+          placeholder.classList.add('hidden');
         }
-        responseBox.textContent = JSON.stringify(data, null, 2);
+      }
+    }
+    wireDropZone({
+      zoneId: 'productDropZone', inputId: 'productImageInput',
+      previewId: 'productPreview', placeholderId: 'productDropPlaceholder',
+      fileNameId: 'productFileName', isImageOnly: true
+    });
+    wireDropZone({
+      zoneId: 'mediaDropZone', inputId: 'mediaPhotoInput',
+      previewId: 'mediaPreview', placeholderId: 'mediaDropPlaceholder',
+      fileNameId: 'mediaFileName', isImageOnly: false
+    });
+
+    // ── Status helper ───────────────────────────────────────────────
+    function setStatus(elId, kind, text) {
+      const el = document.getElementById(elId);
+      el.className = 'status-line ' + kind;
+      el.textContent = text;
+      el.classList.remove('hidden');
+    }
+
+    // ── Product submit ──────────────────────────────────────────────
+    productForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('productSubmitBtn');
+      btn.disabled = true;
+      setStatus('productStatus', 'info', 'Uploading…');
+      try {
+        const fd  = new FormData(productForm);
+        const res = await fetch('/api/upload/product', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        const draftNote = data.product?.draft
+          ? ' (draft — finish price + URL in the catalog browser to make it matchable)'
+          : '';
+        setStatus('productStatus', 'ok', `✓ ${data.created ? 'Added' : 'Updated'} "${data.product.title}"${draftNote}`);
+        productForm.reset();
+        document.getElementById('productPreview').classList.add('hidden');
+        document.getElementById('productPreview').style.backgroundImage = '';
+        document.getElementById('productDropPlaceholder').classList.remove('hidden');
+        document.getElementById('productFileName').classList.add('hidden');
       } catch (err) {
-        statusMessage.textContent = "❌ Upload failed: " + err.message;
+        setStatus('productStatus', 'error', '✗ ' + err.message);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    // ── Media submit — run detect, redirect to Detection Review ─────
+    mediaForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('mediaSubmitBtn');
+      btn.disabled = true;
+      setStatus('mediaStatus', 'info', 'Uploading…');
+      try {
+        const fd = new FormData(mediaForm);
+        // Pack metadata as JSON — same shape detect.html sends.
+        const metadata = {
+          brand:    (fd.get('brand') || '').toString().trim(),
+          brandUrl: (fd.get('brandUrl') || '').toString().trim() || null,
+          category: (fd.get('category') || '').toString(),
+          caption:  (fd.get('caption') || '').toString().trim()
+        };
+        fd.append('metadata', JSON.stringify(metadata));
+
+        const res = await fetch('/api/detect', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
+
+        setStatus('mediaStatus', 'ok', `✓ Queued. Redirecting to Detection Review…`);
+        setTimeout(() => {
+          window.location.href = `detect.html?runId=${encodeURIComponent(data.runId)}`;
+        }, 600);
+      } catch (err) {
+        setStatus('mediaStatus', 'error', '✗ ' + err.message);
+        btn.disabled = false;
       }
     });
   </script>

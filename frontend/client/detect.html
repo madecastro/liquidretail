@@ -1346,7 +1346,7 @@
     'subjects-text': 'Analyzing subjects & text (GPT-4.1)',
     'smart-crops':   'Generating smart crops',
     'judge':         'Judging best results (GPT-4.1)',
-    'extended-crops':'Generating 9:16 & 1.91:1 candidates (OpenAI + Gemini)',
+    'extended-crops':'Generating 9:16 & 1.91:1 candidates',
     'judge-extended':'Judging extended-ratio candidates',
     'product-match': 'Finding similar products online (Gemini search + Google Lens)',
     'done':          'Done'
@@ -2803,9 +2803,12 @@
 
   // Extended ratios (9:16, 1.91:1): show the currently-selected candidate large on
   // the left (starts as the judge winner; click a chip to switch), and all
-  // candidates as thumbnails on the right, organized by variant (extension vs
-  // generation) × provider (OpenAI vs Gemini). Cloudinary blurred-pad falls into
-  // its own "Other" group for video jobs.
+  // candidates as thumbnails on the right, grouped by variant (extension vs
+  // generation). Within each variant, one chip per AI provider that returned a
+  // candidate — discovered dynamically from the candidates array, so adding a
+  // provider in extendedCropsProviders.js automatically gets a chip with no
+  // frontend changes. Non-AI variants (Cloudinary blurred-pad on video jobs)
+  // fall into their own "Other" group.
   function renderExtendedCropPanel() {
     const wrap = document.getElementById('cropImageWrap');
     const img  = document.getElementById('cropSourceImg');
@@ -2827,7 +2830,7 @@
       document.getElementById('cropCards').innerHTML =
         `<div class="text-center py-10 text-[#444] text-sm">
            No ${state.selectedRatio} candidates generated yet.
-           <p class="text-[10px] text-[#333] mt-1">Check that GEMINI_API_KEY is set and OpenAI gpt-image-1 is enabled.</p>
+           <p class="text-[10px] text-[#333] mt-1">Check that at least one extended-crop provider is registered (server/services/extendedCropsProviders.js) and its API key is set.</p>
          </div>`;
       document.getElementById('cropReasoning').classList.add('hidden');
       document.getElementById('cropVideoPreview').classList.add('hidden');
@@ -2852,18 +2855,36 @@
     const [ratioNum, ratioDen] = state.selectedRatio === '1.91:1' ? [191, 100]
                                : state.selectedRatio.split(':').map(Number);
 
-    // Group candidates: extension × provider, generation × provider, other
-    const byKey = { ext_openai: null, ext_gemini: null, gen_openai: null, gen_gemini: null, other: [] };
+    // Group candidates: AI variants (extension / generation / future) get one
+    // chip per provider that returned a candidate; non-AI providers (cloudinary
+    // blurred-pad) fall into a separate "Other" bucket. AI groups are
+    // discovered dynamically from candidate.variant — adding a new variant in
+    // the registry automatically appears as a new section.
+    const aiGroups = new Map();   // variant → array of candidates
+    const otherGroup = [];
     for (const c of candidates) {
-      if (c.variant === 'extension' && c.provider === 'openai')  byKey.ext_openai = c;
-      else if (c.variant === 'extension' && c.provider === 'gemini') byKey.ext_gemini = c;
-      else if (c.variant === 'generation' && c.provider === 'openai') byKey.gen_openai = c;
-      else if (c.variant === 'generation' && c.provider === 'gemini') byKey.gen_gemini = c;
-      else byKey.other.push(c);
+      if (c.provider === 'cloudinary') { otherGroup.push(c); continue; }
+      if (!aiGroups.has(c.variant)) aiGroups.set(c.variant, []);
+      aiGroups.get(c.variant).push(c);
+    }
+    // Stable display order: extension first, then generation, then anything new.
+    const VARIANT_ORDER = ['extension', 'generation'];
+    const orderedVariants = [
+      ...VARIANT_ORDER.filter(v => aiGroups.has(v)),
+      ...[...aiGroups.keys()].filter(v => !VARIANT_ORDER.includes(v))
+    ];
+    const VARIANT_DESC = {
+      extension:  'outpaint the existing scene',
+      generation: 'regenerate background around subject'
+    };
+    // Within each group, sort providers alphabetically so card position is
+    // stable across re-renders even if the server returns them in a different
+    // order across runs.
+    for (const arr of aiGroups.values()) {
+      arr.sort((a, b) => (a.provider || '').localeCompare(b.provider || ''));
     }
 
-    // Diagnostic log — if this shows 4 identical URLs, the issue is backend;
-    // if it shows 4 distinct URLs, the issue is pure rendering.
+    // Diagnostic log — distinct URLs prove backend+frontend are wired correctly.
     console.log(
       `[extended ${state.selectedRatio}] count=${candidates.length} winner=${winnerId || '(none)'} selected=${state.selectedCropId || '(none)'}`
     );
@@ -2873,13 +2894,6 @@
 
     const scoresByRatio = state.extendedJudge?.[state.selectedRatio]?.scores || {};
     const buildChip = (c) => {
-      if (!c) {
-        const empty = document.createElement('div');
-        empty.className = 'crop-card p-4 flex items-center justify-center';
-        empty.style.cssText = `aspect-ratio: ${ratioNum} / ${ratioDen}; opacity: 0.45;`;
-        empty.innerHTML = '<span class="text-[10px] text-[#555]">— not generated —</span>';
-        return empty;
-      }
       const isSel = c.id === state.selectedCropId;
       const isWin = c.id === winnerId;
       const judgeScore = scoresByRatio[c.id];
@@ -2960,10 +2974,17 @@
       const s = document.createElement('div');
       const header = document.createElement('p');
       header.className = 'text-[10px] font-bold uppercase tracking-wider text-[#666] mb-2';
-      header.innerHTML = `${escapeHtml(title)} <span class="text-[#555] font-normal normal-case ml-1">— ${escapeHtml(subtitle)}</span>`;
+      header.innerHTML = `${escapeHtml(title)}` + (subtitle
+        ? ` <span class="text-[#555] font-normal normal-case ml-1">— ${escapeHtml(subtitle)}</span>`
+        : '');
       s.appendChild(header);
       const row = document.createElement('div');
-      row.className = 'grid grid-cols-2 gap-3';
+      // Fluid grid: 1 chip → single full-width card; 2+ chips → 2 columns
+      // wrapping to multiple rows. Inline style keeps this independent of
+      // whether arbitrary Tailwind grid-cols-N classes are in the bundle.
+      row.style.display = 'grid';
+      row.style.gap = '0.75rem';
+      row.style.gridTemplateColumns = chipsArr.length === 1 ? '1fr' : 'repeat(2, minmax(0, 1fr))';
       for (const c of chipsArr) row.appendChild(buildChip(c));
       s.appendChild(row);
       return s;
@@ -2972,10 +2993,15 @@
     const grid = document.getElementById('cropCards');
     grid.className = 'space-y-4';
     grid.innerHTML = '';
-    grid.appendChild(section('Extension',  'outpaint the existing scene',        [byKey.ext_openai, byKey.ext_gemini]));
-    grid.appendChild(section('Generation', 'regenerate background around subject', [byKey.gen_openai, byKey.gen_gemini]));
-    if (byKey.other.length) {
-      grid.appendChild(section('Other', 'non-AI variants', byKey.other));
+    for (const variant of orderedVariants) {
+      grid.appendChild(section(
+        variant.charAt(0).toUpperCase() + variant.slice(1),
+        VARIANT_DESC[variant] || '',
+        aiGroups.get(variant)
+      ));
+    }
+    if (otherGroup.length) {
+      grid.appendChild(section('Other', 'non-AI variants', otherGroup));
     }
 
     // Judge reasoning + per-provider failures

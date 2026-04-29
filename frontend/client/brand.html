@@ -102,6 +102,9 @@
     .cb-pill.has-reviews   { background: rgba(52,211,153,0.15); color: #34d399; }
     .cb-pill.has-matches   { background: rgba(59,130,246,0.18); color: #93c5fd; }
     .cb-pill.out-of-stock  { background: rgba(248,113,113,0.15); color: #f87171; }
+    .cb-pill.source-manual    { background: rgba(168,85,247,0.18); color: #c4b5fd; }
+    .cb-pill.source-detect    { background: rgba(245,158,11,0.18); color: #fcd34d; }
+    .cb-pill.draft            { background: rgba(250,204,21,0.20); color: #facc15; }
     .cb-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; }
     .cb-btn {
       font-size: 10px; padding: 4px 8px; border-radius: 6px;
@@ -1290,6 +1293,12 @@
       const stockPill = outOfStock
         ? `<span class="cb-pill out-of-stock">${escapeHtml(p.availability)}</span>`
         : '';
+      // Source pill — only show when not from IG catalog (IG is the
+      // implicit default; no point pilling every row with it).
+      let sourcePill = '';
+      if (p.source === 'manual-upload')      sourcePill = '<span class="cb-pill source-manual">Manual</span>';
+      else if (p.source === 'detect-identified') sourcePill = '<span class="cb-pill source-detect">From detect</span>';
+      const draftPill = p.draft ? '<span class="cb-pill draft">Draft</span>' : '';
 
       card.innerHTML = `
         <div class="cb-thumb" style="${p.imageUrl ? `background-image:url('${escapeAttr(p.imageUrl)}')` : ''}"></div>
@@ -1297,7 +1306,7 @@
         <div class="cb-meta">${p.category ? escapeHtml(p.category) : '<em style="color:#444">no category</em>'}</div>
         <div class="flex items-center justify-between gap-2 flex-wrap">
           <span class="cb-price">${escapeHtml(priceStr)}</span>
-          <div class="flex items-center gap-1 flex-wrap">${reviewsLine}${matchPill}${stockPill}</div>
+          <div class="flex items-center gap-1 flex-wrap">${draftPill}${sourcePill}${reviewsLine}${matchPill}${stockPill}</div>
         </div>
         <div class="cb-actions">
           ${p.productUrl ? `<a href="${escapeAttr(p.productUrl)}" target="_blank" rel="noopener" class="cb-btn">View →</a>` : ''}

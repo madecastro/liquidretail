@@ -1,0 +1,30 @@
+{
+  "name": "liquidretail-app",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Reach Social SPA — Chakra UI v2 redesign of the four-page product flow (Brand / Upload / Detect / Ad Generation). Lives alongside client/ during cohabitation; will replace it when feature parity ships.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "type-check": "tsc -b --noEmit"
+  },
+  "dependencies": {
+    "@chakra-ui/react": "^2.10.0",
+    "@emotion/react": "^11.13.0",
+    "@emotion/styled": "^11.13.0",
+    "framer-motion": "^11.11.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.27.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.17",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  }
+}

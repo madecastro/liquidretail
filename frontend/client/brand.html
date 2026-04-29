@@ -277,6 +277,17 @@
         </div>
       </div>
 
+      <div id="autoAddDetectRow" class="mt-4 pt-4 border-t border-[#1f1f1f] flex items-center gap-3 flex-wrap">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="text-white font-semibold text-sm">Auto-add detected products</span>
+            <span id="autoAddStatusPill" class="source-pill source-stub">Off</span>
+          </div>
+          <p class="text-[#888] text-xs mt-1">Confident detect matches (≥85%) automatically create draft catalog rows. Drafts wait in the Drafts queue with the price + URL inline editor — they don't participate in matching until completed.</p>
+        </div>
+        <button id="autoAddToggleBtn" type="button" class="pill-btn">Enable</button>
+      </div>
+
       <div id="catalogBrowserRow" class="hidden mt-4 pt-4 border-t border-[#1f1f1f]">
         <div class="flex items-center gap-2 mb-3 flex-wrap">
           <span class="text-white font-semibold text-sm">Catalog browser</span>
@@ -581,6 +592,9 @@
     const crConfig        = document.getElementById('crConfig');
     const crTemplate      = document.getElementById('crTemplate');
     const crDailyCap      = document.getElementById('crDailyCap');
+    const autoAddDetectRow  = document.getElementById('autoAddDetectRow');
+    const autoAddStatusPill = document.getElementById('autoAddStatusPill');
+    const autoAddToggleBtn  = document.getElementById('autoAddToggleBtn');
     const catalogBrowserRow    = document.getElementById('catalogBrowserRow');
     const catalogBrowserToggle = document.getElementById('catalogBrowserToggle');
     const catalogBrowserBody   = document.getElementById('catalogBrowserBody');
@@ -656,6 +670,7 @@
         loadIgStatus();
         loadMetaAdsStatus();
         loadGoogleAdsStatus();
+        loadUploadSettings();
         // Self-drive polling whenever enrichment is active. Covers
         // both "user clicked refresh" and "page loaded mid-enrichment".
         if (currentBrand.enrichmentStage) ensurePolling();
@@ -1198,6 +1213,53 @@
       if (!Number.isFinite(v) || v < 0) { crDailyCap.value = crState.dailyCap ?? 25; return; }
       try { await patchCommentReply({ dailyCap: v }); }
       catch (err) { alert('Cap update failed: ' + err.message); }
+    });
+
+    // ── Upload-6 — auto-add detected products toggle ───────────────
+    let uploadSettingsState = { autoCreateFromDetect: false };
+
+    async function loadUploadSettings() {
+      if (!currentBrand) return;
+      const id = (currentBrand._id || currentBrand.id);
+      if (!id) return;
+      try {
+        const res = await fetch(`/api/brand/${encodeURIComponent(id)}/upload-settings`);
+        if (!res.ok) return;
+        const data = await res.json();
+        uploadSettingsState = data.uploadSettings || uploadSettingsState;
+        renderAutoAdd();
+      } catch (_) { /* non-fatal */ }
+    }
+
+    function renderAutoAdd() {
+      const on = !!uploadSettingsState.autoCreateFromDetect;
+      autoAddStatusPill.textContent = on ? 'On' : 'Off';
+      autoAddStatusPill.className   = 'source-pill ' + (on ? 'source-curated' : 'source-stub');
+      autoAddToggleBtn.textContent  = on ? 'Disable' : 'Enable';
+    }
+
+    async function patchUploadSettings(body) {
+      const id = (currentBrand._id || currentBrand.id);
+      const res = await fetch(`/api/brand/${encodeURIComponent(id)}/upload-settings`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      uploadSettingsState = data.uploadSettings;
+      renderAutoAdd();
+    }
+
+    autoAddToggleBtn.addEventListener('click', async () => {
+      autoAddToggleBtn.disabled = true;
+      try {
+        await patchUploadSettings({ autoCreateFromDetect: !uploadSettingsState.autoCreateFromDetect });
+      } catch (err) {
+        alert('Auto-add toggle failed: ' + err.message);
+      } finally {
+        autoAddToggleBtn.disabled = false;
+      }
     });
 
     postsSyncBtn.addEventListener('click', async () => {

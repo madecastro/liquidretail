@@ -318,6 +318,16 @@
       transition: background 0.15s;
     }
     .id-cta:hover { background: #274a73; }
+    .id-save-draft-btn {
+      display: inline-flex; align-items: center;
+      background: rgba(250,204,21,0.10); color: #facc15;
+      border: 1px solid rgba(250,204,21,0.25);
+      font-size: 11px; font-weight: 600;
+      padding: 5px 11px; border-radius: 8px; margin-top: 10px;
+      cursor: pointer; transition: background 0.15s;
+    }
+    .id-save-draft-btn:hover:not(:disabled)  { background: rgba(250,204,21,0.18); }
+    .id-save-draft-btn:disabled               { opacity: 0.6; cursor: not-allowed; }
     /* Certainty pill */
     .certainty-pill {
       display: inline-flex; align-items: center; gap: 6px;
@@ -2031,6 +2041,29 @@
     }
   }
 
+  // Upload-7 — POST the latest match as a draft CatalogProduct. Used
+  // by the "Save as draft product" button on the identification card.
+  async function saveDraftProduct(btn) {
+    if (!state.mediaId) return;
+    btn.disabled = true;
+    const orig = btn.textContent.trim();
+    btn.textContent = 'Saving…';
+    try {
+      const res = await fetch(`/api/media/${encodeURIComponent(state.mediaId)}/draft-product`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.reason || data.error || `HTTP ${res.status}`);
+      btn.textContent = `✓ Saved "${data.productName}" as draft`;
+      btn.disabled = true;
+      // No further action — user can click View Drafts to navigate.
+      btn.insertAdjacentHTML('afterend',
+        ' <a href="brand.html" class="text-[#93c5fd] text-xs hover:underline ml-2">View drafts →</a>'
+      );
+    } catch (err) {
+      btn.textContent = '✗ ' + err.message;
+      setTimeout(() => { btn.disabled = false; btn.textContent = orig; }, 3000);
+    }
+  }
+
   function buildIdentificationCard(id) {
     const wrap = document.createElement('div');
     wrap.className = 'mb-4';
@@ -2049,6 +2082,18 @@
              <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
            </svg>
          </a>`
+      : '';
+
+    // Upload-7 — manual "Save as draft product" escape hatch. Only
+    // surfaces when a productName was identified AND the catalog
+    // matcher didn't already win (otherwise the row already exists).
+    const canSaveDraft = !!id.productName
+                       && state.productMatches?.outcome === 'product_match'
+                       && state.productMatches?.winner !== 'catalog';
+    const saveDraftHtml = canSaveDraft
+      ? `<button type="button" class="id-save-draft-btn" data-action="save-draft-product">
+           + Save as draft product
+         </button>`
       : '';
 
     const nameHtml = id.productName
@@ -2071,10 +2116,17 @@
             ${id.details?.price?.display ? `<span class="text-[#34d399] text-sm font-mono font-bold ml-auto">${escapeHtml(id.details.price.display)}</span>` : ''}
           </div>
           ${id.reasoning ? `<div class="id-reasoning">${escapeHtml(id.reasoning)}</div>` : ''}
-          ${ctaHtml}
+          <div class="flex items-center gap-2 flex-wrap">
+            ${ctaHtml}
+            ${saveDraftHtml}
+          </div>
         </div>
       </div>
     `;
+
+    // Wire the save-draft button if present.
+    const saveBtn = wrap.querySelector('[data-action="save-draft-product"]');
+    if (saveBtn) saveBtn.addEventListener('click', () => saveDraftProduct(saveBtn));
 
     // Details section (price comparison + reviews + specs)
     if (id.details) {

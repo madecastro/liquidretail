@@ -1,7 +1,9 @@
-import { Box, Flex, Text, VStack, Badge } from '@chakra-ui/react';
+import { Box, Flex, Text, VStack, Badge, Button, HStack, Avatar } from '@chakra-ui/react';
 import { NavLink } from 'react-router-dom';
 import { STEPS, type StepStatus } from '../routes';
 import { rsGradient } from '../theme/reachSocialTheme';
+import { useAuth } from '../auth/AuthContext';
+import { BrandPicker } from './BrandPicker';
 
 // Fixed 240px left sidebar — Reach Social mark at top, four pipeline
 // steps as nav links with status badges, sign-out at the bottom
@@ -12,6 +14,7 @@ type Props = {
 };
 
 export function Sidebar({ stepStatuses }: Props) {
+  const auth = useAuth();
   return (
     <Flex
       as="aside"
@@ -29,7 +32,13 @@ export function Sidebar({ stepStatuses }: Props) {
     >
       <BrandMark />
 
-      <VStack as="nav" align="stretch" spacing={1} mt={8}>
+      {auth.status === 'authenticated' && (
+        <Box mt={6}>
+          <BrandPicker />
+        </Box>
+      )}
+
+      <VStack as="nav" align="stretch" spacing={1} mt={6}>
         {STEPS.map((step, i) => {
           const status = stepStatuses[step.key] ?? 'pending';
           return (
@@ -41,9 +50,22 @@ export function Sidebar({ stepStatuses }: Props) {
       </VStack>
 
       <Box mt="auto" pt={6} borderTopWidth="1px" borderTopColor="brand.border">
-        <Text fontSize="xs" color="brand.muted">
-          Phase 2 shell — auth + brand picker arrive next.
-        </Text>
+        {auth.status === 'authenticated' ? (
+          <HStack spacing={3}>
+            <Avatar name={auth.user.name} src={auth.user.photo ?? undefined} size="sm" />
+            <Box flex={1} minW={0}>
+              <Text fontSize="sm" fontWeight="700" color="brand.ink" noOfLines={1}>
+                {auth.user.name}
+              </Text>
+              <Text fontSize="xs" color="brand.muted" noOfLines={1}>{auth.user.email}</Text>
+            </Box>
+            <Button onClick={auth.signOut} variant="ghost" size="xs">Sign out</Button>
+          </HStack>
+        ) : auth.status === 'loading' ? (
+          <Text fontSize="xs" color="brand.muted">Loading session…</Text>
+        ) : (
+          <Button onClick={auth.signIn} variant="brand" w="full" size="sm">Sign in</Button>
+        )}
       </Box>
     </Flex>
   );

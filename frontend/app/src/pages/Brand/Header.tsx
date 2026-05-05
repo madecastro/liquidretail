@@ -141,7 +141,7 @@ export function BrandHeader({ brand, edit, onChanged }: Props) {
             <Button
               variant="brand"
               size="sm"
-              onClick={() => navigate(`/ads?brandId=${brand._id}`)}
+              onClick={() => navigate('/generate-ads')}
               leftIcon={<SparklesIcon />}
               isDisabled={isEditing}
             >

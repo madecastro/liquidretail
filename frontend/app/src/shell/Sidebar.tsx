@@ -1,4 +1,4 @@
-import { Box, Flex, Text, VStack, Badge, Button, HStack, Avatar, Divider } from '@chakra-ui/react';
+import { Box, Flex, Image, Text, VStack, Badge, Button, HStack, Avatar, Divider } from '@chakra-ui/react';
 import { NavLink } from 'react-router-dom';
 import { STEPS, SECONDARY_NAV, type StepStatus } from '../routes';
 import { rsGradient } from '../theme/reachSocialTheme';
@@ -83,12 +83,9 @@ export function Sidebar({ stepStatuses }: Props) {
 }
 
 function BrandMark() {
-  // Placeholder mark — replace with the real Reach Social logo asset
-  // when art lands. Gradient block + wordmark keeps the brand voice
-  // visible in the meantime.
   return (
     <Flex align="center" gap={3}>
-      <Box w="36px" h="36px" borderRadius="xl" bgImage={rsGradient} boxShadow="brand" />
+      <Image src="/reach-social-logo.png" alt="Reach Social" w="36px" h="36px" />
       <Box>
         <Text fontWeight="800" color="brand.ink" lineHeight="1.1">Reach Social</Text>
         <Text fontSize="xs" color="brand.muted">AI creative pipeline</Text>

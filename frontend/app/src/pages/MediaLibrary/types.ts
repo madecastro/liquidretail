@@ -160,6 +160,38 @@ export type DetectMatch = {
   enrichmentTiers?: string[];
 };
 
+export type ReadinessReason = {
+  kind:     string;          // 'product_visibility' | 'safe_zones' | etc.
+  label:    string;
+  severity: 'positive' | 'caution' | 'negative';
+};
+
+export type AdSuitability = {
+  score:     number;          // 0..10, 1 decimal
+  reasons:   ReadinessReason[];
+  metrics?:  Record<string, unknown>;
+  updatedAt?: string;
+};
+
+export type TechnicalInsights = {
+  brightnessAvg: number | null;   // 0..1
+  densityAvg:    number | null;   // 0..1
+  focusScore:    number | null;
+  focusBucket:   'Soft' | 'Acceptable' | 'Sharp' | null;
+  updatedAt?:    string;
+};
+
+export type DetectBackground = {
+  description?: string;
+  setting?:     string;
+  palette?:     string[];          // hex strings
+  lighting?:    string;
+  style?:       string;
+  notes?:       string;
+  mood?:        string[];          // Phase A-0
+  sceneType?:   string;            // Phase A-0
+};
+
 export type DetectResult = {
   type:    'image' | 'video';
   imageUrl?: string;
@@ -174,7 +206,7 @@ export type DetectResult = {
   refinedProducts?:  RefinedProduct[];
   subjects?:         Subject[];
   text?:             TextRegion[];
-  background?:       Record<string, unknown> | null;
+  background?:       DetectBackground | null;
   primarySubjectDesc?: string | null;
   safeRect?:         Bbox | null;
   crops?:            Record<string, unknown[]>;
@@ -184,6 +216,12 @@ export type DetectResult = {
   mediaClassification?: { detectSummary?: { outcome?: DetectOutcome } } | null;
   overlayZones?:     Record<string, OverlayZoneVariant[]>;
   mediaSource?:      Record<string, unknown>;
+  // Phase A-0 derived display fields
+  primarySubjectLabel?:   string | null;
+  secondaryElementsTags?: string[];
+  technicalInsights?:     TechnicalInsights | null;
+  adSuitability?:         AdSuitability | null;
+  platformStats?:         { likes?: number; comments?: number; views?: number; shares?: number; saves?: number } | null;
 };
 
 export type DetectDetailResponse = {

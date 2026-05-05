@@ -96,7 +96,11 @@ export function MediaLibraryPage() {
         <Flex direction="column" flex={1} minW={0} minH={0}>
           {selectedRow ? (
             <>
-              <MediaHeader row={selectedRow} />
+              <MediaHeader
+                row={selectedRow}
+                likes={detail.data?.result?.platformStats?.likes ?? null}
+                comments={detail.data?.result?.platformStats?.comments ?? null}
+              />
               <FilterChips active={activeLayers} onToggle={toggleLayer} />
               <Canvas
                 fileUrl={selectedRow.fileUrl}

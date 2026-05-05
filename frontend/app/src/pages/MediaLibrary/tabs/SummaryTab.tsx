@@ -13,8 +13,10 @@ import {
   DrawerBody, DrawerHeader, useDisclosure, Code, Collapse, Icon
 } from '@chakra-ui/react';
 import { useState } from 'react';
-import type { DetectResult, MediaListRow, ReadinessReason } from '../types';
+import type { DetectResult, MediaListRow, ReadinessReason, DetectMatch } from '../types';
 import { matchLevelTone } from '../format';
+import { EvidencePopover } from '../EvidencePopover';
+import { ReviewsSlideOver } from '../ReviewsSlideOver';
 
 type Props = {
   row:    MediaListRow | null;
@@ -178,62 +180,116 @@ function DetectedProductsCard({ detect }: { detect: DetectResult | null }) {
   const matched = (detect?.productMatchesAll || []).filter(m =>
     m.outcome === 'product_match' || m.outcome === 'product_category'
   );
-  return (
-    <Card variant="outline">
-      <CardBody>
-        <HStack justify="space-between" mb={3}>
-          <Heading size="xs">Detected Products</Heading>
-          <Badge fontSize="9px" variant="subtle" colorScheme="gray">{matched.length}</Badge>
-        </HStack>
-        {matched.length === 0 ? (
-          <Text fontSize="xs" color="brand.muted">No product matches yet.</Text>
-        ) : (
-          <VStack align="stretch" spacing={3} divider={<Divider />}>
-            {matched.map((m, i) => {
-              const certainty = m.identification?.certainty ?? 0;
-              const matchTone = matchLevelTone(
-                m.outcome === 'product_match' ? 'high' :
-                m.outcome === 'product_category' ? 'medium' : 'none'
-              );
-              const title = m.catalog?.title || m.identification?.productName || '(unknown)';
-              const breadcrumb = m.categoryDoc?.breadcrumb || m.brandCategory?.breadcrumb || null;
-              const productImg = m.catalog?.imageUrl || null;
-              const agreement  = (m.identification as Record<string, unknown> | null)?.['agreement'] as string | undefined;
+  const reviewsDrawer = useDisclosure();
+  const [reviewMatch, setReviewMatch] = useState<DetectMatch | null>(null);
 
-              return (
-                <HStack key={i} align="flex-start" spacing={3}>
-                  <Box w="48px" h="48px" borderRadius="md" overflow="hidden" bg="gray.100" flexShrink={0}>
-                    {productImg && <Image src={productImg} alt={title} w="100%" h="100%" objectFit="cover" />}
-                  </Box>
-                  <Box flex={1} minW={0}>
-                    <Text fontSize="xs" fontWeight="700" color="brand.ink" noOfLines={1}>{title}</Text>
-                    {breadcrumb && (
-                      <Text fontSize="10px" color="brand.muted" noOfLines={1}>{breadcrumb}</Text>
-                    )}
-                    <HStack mt={1} spacing={2} wrap="wrap">
-                      <Text fontSize="10px" color="brand.muted">{Math.round(certainty * 100)}% match</Text>
-                      <Badge variant="subtle" fontSize="9px" px={1.5} borderRadius="md" style={{ background: matchTone.bg, color: matchTone.fg }}>
-                        {matchTone.label}
-                      </Badge>
-                      {m.matchSource && (
-                        <Badge variant="subtle" fontSize="9px" px={1.5} borderRadius="md" colorScheme="purple">
-                          {m.matchSource}
-                        </Badge>
+  return (
+    <>
+      <Card variant="outline">
+        <CardBody>
+          <HStack justify="space-between" mb={3}>
+            <Heading size="xs">Detected Products</Heading>
+            <Badge fontSize="9px" variant="subtle" colorScheme="gray">{matched.length}</Badge>
+          </HStack>
+          {matched.length === 0 ? (
+            <Text fontSize="xs" color="brand.muted">No product matches yet.</Text>
+          ) : (
+            <VStack align="stretch" spacing={3} divider={<Divider />}>
+              {matched.map((m, i) => {
+                const certainty = m.identification?.certainty ?? 0;
+                const matchTone = matchLevelTone(
+                  m.outcome === 'product_match' ? 'high' :
+                  m.outcome === 'product_category' ? 'medium' : 'none'
+                );
+                const title = m.catalog?.title || m.identification?.productName || '(unknown)';
+                const breadcrumb = m.categoryDoc?.breadcrumb || m.brandCategory?.breadcrumb || null;
+                const productImg = m.catalog?.imageUrl || null;
+                const agreement  = (m.identification as Record<string, unknown> | null)?.['agreement'] as string | undefined;
+
+                return (
+                  <HStack key={i} align="flex-start" spacing={3}>
+                    <Box
+                      w="48px" h="48px"
+                      borderRadius="md"
+                      overflow="hidden"
+                      bg="gray.100"
+                      flexShrink={0}
+                      cursor="pointer"
+                      onClick={() => { setReviewMatch(m); reviewsDrawer.onOpen(); }}
+                      title="View reviews"
+                      _hover={{ outline: '2px solid', outlineColor: 'rsViolet.300' }}
+                    >
+                      {productImg && <Image src={productImg} alt={title} w="100%" h="100%" objectFit="cover" />}
+                    </Box>
+                    <Box flex={1} minW={0}>
+                      <Text
+                        fontSize="xs"
+                        fontWeight="700"
+                        color="brand.ink"
+                        noOfLines={1}
+                        cursor="pointer"
+                        onClick={() => { setReviewMatch(m); reviewsDrawer.onOpen(); }}
+                        _hover={{ color: 'rsViolet.700' }}
+                      >
+                        {title}
+                      </Text>
+                      {breadcrumb && (
+                        <Text fontSize="10px" color="brand.muted" noOfLines={1}>{breadcrumb}</Text>
                       )}
-                      {agreement && (
-                        <Badge variant="outline" fontSize="9px" px={1.5} borderRadius="md">
-                          {agreement}
+                      <HStack mt={1} spacing={2} wrap="wrap">
+                        <Text fontSize="10px" color="brand.muted">{Math.round(certainty * 100)}% match</Text>
+                        <Badge variant="subtle" fontSize="9px" px={1.5} borderRadius="md" style={{ background: matchTone.bg, color: matchTone.fg }}>
+                          {matchTone.label}
                         </Badge>
-                      )}
-                    </HStack>
-                  </Box>
-                </HStack>
-              );
-            })}
-          </VStack>
-        )}
-      </CardBody>
-    </Card>
+                        {m.matchSource && (
+                          <Badge variant="subtle" fontSize="9px" px={1.5} borderRadius="md" colorScheme="purple">
+                            {m.matchSource}
+                          </Badge>
+                        )}
+                        {agreement && (
+                          <EvidencePopover match={m}>
+                            <Badge
+                              variant="outline"
+                              fontSize="9px"
+                              px={1.5}
+                              borderRadius="md"
+                              cursor="pointer"
+                              _hover={{ bg: 'gray.100' }}
+                            >
+                              {agreement} ⓘ
+                            </Badge>
+                          </EvidencePopover>
+                        )}
+                        {!agreement && m.providers && Object.keys(m.providers).length > 0 && (
+                          <EvidencePopover match={m}>
+                            <Badge
+                              variant="outline"
+                              fontSize="9px"
+                              px={1.5}
+                              borderRadius="md"
+                              cursor="pointer"
+                              _hover={{ bg: 'gray.100' }}
+                            >
+                              evidence ⓘ
+                            </Badge>
+                          </EvidencePopover>
+                        )}
+                      </HStack>
+                    </Box>
+                  </HStack>
+                );
+              })}
+            </VStack>
+          )}
+        </CardBody>
+      </Card>
+
+      <ReviewsSlideOver
+        isOpen={reviewsDrawer.isOpen}
+        onClose={reviewsDrawer.onClose}
+        match={reviewMatch}
+      />
+    </>
   );
 }
 

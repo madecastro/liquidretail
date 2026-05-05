@@ -129,6 +129,40 @@ export type OverlayZoneVariant = {
   analysis:     OverlayZoneAnalysis | null;
 };
 
+export type ProviderMatch = {
+  title?:    string;
+  url?:      string;
+  retailer?: string;
+  snippet?:  string;
+  thumbnail?: string | null;
+  priceHint?: string | null;
+  source?:   string;
+  weight?:   string;
+};
+
+export type ProviderEntry = {
+  provider:    string;
+  reasoning?:  string;
+  queryUsed?:  string;
+  matches?:    ProviderMatch[];
+  groundingUrls?: string[];
+};
+
+export type ReviewQuote = {
+  text:    string;
+  author?: string | null;
+  source?: string | null;
+};
+
+export type ReviewBlock = {
+  quotes?:      ReviewQuote[];
+  rating?:      number | null;
+  reviewCount?: number | null;
+  summary?:     string | null;
+  sources?:     string[];
+  fetchedAt?:   string;
+} | null;
+
 export type DetectMatch = {
   refinedProductId?: string | null;
   productIndex?:     string | null;
@@ -141,6 +175,10 @@ export type DetectMatch = {
     certainty?:      number;
     certaintyLabel?: string;
     reasoning?:      string;
+    primaryUrl?:     string | null;
+    primaryRetailer?: string | null;
+    primaryThumbnail?: string | null;
+    evidenceUrls?:   ProviderMatch[];
   } | null;
   catalog?: {
     title?:        string;
@@ -149,15 +187,22 @@ export type DetectMatch = {
     category?:     string;
     price?:        number | null;
     currency?:     string | null;
+    productReviews?: ReviewBlock;
   } | null;
   categoryDoc?: {
     breadcrumb?: string;
     url?:        string | null;
+    categoryReviews?: ReviewBlock;
   } | null;
   catalogVisualScore?:   number | null;
   catalogCombinedScore?: number | null;
   brandCategory?: { breadcrumb?: string; url?: string } | null;
+  brandReviews?:    ReviewBlock;
+  productReviews?:  ReviewBlock;
+  categoryReviews?: ReviewBlock;
   enrichmentTiers?: string[];
+  // Phase A-3 — provider evidence for the EvidencePopover drill-in
+  providers?: Record<string, ProviderEntry>;
 };
 
 export type ReadinessReason = {

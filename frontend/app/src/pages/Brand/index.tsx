@@ -23,9 +23,10 @@ import { VisualIdentityCard } from './VisualIdentityCard';
 import { AudiencePersonasCard } from './AudiencePersonasCard';
 import { IntegrationsCard } from './IntegrationsCard';
 import { AutomationEngineCard } from './AutomationEngineCard';
+import { BrandSafetyCard } from './BrandSafetyCard';
+import { PreviewCard } from './PreviewCard';
 import { DangerZone } from './DangerZone';
 import { SaveBar } from './SaveBar';
-import { PlaceholderCard } from './PlaceholderCard';
 
 export function BrandPage() {
   const { brand, loading, error, refresh } = useBrandDetail();
@@ -68,24 +69,14 @@ export function BrandPage() {
 
         <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={5}>
           <AutomationEngineCard brand={brand} onChanged={refresh} />
-          <PlaceholderCard
-            title="Brand Safety"
-            phase="Phase 4d"
-            iconColor="#DC2626"
-            description="Risk Score gauge (0-100) · Category · Blocked Topics. NEW concept — needs schema additions on Brand.brandSafety { riskScore, category, blockedTopics[], adjustedAt } before the UI can wire."
-          />
+          <BrandSafetyCard brand={brand} onChanged={refresh} />
         </SimpleGrid>
 
         <BrandVoiceCard brand={brand} edit={edit} />
 
         <SimpleGrid columns={{ base: 1, lg: 3 }} spacing={5}>
           <VisualIdentityCard brand={brand} edit={edit} />
-          <PlaceholderCard
-            title="Preview"
-            phase="Phase 4d"
-            iconColor="#16B8D8"
-            description="Carousel of sample ad creatives rendered with this brand applied. Backend prereq: a /api/brand/:id/preview endpoint that returns 3-4 layout-input previews using a representative Media."
-          />
+          <PreviewCard brand={brand} />
           <AudiencePersonasCard brand={brand} edit={edit} />
         </SimpleGrid>
 

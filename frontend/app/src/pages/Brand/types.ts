@@ -60,6 +60,15 @@ export type Brand = {
   enrichedAt?:       string;
   curatedFields?:    string[];
 
+  // Phase 4d — Brand Safety operator config
+  brandSafety?: {
+    riskScore?:     number | null;
+    category?:      string | null;
+    blockedTopics?: string[];
+    adjustedAt?:    string | null;
+    adjustedBy?:    string | null;
+  } | null;
+
   // Settings
   syncSettings?: {
     autoSyncEnabled?:    boolean;

@@ -22,7 +22,25 @@ type AuthContextValue = AuthState & {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const LOGIN_URL = '/login.html';
+// Initiate Google OAuth directly via the backend (proxied through
+// Netlify's /auth/* rule). The `redirect` param tells the backend
+// to bounce the post-auth #token=... payload back to OUR origin
+// rather than the default FRONTEND_URL — needed during cohabitation
+// where the new Chakra app and the legacy app live on different
+// hostnames. Backend allowlist-validates the origin.
+function buildLoginUrl(): string {
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  return origin
+    ? `/auth/google?redirect=${encodeURIComponent(origin)}`
+    : '/auth/google';
+}
+function buildLogoutLandingUrl(): string {
+  // Keep the legacy /login.html for the post-logout screen. Netlify's
+  // SPA fallback returns index.html which our AuthProvider then
+  // re-renders as the unauthenticated gate. Same UX, no missing-page
+  // 404 noise in the network tab.
+  return '/';
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({ status: 'loading' });
@@ -59,10 +77,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AuthContextValue>(() => ({
     ...state,
-    signIn:  () => { window.location.assign(LOGIN_URL); },
+    signIn:  () => { window.location.assign(buildLoginUrl()); },
     signOut: () => {
       clearAuth();
-      window.location.assign(LOGIN_URL);
+      window.location.assign(buildLogoutLandingUrl());
     }
   }), [state]);
 

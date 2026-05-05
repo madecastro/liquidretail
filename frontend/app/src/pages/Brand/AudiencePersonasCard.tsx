@@ -1,15 +1,21 @@
 // Phase 4a — Audience Personas (display only).
 // Phase 4b — adds inline edit: each persona row becomes editable
 // (name + description + interests + painPoints + toneHint), with
-// add/remove buttons. Avatar generation (#24 backlog) deferred.
+// add/remove buttons.
+// Phase 4 follow-up #6 — avatar generation. Each persona row in edit
+// mode gets a "Generate avatar" button that calls the backend
+// /api/brand/:id/personas/:index/avatar endpoint to produce a portrait
+// illustration via gpt-image-1; the URL is persisted on
+// demographics[i].avatarUrl and rendered in place of the generic icon.
 
 import {
-  Card, CardBody, VStack, HStack, Box, Text, Heading, Button, Icon,
-  Input, Textarea, IconButton, Wrap, WrapItem, Badge
+  Card, CardBody, VStack, HStack, Box, Text, Heading, Button, Icon, Image,
+  Input, Textarea, IconButton, Wrap, WrapItem, Badge, Spinner, useToast
 } from '@chakra-ui/react';
 import { useState } from 'react';
 import type { Brand, BrandDemographic } from './types';
 import type { BrandEdit } from './useBrandEdit';
+import { apiJson } from '../../auth/apiFetch';
 
 const PERSONA_TONES = [
   { bg: 'rgba(122,53,232,0.10)',  fg: '#6B21A8' },
@@ -21,9 +27,9 @@ const PERSONA_TONES = [
 ];
 
 export function AudiencePersonasCard({ brand, edit }: { brand: Brand; edit: BrandEdit }) {
-  void brand;       // read via edit.valueOf so the editor sees draft
   const personas = ((edit.valueOf('demographics') || []) as BrandDemographic[]).slice(0, 6);
   const isEditing = edit.isEditing;
+  const brandId = brand._id;
 
   return (
     <Card variant="outline" h="100%">
@@ -52,8 +58,11 @@ export function AudiencePersonasCard({ brand, edit }: { brand: Brand; edit: Bran
                 persona={p}
                 tone={PERSONA_TONES[i % PERSONA_TONES.length]}
                 isEditing={isEditing}
+                brandId={brandId}
+                isDirty={edit.dirty}
                 onSet={(next) => edit.setDemographic(i, next)}
                 onRemove={() => edit.removeDemographic(i)}
+                onAvatarGenerated={(url) => edit.setDemographic(i, { ...p, avatarUrl: url })}
               />
             ))}
           </VStack>
@@ -64,21 +73,63 @@ export function AudiencePersonasCard({ brand, edit }: { brand: Brand; edit: Bran
 }
 
 function PersonaRow({
-  index, persona, tone, isEditing, onSet, onRemove
+  index, persona, tone, isEditing, brandId, isDirty, onSet, onRemove, onAvatarGenerated
 }: {
   index: number;
   persona: BrandDemographic;
   tone: { bg: string; fg: string };
   isEditing: boolean;
+  brandId: string;
+  isDirty: boolean;
   onSet: (persona: BrandDemographic) => void;
   onRemove: () => void;
+  onAvatarGenerated: (url: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const toast = useToast();
+
+  // Generation requires the persona to be persisted server-side at the
+  // given index — we PATCH avatarUrl onto demographics[i] in place. If
+  // the operator is mid-edit with unsaved changes, the index they see
+  // may not match what the server has. Block until they save.
+  const canGenerate = !!persona.name?.trim() || !!persona.description?.trim();
+  const generateAvatar = async () => {
+    if (!canGenerate || generating) return;
+    if (isDirty) {
+      toast({
+        title: 'Save changes first',
+        description: 'Avatar generation patches the saved persona at this index. Save the brand, then generate.',
+        status: 'info',
+        duration: 4000
+      });
+      return;
+    }
+    setGenerating(true);
+    try {
+      const res = await apiJson<{ avatarUrl: string }>(`/api/brand/${brandId}/personas/${index}/avatar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      onAvatarGenerated(res.avatarUrl);
+      toast({ title: 'Avatar generated', status: 'success', duration: 2500 });
+    } catch (err: unknown) {
+      toast({
+        title: 'Avatar generation failed',
+        description: err instanceof Error ? err.message : 'Unknown error',
+        status: 'error',
+        duration: 5000
+      });
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   if (!isEditing) {
     return (
       <HStack align="flex-start" spacing={3}>
-        <PersonaTile tone={tone} />
+        <PersonaTile tone={tone} avatarUrl={persona.avatarUrl} name={persona.name} />
         <Box flex={1} minW={0}>
           <Text fontSize="sm" fontWeight="700" color="brand.ink" noOfLines={1}>
             {persona.name || '(unnamed persona)'}
@@ -96,7 +147,22 @@ function PersonaRow({
   return (
     <Box borderWidth="1px" borderColor="brand.border" borderRadius="md" p={3}>
       <HStack align="flex-start" spacing={3}>
-        <PersonaTile tone={tone} />
+        <VStack spacing={1.5} align="center">
+          <PersonaTile tone={tone} avatarUrl={persona.avatarUrl} name={persona.name} generating={generating} />
+          <Button
+            size="xs"
+            variant="ghost"
+            onClick={generateAvatar}
+            isDisabled={!canGenerate || generating}
+            isLoading={generating}
+            loadingText="…"
+            fontSize="10px"
+            px={1.5}
+            h="22px"
+          >
+            {persona.avatarUrl ? 'Regenerate' : 'Generate'}
+          </Button>
+        </VStack>
         <VStack flex={1} align="stretch" spacing={2} minW={0}>
           <HStack>
             <Input
@@ -154,7 +220,36 @@ function PersonaRow({
   );
 }
 
-function PersonaTile({ tone }: { tone: { bg: string; fg: string } }) {
+function PersonaTile({
+  tone, avatarUrl, name, generating
+}: {
+  tone: { bg: string; fg: string };
+  avatarUrl?: string;
+  name?: string;
+  generating?: boolean;
+}) {
+  if (generating) {
+    return (
+      <Box w="40px" h="40px" flexShrink={0} borderRadius="md" bg={tone.bg} display="flex" alignItems="center" justifyContent="center">
+        <Spinner size="sm" color={tone.fg} />
+      </Box>
+    );
+  }
+  if (avatarUrl) {
+    return (
+      <Image
+        src={avatarUrl}
+        alt={name ? `${name} avatar` : 'Persona avatar'}
+        w="40px" h="40px"
+        flexShrink={0}
+        borderRadius="md"
+        objectFit="cover"
+        fallback={
+          <Box w="40px" h="40px" flexShrink={0} borderRadius="md" bg={tone.bg} />
+        }
+      />
+    );
+  }
   return (
     <Box
       w="40px" h="40px"

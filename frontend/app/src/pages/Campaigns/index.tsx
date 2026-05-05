@@ -13,6 +13,23 @@ import { Link as RouterLink } from 'react-router-dom';
 import { PageHeader } from '../../shell/PageHeader';
 import { apiJson } from '../../auth/apiFetch';
 
+export type CampaignInsights = {
+  impressions:           number | null;
+  reach:                 number | null;
+  clicks:                number | null;
+  ctr:                   number | null;
+  cpcMicros:             number | null;
+  cpmMicros:             number | null;
+  spendMicros:           number | null;
+  frequency:             number | null;
+  conversions:           number | null;
+  conversionValueMicros: number | null;
+  videoViews:            number | null;
+  currency:              string | null;
+  rangeDays:             number | null;
+  fetchedAt:             string | null;
+};
+
 type Campaign = {
   id:            string;
   platform:      'meta-ads' | 'google-ads' | string;
@@ -26,6 +43,7 @@ type Campaign = {
   matchedProductCount: number;
   adSetCount:    number;
   adCount:       number;
+  insights:      CampaignInsights | null;
   lastSyncedAt:  string | null;
 };
 
@@ -212,6 +230,7 @@ function CampaignRow({ campaign: c }: { campaign: Campaign }) {
                 </>
               )}
             </HStack>
+            {c.insights && <InsightsRow insights={c.insights} fallbackCurrency={c.budget?.currency || null} />}
           </Box>
           <Button
             as={RouterLink}
@@ -226,6 +245,57 @@ function CampaignRow({ campaign: c }: { campaign: Campaign }) {
       </CardBody>
     </Card>
   );
+}
+
+function InsightsRow({ insights, fallbackCurrency }: { insights: CampaignInsights; fallbackCurrency: string | null }) {
+  const cur = insights.currency || fallbackCurrency || 'USD';
+  const cells: Array<{ label: string; value: string | null }> = [
+    { label: 'Spend',       value: formatMicrosCurrency(insights.spendMicros, cur) },
+    { label: 'Impressions', value: formatCompact(insights.impressions) },
+    { label: 'Clicks',      value: formatCompact(insights.clicks) },
+    { label: 'CTR',         value: formatPercent(insights.ctr) },
+    { label: 'CPC',         value: formatMicrosCurrency(insights.cpcMicros, cur) },
+    { label: 'Conv.',       value: formatCompact(insights.conversions) }
+  ];
+  const present = cells.filter(c => c.value);
+  if (present.length === 0) return null;
+  return (
+    <HStack spacing={4} mt={2.5} pt={2} borderTopWidth="1px" borderTopColor="brand.border" wrap="wrap">
+      {present.map(c => (
+        <Box key={c.label} minW="50px">
+          <Text fontSize="9px" color="brand.muted" textTransform="uppercase" letterSpacing="0.04em">{c.label}</Text>
+          <Text fontSize="sm" fontWeight="700" color="brand.ink">{c.value}</Text>
+        </Box>
+      ))}
+    </HStack>
+  );
+}
+
+function formatMicrosCurrency(micros: number | null | undefined, currency: string | null | undefined): string | null {
+  if (micros == null || !Number.isFinite(micros)) return null;
+  const amount = micros / 1_000_000;
+  const cur = currency || 'USD';
+  try {
+    const opts: Intl.NumberFormatOptions = amount >= 1000
+      ? { style: 'currency', currency: cur, maximumFractionDigits: 0 }
+      : { style: 'currency', currency: cur, maximumFractionDigits: 2 };
+    return new Intl.NumberFormat('en-US', opts).format(amount);
+  } catch {
+    return `${amount.toFixed(2)} ${cur}`;
+  }
+}
+
+function formatCompact(n: number | null | undefined): string | null {
+  if (n == null || !Number.isFinite(n)) return null;
+  if (n < 1000) return String(Math.round(n));
+  if (n < 1_000_000)     return `${(n / 1000).toFixed(n < 10000 ? 1 : 0)}k`;
+  if (n < 1_000_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  return `${(n / 1_000_000_000).toFixed(1)}B`;
+}
+
+function formatPercent(fraction: number | null | undefined): string | null {
+  if (fraction == null || !Number.isFinite(fraction)) return null;
+  return `${(fraction * 100).toFixed(2)}%`;
 }
 
 function formatBudget(micros: number | null | undefined, currency: string | null | undefined): string | null {

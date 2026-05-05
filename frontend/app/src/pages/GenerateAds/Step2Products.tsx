@@ -52,8 +52,26 @@ type CampaignMeta = {
   productSetIds:   string[];
   adSetCount:      number;
   adCount:         number;
+  insights:        CampaignInsights | null;
   lastSyncedAt:    string | null;
   sampleCreatives: Creative[];
+};
+
+type CampaignInsights = {
+  impressions:           number | null;
+  reach:                 number | null;
+  clicks:                number | null;
+  ctr:                   number | null;
+  cpcMicros:             number | null;
+  cpmMicros:             number | null;
+  spendMicros:           number | null;
+  frequency:             number | null;
+  conversions:           number | null;
+  conversionValueMicros: number | null;
+  videoViews:            number | null;
+  currency:              string | null;
+  rangeDays:             number | null;
+  fetchedAt:             string | null;
 };
 
 type Creative = {
@@ -233,6 +251,8 @@ function CampaignSummaryCard({ campaign }: { campaign: CampaignMeta }) {
             <KV label="Ads"      value={`${campaign.adCount} (${campaign.adSetCount} ad set${campaign.adSetCount === 1 ? '' : 's'})`} />
           </SimpleGrid>
 
+          {campaign.insights && <CampaignInsightsRow insights={campaign.insights} fallbackCurrency={campaign.budget?.currency || null} />}
+
           {t && (t.geo.length > 0 || ageRange || t.interests.length > 0 || t.audiences.length > 0 || t.devices.length > 0) && (
             <>
               <Divider />
@@ -271,6 +291,37 @@ function CampaignSummaryCard({ campaign }: { campaign: CampaignMeta }) {
         </VStack>
       </CardBody>
     </Card>
+  );
+}
+
+function CampaignInsightsRow({ insights, fallbackCurrency }: { insights: CampaignInsights; fallbackCurrency: string | null }) {
+  const cur = insights.currency || fallbackCurrency || 'USD';
+  const cells: Array<{ label: string; value: string | null }> = [
+    { label: 'Spend',       value: formatMicrosCurrency(insights.spendMicros, cur) },
+    { label: 'Impressions', value: formatCompact(insights.impressions) },
+    { label: 'Reach',       value: formatCompact(insights.reach) },
+    { label: 'Clicks',      value: formatCompact(insights.clicks) },
+    { label: 'CTR',         value: formatPercent(insights.ctr) },
+    { label: 'CPC',         value: formatMicrosCurrency(insights.cpcMicros, cur) },
+    { label: 'CPM',         value: formatMicrosCurrency(insights.cpmMicros, cur) },
+    { label: 'Conversions', value: formatCompact(insights.conversions) }
+  ];
+  const present = cells.filter(c => c.value);
+  if (present.length === 0) return null;
+  return (
+    <Box>
+      <Text fontSize="xs" fontWeight="700" color="brand.muted" textTransform="uppercase" letterSpacing="0.04em" mb={1.5}>
+        Performance {insights.rangeDays ? `(last ${insights.rangeDays}d)` : '(lifetime)'}
+      </Text>
+      <SimpleGrid columns={{ base: 2, md: 4 }} spacing={3}>
+        {present.map(c => (
+          <Box key={c.label}>
+            <Text fontSize="9px" color="brand.muted" textTransform="uppercase" letterSpacing="0.04em">{c.label}</Text>
+            <Text fontSize="md" fontWeight="800" color="brand.ink">{c.value}</Text>
+          </Box>
+        ))}
+      </SimpleGrid>
+    </Box>
   );
 }
 
@@ -565,6 +616,33 @@ function NoMatchesFallback() {
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────
+
+function formatMicrosCurrency(micros: number | null | undefined, currency: string | null | undefined): string | null {
+  if (micros == null || !Number.isFinite(micros)) return null;
+  const amount = micros / 1_000_000;
+  const cur = currency || 'USD';
+  try {
+    const opts: Intl.NumberFormatOptions = amount >= 1000
+      ? { style: 'currency', currency: cur, maximumFractionDigits: 0 }
+      : { style: 'currency', currency: cur, maximumFractionDigits: 2 };
+    return new Intl.NumberFormat('en-US', opts).format(amount);
+  } catch {
+    return `${amount.toFixed(2)} ${cur}`;
+  }
+}
+
+function formatCompact(n: number | null | undefined): string | null {
+  if (n == null || !Number.isFinite(n)) return null;
+  if (n < 1000) return String(Math.round(n));
+  if (n < 1_000_000)     return `${(n / 1000).toFixed(n < 10000 ? 1 : 0)}k`;
+  if (n < 1_000_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  return `${(n / 1_000_000_000).toFixed(1)}B`;
+}
+
+function formatPercent(fraction: number | null | undefined): string | null {
+  if (fraction == null || !Number.isFinite(fraction)) return null;
+  return `${(fraction * 100).toFixed(2)}%`;
+}
 
 function formatBudget(micros: number | null | undefined, currency: string | null | undefined): string | null {
   if (!micros || !Number.isFinite(micros)) return null;

@@ -110,15 +110,27 @@ export type CatalogDetail = {
   lastSyncedAt?: string;
 };
 
+export type PlatformStats = {
+  views?:      number | null;
+  likes?:      number | null;
+  comments?:   number | null;
+  shares?:     number | null;
+  saves?:      number | null;
+  reach?:      number | null;
+  engagement?: number | null;
+  fetchedAt?:  string | null;
+};
+
 export type SourceMediaRef = {
-  id:        string;
-  externalId: string;
-  fileType:  'image' | 'video';
-  fileUrl:   string;
-  fileName?: string;
-  source:    string;
-  permalink: string | null;
-  createdAt: string;
+  id:             string;
+  externalId:     string;
+  fileType:       'image' | 'video';
+  fileUrl:        string;
+  fileName?:      string;
+  source:         string;
+  permalink:      string | null;
+  createdAt:      string;
+  platformStats?: PlatformStats | null;
 } | null;
 
 export type CatalogDetailResponse = {

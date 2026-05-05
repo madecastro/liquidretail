@@ -12,7 +12,7 @@ import {
   Box, Tabs, TabList, Tab, TabPanels, TabPanel, VStack, HStack, Text, Badge,
   Card, CardBody, Heading, Image, Divider, Icon, Link
 } from '@chakra-ui/react';
-import type { CatalogDetail, CatalogMatchRow, SourceMediaRef, CatalogReviewRow, CatalogSeller, CatalogReviewQuote } from './types';
+import type { CatalogDetail, CatalogMatchRow, SourceMediaRef, CatalogReviewRow, CatalogSeller, CatalogReviewQuote, PlatformStats } from './types';
 import { sourceTone, formatPrice, timeAgo, compactNumber } from './format';
 
 type Props = {
@@ -115,6 +115,7 @@ function SummaryTab({ product, sourceMedia }: { product: CatalogDetail | null; s
                 </Link>
               </Box>
             </HStack>
+            <PlatformStatsRow stats={sourceMedia.platformStats || null} />
           </CardBody>
         </Card>
       )}
@@ -125,6 +126,37 @@ function SummaryTab({ product, sourceMedia }: { product: CatalogDetail | null; s
         </Text>
       )}
     </VStack>
+  );
+}
+
+function PlatformStatsRow({ stats }: { stats: PlatformStats | null }) {
+  if (!stats) return null;
+  const cells: Array<{ label: string; value: number | null | undefined }> = [
+    { label: 'Likes',      value: stats.likes },
+    { label: 'Comments',   value: stats.comments },
+    { label: 'Views',      value: stats.views },
+    { label: 'Reach',      value: stats.reach },
+    { label: 'Saves',      value: stats.saves },
+    { label: 'Engagement', value: stats.engagement }
+  ];
+  const present = cells.filter(c => typeof c.value === 'number');
+  if (present.length === 0) return null;
+  return (
+    <Box mt={3} pt={3} borderTopWidth="1px" borderTopColor="brand.border">
+      <HStack spacing={3} wrap="wrap">
+        {present.map(c => (
+          <Box key={c.label} minW="56px">
+            <Text fontSize="10px" color="brand.muted" textTransform="uppercase" letterSpacing="0.04em">{c.label}</Text>
+            <Text fontSize="sm" fontWeight="700" color="brand.ink">{compactNumber(c.value as number)}</Text>
+          </Box>
+        ))}
+      </HStack>
+      {stats.fetchedAt && (
+        <Text fontSize="9px" color="brand.muted" mt={1.5}>
+          Updated {timeAgo(stats.fetchedAt)}
+        </Text>
+      )}
+    </Box>
   );
 }
 

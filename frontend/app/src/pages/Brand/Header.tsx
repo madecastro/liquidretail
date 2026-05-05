@@ -1,19 +1,22 @@
 // Phase 4a — Brand page top header card.
-// Logo · name · status pill · website · tagline · timestamps · 3 CTAs.
+// Phase 4b — Edit Brand toggles edit mode; tagline + website become
+// inputs; Refresh AI fires the existing background-enrichment endpoint.
 
-import { Box, HStack, VStack, Text, Image, Badge, Button, Link, Card, CardBody, Icon, Heading } from '@chakra-ui/react';
+import { Box, HStack, VStack, Text, Image, Badge, Button, Link, Card, CardBody, Icon, Heading, Input } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { apiJson } from '../../auth/apiFetch';
 import { useState } from 'react';
 import { useToast } from '@chakra-ui/react';
 import type { Brand } from './types';
+import type { BrandEdit } from './useBrandEdit';
 
 type Props = {
   brand:     Brand;
+  edit:      BrandEdit;
   onChanged: () => void;
 };
 
-export function BrandHeader({ brand, onChanged }: Props) {
+export function BrandHeader({ brand, edit, onChanged }: Props) {
   const navigate = useNavigate();
   const toast    = useToast();
   const [refreshing, setRefreshing] = useState(false);
@@ -22,6 +25,10 @@ export function BrandHeader({ brand, onChanged }: Props) {
   const sourceTone  = brand.source === 'curated' ? 'purple'
                     : brand.source === 'enriched' ? 'green'
                     :                               'gray';
+
+  const isEditing  = edit.isEditing;
+  const websiteUrl = (edit.valueOf('websiteUrl') as string | null) ?? '';
+  const tagline    = (edit.valueOf('tagline')    as string | null) ?? '';
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -79,17 +86,39 @@ export function BrandHeader({ brand, onChanged }: Props) {
               </Badge>
             </HStack>
 
-            {brand.websiteUrl && (
-              <Link href={brand.websiteUrl} isExternal fontSize="sm" color="rsViolet.700" display="inline-flex" alignItems="center">
-                {brand.websiteUrl}
-                <ExternalIcon />
-              </Link>
+            {isEditing ? (
+              <Input
+                size="sm"
+                value={websiteUrl}
+                onChange={e => edit.setField('websiteUrl', e.target.value || null)}
+                placeholder="https://example.com"
+                fontSize="sm"
+                color="rsViolet.700"
+              />
+            ) : (
+              brand.websiteUrl && (
+                <Link href={brand.websiteUrl} isExternal fontSize="sm" color="rsViolet.700" display="inline-flex" alignItems="center">
+                  {brand.websiteUrl}
+                  <ExternalIcon />
+                </Link>
+              )
             )}
 
-            {brand.tagline && (
-              <Text fontSize="md" color="brand.muted" fontStyle="italic" noOfLines={2}>
-                "{brand.tagline}"
-              </Text>
+            {isEditing ? (
+              <Input
+                size="sm"
+                value={tagline}
+                onChange={e => edit.setField('tagline', e.target.value || null)}
+                placeholder='Tagline — e.g. "The perfect combination of heat & flavor."'
+                fontSize="md"
+                fontStyle="italic"
+              />
+            ) : (
+              brand.tagline && (
+                <Text fontSize="md" color="brand.muted" fontStyle="italic" noOfLines={2}>
+                  "{brand.tagline}"
+                </Text>
+              )
             )}
 
             <HStack spacing={4} mt={1} flexWrap="wrap">
@@ -114,6 +143,7 @@ export function BrandHeader({ brand, onChanged }: Props) {
               size="sm"
               onClick={() => navigate(`/ads?brandId=${brand._id}`)}
               leftIcon={<SparklesIcon />}
+              isDisabled={isEditing}
             >
               Generate Ads
             </Button>
@@ -122,19 +152,30 @@ export function BrandHeader({ brand, onChanged }: Props) {
               size="sm"
               onClick={handleRefresh}
               isLoading={refreshing}
+              isDisabled={isEditing}
               leftIcon={<RefreshIcon />}
             >
               Refresh AI
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              isDisabled
-              leftIcon={<EditIcon />}
-              title="Edit mode lands in Phase 4b"
-            >
-              Edit Brand
-            </Button>
+            {isEditing ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={edit.cancelEdit}
+                leftIcon={<EditIcon />}
+              >
+                Cancel Edit
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={edit.enterEdit}
+                leftIcon={<EditIcon />}
+              >
+                Edit Brand
+              </Button>
+            )}
           </VStack>
         </HStack>
       </CardBody>

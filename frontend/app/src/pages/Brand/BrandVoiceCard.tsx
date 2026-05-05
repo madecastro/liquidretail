@@ -1,19 +1,29 @@
 // Phase 4a — Brand Voice Profile (read-only display).
-// Tone, hashtags, brand summary, tags, keywords (we fold "keywords"
-// into our tags array since the schema has one tag list, not two).
+// Phase 4b — adds inline edit mode: tone/hashtags/tags become chip
+// add/remove with an inline input; brand summary becomes a textarea.
 //
-// Phase 4b will add inline edit + Regenerate-with-AI wiring.
+// Read mode + edit mode share the same card; we toggle the inner
+// renderers based on edit.isEditing. Pill-overflow ("+N") is only
+// shown in read mode — edit mode lists every chip so the user can
+// remove any of them.
 
-import { Card, CardBody, HStack, VStack, Text, Heading, Badge, Wrap, WrapItem, Box, Icon, Button } from '@chakra-ui/react';
+import { useState } from 'react';
+import {
+  Card, CardBody, HStack, VStack, Text, Heading, Badge, Wrap, WrapItem,
+  Box, Icon, Button, Input, Textarea, IconButton
+} from '@chakra-ui/react';
 import type { Brand } from './types';
+import type { BrandEdit } from './useBrandEdit';
 
-const PILL_PREVIEW_COUNT = 5;     // chips before showing "+N more"
+const PILL_PREVIEW_COUNT = 5;
 
-export function BrandVoiceCard({ brand }: { brand: Brand }) {
-  const tone     = brand.tone     || [];
-  const hashtags = brand.hashtags || [];
-  const tags     = brand.tags     || [];
-  const summary  = brand.summary  || '';
+export function BrandVoiceCard({ brand, edit }: { brand: Brand; edit: BrandEdit }) {
+  void brand;        // brand is read via edit.valueOf so the editor sees the draft
+  const tone     = (edit.valueOf('tone')     || []) as string[];
+  const hashtags = (edit.valueOf('hashtags') || []) as string[];
+  const tags     = (edit.valueOf('tags')     || []) as string[];
+  const summary  = (edit.valueOf('summary')  || '') as string;
+  const isEditing = edit.isEditing;
 
   return (
     <Card variant="outline">
@@ -26,7 +36,13 @@ export function BrandVoiceCard({ brand }: { brand: Brand }) {
               AI Generated
             </Badge>
           </HStack>
-          <Button size="xs" variant="outline" leftIcon={<SparkleIcon />} isDisabled title="Inline regenerate lands in Phase 4b">
+          <Button
+            size="xs"
+            variant="outline"
+            leftIcon={<SparkleIcon />}
+            isDisabled
+            title="Regenerate-with-AI ships in a follow-up — wire to /api/brand/:id/refresh-enrichment with field-scoped reset"
+          >
             Regenerate with AI
           </Button>
         </HStack>
@@ -34,29 +50,45 @@ export function BrandVoiceCard({ brand }: { brand: Brand }) {
         <HStack align="flex-start" spacing={8}>
           <VStack align="stretch" flex={1} spacing={5} minW={0}>
             <FieldBlock label="Tone of Voice">
-              {tone.length === 0
-                ? <EmptyHint text="Tone descriptors will appear once the brand is enriched." />
-                : <ChipRow items={tone} colorScheme="orange" />}
+              {isEditing
+                ? <ChipEditor items={tone} colorScheme="orange" placeholder="add a tone descriptor" onAdd={v => edit.addToArrayField('tone', v)} onRemove={v => edit.removeFromArrayField('tone', v)} />
+                : tone.length === 0
+                  ? <EmptyHint text="Tone descriptors will appear once the brand is enriched." />
+                  : <ChipRow items={tone} colorScheme="orange" />}
             </FieldBlock>
 
             <FieldBlock label="Brand Summary">
-              {summary
-                ? <Text fontSize="sm" color="brand.ink" lineHeight="1.55">{summary}</Text>
-                : <EmptyHint text="Brand summary populates after enrichment." />}
+              {isEditing ? (
+                <Textarea
+                  value={summary}
+                  onChange={e => edit.setField('summary', e.target.value)}
+                  placeholder="2–4 sentences describing who the brand is, what they make, and what makes them distinct."
+                  size="sm"
+                  rows={5}
+                />
+              ) : (
+                summary
+                  ? <Text fontSize="sm" color="brand.ink" lineHeight="1.55">{summary}</Text>
+                  : <EmptyHint text="Brand summary populates after enrichment." />
+              )}
             </FieldBlock>
           </VStack>
 
           <VStack align="stretch" flex={1} spacing={5} minW={0}>
             <FieldBlock label="Hashtags">
-              {hashtags.length === 0
-                ? <EmptyHint text="Hashtags populate during enrichment." />
-                : <ChipRow items={hashtags} colorScheme="purple" preview={PILL_PREVIEW_COUNT} />}
+              {isEditing
+                ? <ChipEditor items={hashtags} colorScheme="purple" placeholder="add a hashtag (with or without #)" onAdd={v => edit.addToArrayField('hashtags', normalizeHashtag(v))} onRemove={v => edit.removeFromArrayField('hashtags', v)} />
+                : hashtags.length === 0
+                  ? <EmptyHint text="Hashtags populate during enrichment." />
+                  : <ChipRow items={hashtags} colorScheme="purple" preview={PILL_PREVIEW_COUNT} />}
             </FieldBlock>
 
             <FieldBlock label="Tags">
-              {tags.length === 0
-                ? <EmptyHint text="Tags populate during enrichment." />
-                : <ChipRow items={tags} colorScheme="blue" preview={PILL_PREVIEW_COUNT} />}
+              {isEditing
+                ? <ChipEditor items={tags} colorScheme="blue" placeholder="add a tag" onAdd={v => edit.addToArrayField('tags', v.toLowerCase())} onRemove={v => edit.removeFromArrayField('tags', v)} />
+                : tags.length === 0
+                  ? <EmptyHint text="Tags populate during enrichment." />
+                  : <ChipRow items={tags} colorScheme="blue" preview={PILL_PREVIEW_COUNT} />}
             </FieldBlock>
           </VStack>
         </HStack>
@@ -100,8 +132,78 @@ function ChipRow({
   );
 }
 
+function ChipEditor({
+  items, colorScheme, placeholder, onAdd, onRemove
+}: {
+  items: string[];
+  colorScheme: string;
+  placeholder: string;
+  onAdd: (value: string) => void;
+  onRemove: (value: string) => void;
+}) {
+  const [input, setInput] = useState('');
+  const commit = () => {
+    const v = input.trim();
+    if (!v) return;
+    onAdd(v);
+    setInput('');
+  };
+  return (
+    <VStack align="stretch" spacing={2}>
+      <Wrap spacing={2}>
+        {items.map((item, i) => (
+          <WrapItem key={i}>
+            <Badge
+              variant="subtle"
+              colorScheme={colorScheme}
+              fontSize="11px"
+              px={2}
+              py={1}
+              borderRadius="md"
+              textTransform="none"
+              fontWeight="600"
+              display="inline-flex"
+              alignItems="center"
+              gap={1}
+            >
+              {item}
+              <IconButton
+                aria-label={`Remove ${item}`}
+                size="xs"
+                variant="ghost"
+                minW="14px"
+                h="14px"
+                onClick={() => onRemove(item)}
+                icon={<Box as="span" fontSize="10px" lineHeight={1}>×</Box>}
+              />
+            </Badge>
+          </WrapItem>
+        ))}
+      </Wrap>
+      <HStack spacing={2}>
+        <Input
+          size="sm"
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') { e.preventDefault(); commit(); }
+            if (e.key === ',')     { e.preventDefault(); commit(); }
+          }}
+          placeholder={placeholder}
+        />
+        <Button size="sm" variant="outline" onClick={commit} isDisabled={!input.trim()}>Add</Button>
+      </HStack>
+    </VStack>
+  );
+}
+
 function EmptyHint({ text }: { text: string }) {
   return <Text fontSize="xs" color="brand.muted" fontStyle="italic">{text}</Text>;
+}
+
+function normalizeHashtag(s: string): string {
+  const trimmed = s.trim();
+  return trimmed.startsWith('#') ? trimmed : `#${trimmed.replace(/^#+/, '')}`;
 }
 
 function SparkleIcon() {

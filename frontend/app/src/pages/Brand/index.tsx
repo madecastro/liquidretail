@@ -1,4 +1,7 @@
 // Phase 4a — Brand page entry. Replaces the legacy /brand placeholder.
+// Phase 4b — wires inline edit mode via useBrandEdit. The hook owns
+// the working draft + dirty tracking; cards render edit affordances
+// when isEditing is true. SaveBar surfaces only when editing or dirty.
 //
 // Layout (top to bottom):
 //   Breadcrumb
@@ -8,15 +11,12 @@
 //   Brand Voice Profile (full width)
 //   Three-col: Visual Identity ┃ Preview ┃ Audience Personas
 //   Danger Zone
-//   SaveBar (sticky)
-//
-// 4a ships read-only display + delete + refresh-AI. 4b adds inline
-// edit mode wired to SaveBar. 4c lights up Integrations + Automation.
-// 4d adds Brand Safety + Preview render.
+//   SaveBar (sticky, surfaces only when editing/dirty)
 
-import { useState } from 'react';
-import { Box, VStack, HStack, SimpleGrid, Text, Spinner, Card, CardBody } from '@chakra-ui/react';
+import { Box, VStack, HStack, SimpleGrid, Text, Spinner, Card, CardBody, useToast } from '@chakra-ui/react';
+import { useEffect } from 'react';
 import { useBrandDetail } from './useBrandDetail';
+import { useBrandEdit } from './useBrandEdit';
 import { BrandHeader } from './Header';
 import { BrandVoiceCard } from './BrandVoiceCard';
 import { VisualIdentityCard } from './VisualIdentityCard';
@@ -27,9 +27,15 @@ import { PlaceholderCard } from './PlaceholderCard';
 
 export function BrandPage() {
   const { brand, loading, error, refresh } = useBrandDetail();
-  // Phase 4a — dirty/saving are stubs. Phase 4b wires real edit state.
-  const [dirty]   = useState(false);
-  const [saving]  = useState(false);
+  const edit = useBrandEdit(brand, refresh);
+  const toast = useToast();
+
+  // Surface save errors via toast (also rendered inline in SaveBar)
+  useEffect(() => {
+    if (edit.error) {
+      toast({ title: 'Save failed', description: edit.error, status: 'error', duration: 4000 });
+    }
+  }, [edit.error, toast]);
 
   if (loading && !brand) {
     return <Card variant="outline"><CardBody><HStack><Spinner /><Text fontSize="sm" color="brand.muted">Loading brand…</Text></HStack></CardBody></Card>;
@@ -51,12 +57,10 @@ export function BrandPage() {
 
   return (
     <Box>
-      {/* Breadcrumb sits inline with shell content; the shell already
-          gives us page padding. */}
       <Breadcrumb brandName={brand.name} />
 
       <VStack align="stretch" spacing={5} mt={3} pb={20}>
-        <BrandHeader brand={brand} onChanged={refresh} />
+        <BrandHeader brand={brand} edit={edit} onChanged={refresh} />
 
         <PlaceholderCard
           title="Integrations"
@@ -80,27 +84,29 @@ export function BrandPage() {
           />
         </SimpleGrid>
 
-        <BrandVoiceCard brand={brand} />
+        <BrandVoiceCard brand={brand} edit={edit} />
 
         <SimpleGrid columns={{ base: 1, lg: 3 }} spacing={5}>
-          <VisualIdentityCard brand={brand} />
+          <VisualIdentityCard brand={brand} edit={edit} />
           <PlaceholderCard
             title="Preview"
             phase="Phase 4d"
             iconColor="#16B8D8"
             description="Carousel of sample ad creatives rendered with this brand applied. Backend prereq: a /api/brand/:id/preview endpoint that returns 3-4 layout-input previews using a representative Media."
           />
-          <AudiencePersonasCard brand={brand} />
+          <AudiencePersonasCard brand={brand} edit={edit} />
         </SimpleGrid>
 
         <DangerZone brand={brand} />
       </VStack>
 
       <SaveBar
-        dirty={dirty}
-        saving={saving}
-        onCancel={() => {/* Phase 4b */}}
-        onSave={() => {/* Phase 4b */}}
+        isEditing={edit.isEditing}
+        dirty={edit.dirty}
+        saving={edit.saving}
+        error={edit.error}
+        onCancel={edit.cancelEdit}
+        onSave={edit.save}
       />
     </Box>
   );

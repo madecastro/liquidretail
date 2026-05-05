@@ -343,7 +343,8 @@ function AdjustSafetyModal({
             </FormControl>
 
             <Text fontSize="10px" color="brand.muted">
-              These settings are stored on the Brand. Matcher and renderer integrations land in a follow-up — for now this is configuration only.
+              The matcher checks each post's caption, OCR text, and comments against the blocked-topic list. Hits are flagged
+              do_not_use and excluded from creative generation. Risk score and category are advisory for now.
             </Text>
           </VStack>
         </ModalBody>

@@ -1,13 +1,16 @@
-// Single source of truth for the four-step pipeline.
+// Single source of truth for the primary navigation.
 //
-// Sidebar, PipelineStepHeader, and the router definitions all read
-// from STEPS so adding/renaming/reordering a step is a one-line
-// change. Step status (pending/active/complete/warning) is derived
-// at runtime — Phase 2 derives it from the current URL only; Phase 3+
-// reads actual brand-setup / upload-readiness / detect-progress
-// state to mark steps complete or needing attention.
+// Sidebar reads from STEPS so adding/renaming/reordering a nav item is
+// a one-line change. Step status (pending/active/complete/warning) is
+// derived at runtime from the current URL (Phase 2); later phases will
+// read actual brand-setup / campaign / render state.
+//
+// Reorg note: Upload + Detect were retired from the primary nav and
+// fold into the Generate Ads wizard (campaign → products → settings →
+// generate). The deep-link routes (/upload, /detect, /media-library,
+// /catalog) still resolve so internal links keep working.
 
-export type StepKey = 'brand' | 'upload' | 'detect' | 'ad-generation';
+export type StepKey = 'brand' | 'campaigns' | 'ads';
 export type StepStatus = 'pending' | 'active' | 'complete' | 'warning';
 
 export type StepDef = {
@@ -18,21 +21,19 @@ export type StepDef = {
 };
 
 export const STEPS: readonly StepDef[] = [
-  { key: 'brand',         path: '/brand',  label: 'Brand',         description: 'Identity & rules' },
-  { key: 'upload',        path: '/upload', label: 'Upload',        description: 'Products & UGC' },
-  { key: 'detect',        path: '/detect', label: 'Detect',        description: 'AI review' },
-  { key: 'ad-generation', path: '/ads',    label: 'Ad Generation', description: 'Variants' }
+  { key: 'brand',     path: '/brand',     label: 'Brand',     description: 'Identity & rules' },
+  { key: 'campaigns', path: '/campaigns', label: 'Campaigns', description: 'Sync & generate' },
+  { key: 'ads',       path: '/ads',       label: 'Ads',       description: 'Rendered creatives' }
 ] as const;
 
-// Phase 2 placeholder: returns "active" for the current route and
-// "pending" for the rest. Phase 3 replaces with real-state derivation.
-//
-// Aliases: /media-library is a Phase A detect-rebuild precursor (sits
-// out of band of the four-step nav), so we map it onto the 'detect'
-// step for the pipeline-header active highlight.
+// Out-of-band routes that should still highlight one of the primary
+// nav items when the user lands on them (deep links + the wizard).
 const ALIAS_TO_STEP: Record<string, StepKey> = {
-  '/media-library': 'detect',
-  '/catalog':       'brand'
+  '/generate-ads':  'campaigns',
+  '/upload':        'campaigns',
+  '/detect':        'campaigns',
+  '/media-library': 'campaigns',
+  '/catalog':       'campaigns'
 };
 
 export function statusFromPath(currentPath: string): Record<StepKey, StepStatus> {

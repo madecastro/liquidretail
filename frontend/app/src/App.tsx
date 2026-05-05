@@ -6,18 +6,15 @@ import { PipelineShell } from './shell/PipelineShell';
 import { BrandPage } from './pages/Brand';
 import { UploadPage } from './pages/Upload';
 import { DetectPage } from './pages/Detect';
-import { AdGenerationPage } from './pages/AdGeneration';
+import { CampaignsPage } from './pages/Campaigns';
+import { AdsPage } from './pages/Ads';
+import { GenerateAdsWizard } from './pages/GenerateAds';
 import { MediaLibraryPage } from './pages/MediaLibrary';
 import { CatalogBrowserPage } from './pages/CatalogBrowser';
 
-// Phase 3 wraps everything in AuthProvider + BrandProvider so any
-// component (including the Sidebar's BrandPicker + sign-out) can read
-// auth state via hooks.
-//
-// RequireAuth gates the routes — unauthenticated users see a sign-in
-// CTA inside the shell, not a blank page. Authentication itself
-// happens through the existing /login.html (Google OAuth bounce);
-// rebuilding login as a SPA route is a later phase.
+// Reorg: primary nav is Brand / Campaigns / Ads. Upload + Detect retired
+// from the sidebar but their routes remain so deep links keep working
+// (they fold into the Generate Ads wizard's empty-state upload step).
 
 export function App() {
   return (
@@ -26,12 +23,15 @@ export function App() {
         <BrowserRouter>
           <Routes>
             <Route element={<PipelineShell />}>
-              <Route path="/brand"         element={<RequireAuth><BrandPage /></RequireAuth>} />
-              <Route path="/upload"        element={<RequireAuth><UploadPage /></RequireAuth>} />
-              <Route path="/detect"        element={<RequireAuth><DetectPage /></RequireAuth>} />
-              <Route path="/media-library" element={<RequireAuth><MediaLibraryPage /></RequireAuth>} />
-              <Route path="/catalog"       element={<RequireAuth><CatalogBrowserPage /></RequireAuth>} />
-              <Route path="/ads"           element={<RequireAuth><AdGenerationPage /></RequireAuth>} />
+              <Route path="/brand"          element={<RequireAuth><BrandPage /></RequireAuth>} />
+              <Route path="/campaigns"      element={<RequireAuth><CampaignsPage /></RequireAuth>} />
+              <Route path="/ads"            element={<RequireAuth><AdsPage /></RequireAuth>} />
+              <Route path="/generate-ads"   element={<RequireAuth><GenerateAdsWizard /></RequireAuth>} />
+              {/* Deep-link / wizard-internal routes — not in primary nav */}
+              <Route path="/upload"         element={<RequireAuth><UploadPage /></RequireAuth>} />
+              <Route path="/detect"         element={<RequireAuth><DetectPage /></RequireAuth>} />
+              <Route path="/media-library"  element={<RequireAuth><MediaLibraryPage /></RequireAuth>} />
+              <Route path="/catalog"        element={<RequireAuth><CatalogBrowserPage /></RequireAuth>} />
             </Route>
             <Route path="/"  element={<Navigate to="/brand" replace />} />
             <Route path="*"  element={<Navigate to="/brand" replace />} />

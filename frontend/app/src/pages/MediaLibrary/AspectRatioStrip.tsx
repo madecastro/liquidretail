@@ -10,11 +10,18 @@ import { HStack, VStack, Box, Text, Badge, Image } from '@chakra-ui/react';
 import { qualityBucket, buildCloudinaryCropUrl } from './format';
 import type { DetectResult } from './types';
 
+export type AspectVariantKind = 'original' | 'smart-crop' | 'extended-crop';
+
 export type AspectVariant = {
   ratio:    string;
   label:    string;
   imageUrl: string | null;
   score:    number | null;
+  kind:     AspectVariantKind;
+  // Source-pixel bbox for smart-crop variants. Lets the canvas project
+  // source-frame overlays (products / people / text) into the cropped
+  // frame's normalized [0,1] coords. Null for original + extended.
+  cropBbox: { x1: number; y1: number; x2: number; y2: number } | null;
 };
 
 type Props = {
@@ -103,7 +110,7 @@ function VariantThumb({ v, selected, onClick }: { v: AspectVariant; selected: bo
 
 function buildVariantList(fileUrl: string, detect: DetectResult | null): AspectVariant[] {
   const out: AspectVariant[] = [];
-  out.push({ ratio: 'original', label: 'Original', imageUrl: fileUrl, score: null });
+  out.push({ ratio: 'original', label: 'Original', imageUrl: fileUrl, score: null, kind: 'original', cropBbox: null });
 
   // Smart-crop ratios live on detect.crops[ratio][] with judge winners
   // surfaced via detect.judge[`crop_<ratio>`]. The flat shape varies a
@@ -125,24 +132,30 @@ function buildVariantList(fileUrl: string, detect: DetectResult | null): AspectV
     // Smart crops are stored as coordinate-only objects (no imageUrl).
     // Build a Cloudinary c_crop transform URL on the fly from the
     // source image so the strip shows actual previews.
+    const cropBbox = winner
+      ? {
+          x1: Number(winner['x1']),
+          y1: Number(winner['y1']),
+          x2: Number(winner['x2']),
+          y2: Number(winner['y2'])
+        }
+      : null;
     let imageUrl: string | null = typeof winner?.['imageUrl'] === 'string' ? winner['imageUrl'] as string : null;
-    if (!imageUrl && winner) {
-      imageUrl = buildCloudinaryCropUrl(fileUrl, {
-        x1: Number(winner['x1']),
-        y1: Number(winner['y1']),
-        x2: Number(winner['x2']),
-        y2: Number(winner['y2'])
-      });
+    if (!imageUrl && cropBbox) {
+      imageUrl = buildCloudinaryCropUrl(fileUrl, cropBbox);
     }
     out.push({
       ratio: b.ratio,
       label: b.label,
       imageUrl,
-      score: typeof winnerScore === 'number' ? winnerScore : null
+      score: typeof winnerScore === 'number' ? winnerScore : null,
+      kind:  'smart-crop',
+      cropBbox
     });
   }
 
-  // Extended ratios — pull from extendedCrops candidates (Gemini extension/generation)
+  // Extended ratios — pull from extendedCrops candidates (Gemini extension/generation).
+  // These are NEW images, not crops of the source — overlays don't translate.
   const extMap = (detect?.extendedCrops as Record<string, Array<Record<string, unknown>>> | undefined) || {};
   for (const ratio of ['9:16', '1.91:1']) {
     const list = extMap[ratio] || [];
@@ -151,7 +164,9 @@ function buildVariantList(fileUrl: string, detect: DetectResult | null): AspectV
       ratio,
       label: ratio === '9:16' ? '9:16 Story' : '1.91:1 Landscape',
       imageUrl: typeof winner?.['imageUrl'] === 'string' ? winner['imageUrl'] as string : null,
-      score:    null   // extended judge scores live elsewhere; A-1 doesn't surface them
+      score:    null,
+      kind:     'extended-crop',
+      cropBbox: null
     });
   }
 

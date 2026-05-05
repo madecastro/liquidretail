@@ -62,15 +62,16 @@ export function MediaLibraryPage() {
 
   // Active aspect-ratio variant — drives what the canvas displays.
   // Defaults to 'original' (full source frame, overlays visible).
-  // Selecting a crop variant shows the cropped image and hides overlays
-  // since their bbox math was computed against the source frame.
+  // Selecting a smart-crop projects source-frame overlays into the
+  // cropped frame; selecting an extended-crop hides source-frame
+  // overlays since the image is Gemini-generated, not a crop.
   const [activeVariant, setActiveVariant] = useState<AspectVariant>(
-    { ratio: 'original', label: 'Original', imageUrl: null, score: null }
+    { ratio: 'original', label: 'Original', imageUrl: null, score: null, kind: 'original', cropBbox: null }
   );
   // Reset to Original whenever the selected media changes — otherwise
   // a 1:1 crop selection from the previous media bleeds over.
   useEffect(() => {
-    setActiveVariant({ ratio: 'original', label: 'Original', imageUrl: null, score: null });
+    setActiveVariant({ ratio: 'original', label: 'Original', imageUrl: null, score: null, kind: 'original', cropBbox: null });
   }, [selectedId]);
 
   const handleSelect = (mediaId: string) => {
@@ -120,9 +121,7 @@ export function MediaLibraryPage() {
                 detect={detail.data?.result || null}
                 loading={detail.loading}
                 activeLayers={activeLayers}
-                displayUrl={activeVariant.ratio === 'original' ? null : activeVariant.imageUrl}
-                isCroppedView={activeVariant.ratio !== 'original'}
-                cropAspect={activeVariant.ratio !== 'original' ? activeVariant.ratio : null}
+                variant={activeVariant}
               />
               <AspectRatioStrip
                 fileUrl={selectedRow.fileUrl}

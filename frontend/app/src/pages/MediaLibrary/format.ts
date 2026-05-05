@@ -82,6 +82,45 @@ export function qualityBucket(score: number | null | undefined): { label: 'High'
   return            { label: 'Low',    tone: '#DC2626' };
 }
 
+// Project a source-frame bbox into a smart-crop's coordinate space.
+// Inputs:
+//   source        — bbox in source pixels OR normalized 0..1 (toggle via flag)
+//   cropBbox      — the smart-crop's source-pixel bbox
+//   imgW, imgH    — source image dimensions (only used to denormalize source)
+//   isNormalized  — true when `source` is in 0..1 (subjects, text regions);
+//                   false when it's in source pixels (refined products, YOLO)
+// Returns:
+//   bbox in normalized [0,1] inside the cropped frame, clipped to the
+//   crop's edges, OR null when the source bbox lies entirely outside
+//   the crop (caller skips rendering it).
+export function projectBboxToCrop(
+  source: { x1: number; y1: number; x2: number; y2: number },
+  cropBbox: { x1: number; y1: number; x2: number; y2: number },
+  imgW: number,
+  imgH: number,
+  isNormalized: boolean
+): { x1: number; y1: number; x2: number; y2: number } | null {
+  const sx1 = isNormalized ? source.x1 * imgW : source.x1;
+  const sy1 = isNormalized ? source.y1 * imgH : source.y1;
+  const sx2 = isNormalized ? source.x2 * imgW : source.x2;
+  const sy2 = isNormalized ? source.y2 * imgH : source.y2;
+  // Intersect with the crop window
+  const ix1 = Math.max(sx1, cropBbox.x1);
+  const iy1 = Math.max(sy1, cropBbox.y1);
+  const ix2 = Math.min(sx2, cropBbox.x2);
+  const iy2 = Math.min(sy2, cropBbox.y2);
+  if (ix2 <= ix1 || iy2 <= iy1) return null;
+  const cw = cropBbox.x2 - cropBbox.x1;
+  const ch = cropBbox.y2 - cropBbox.y1;
+  if (cw <= 0 || ch <= 0) return null;
+  return {
+    x1: (ix1 - cropBbox.x1) / cw,
+    y1: (iy1 - cropBbox.y1) / ch,
+    x2: (ix2 - cropBbox.x1) / cw,
+    y2: (iy2 - cropBbox.y1) / ch
+  };
+}
+
 // Build a Cloudinary `c_crop` transform URL on the fly from the source
 // image + a pixel-coord bbox. Smart-crop output stores coordinates
 // only; the legacy detect view computed transform URLs the same way.

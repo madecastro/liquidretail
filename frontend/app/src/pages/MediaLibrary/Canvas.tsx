@@ -3,6 +3,22 @@
 // <div> tree using percentages so it scales with the image. We assume
 // the underlying media's intrinsic dimensions are known; if not we
 // degrade to "image only, no overlays" rather than risk misaligned bboxes.
+//
+// Phase A-2 polish — when the user picks a smart-crop variant from the
+// strip below, the canvas:
+//   1. Swaps the image to the cropped view
+//   2. Switches the container's CSS aspect-ratio to the crop's
+//   3. Re-projects products / people / text bboxes from source pixels
+//      into the cropped frame's normalized [0,1] coords (clipped at
+//      crop edges, dropping bboxes entirely outside)
+//   4. Pulls the OverlayZoneArtifact analysis for THAT specific ratio
+//      (already computed in the cropped frame's coord space) — so
+//      density + safe-zones still align
+// Extended-crop variants (Gemini-generated 9:16 / 1.91:1) are NOT crops
+// of the source — they're new images. Source-frame overlays don't
+// translate, so products/people/text are hidden in those views; the
+// per-ratio overlay-zone analysis (density + safe zones) still renders
+// since it was computed against the extended image directly.
 
 import { Box, Spinner, Text, Flex, VStack } from '@chakra-ui/react';
 import type {
@@ -12,52 +28,48 @@ import type {
   RefinedProduct,
   YoloProduct,
   Restriction,
-  DensityGrid
+  DensityGrid,
+  OverlayZoneAnalysis
 } from './types';
-import { densityCellColor } from './format';
+import type { AspectVariant } from './AspectRatioStrip';
+import { densityCellColor, projectBboxToCrop } from './format';
 
 type Props = {
-  fileUrl:        string;
-  detect:         DetectResult | null;
-  loading:        boolean;
-  activeLayers:   Set<LayerKey>;
-  // When a non-original aspect-ratio variant is selected, the canvas
-  // swaps to the cropped image and suppresses overlays — the bbox
-  // coords were computed against the source frame, so they no longer
-  // align inside the cropped view. Set both fields together; if
-  // displayUrl is null/undefined, the canvas falls back to fileUrl
-  // and shows overlays as usual.
-  displayUrl?:    string | null;
-  isCroppedView?: boolean;
-  cropAspect?:    string | null;
+  fileUrl:      string;
+  detect:       DetectResult | null;
+  loading:      boolean;
+  activeLayers: Set<LayerKey>;
+  variant:      AspectVariant;       // current selection from the strip
 };
 
-export function Canvas({ fileUrl, detect, loading, activeLayers, displayUrl, isCroppedView, cropAspect }: Props) {
+export function Canvas({ fileUrl, detect, loading, activeLayers, variant }: Props) {
   const w = detect?.width  || 0;
   const h = detect?.height || 0;
-  const renderUrl = displayUrl || fileUrl;
+  const renderUrl = (variant.kind === 'original' ? fileUrl : variant.imageUrl) || fileUrl;
+  const isOriginal     = variant.kind === 'original';
+  const isSmartCrop    = variant.kind === 'smart-crop';
+  const isExtendedCrop = variant.kind === 'extended-crop';
 
-  // Pull the canonical overlay-zone analysis (5:4 base, falling back to
-  // any). Used by Safe Zones + Density layers.
-  const overlay = pickPrimaryOverlay(detect);
+  // Pick the overlay-zone analysis matching the active variant's ratio.
+  // For 'original', use the canonical 5:4-base fallback. For smart-crop
+  // and extended-crop, use that ratio's analysis (already in its own
+  // 0..1 coord space).
+  const overlay = pickOverlayForVariant(detect, variant);
 
   // CSS aspect-ratio container. We pin the height (so the box always
   // claims usable space inside the flex column) and let the width
   // follow from the image's intrinsic ratio. maxWidth caps overflow on
   // wide images; maxHeight caps very tall images so the bottom strip
-  // stays visible. AspectRatio (Chakra) was collapsing to 0 width when
-  // width was "auto" inside a flex-centered parent — switched to raw
-  // CSS aspect-ratio which Chrome / Safari / Firefox all support.
-  //
-  // When a cropped variant is selected, the container's aspect-ratio
-  // switches to that variant so the cropped image fills it correctly
-  // (otherwise the crop would letterbox/pillarbox inside the source
-  // frame's ratio).
-  const ratio = isCroppedView && cropAspect
-    ? cropAspect.replace(':', ' / ')
-    : (w && h ? `${w} / ${h}` : '4 / 5');
+  // stays visible.
+  const ratio = isOriginal
+    ? (w && h ? `${w} / ${h}` : '4 / 5')
+    : variant.ratio.replace(':', ' / ');
+
   const hasDims = w > 0 && h > 0;
-  const showOverlays = !isCroppedView;
+  // Source-frame layers (products / people / text) only render when:
+  //   - original view (no projection needed), OR
+  //   - smart-crop with a known cropBbox + valid source dims
+  const canShowSourceLayers = isOriginal || (isSmartCrop && variant.cropBbox && hasDims);
 
   return (
     <Box
@@ -77,8 +89,8 @@ export function Canvas({ fileUrl, detect, loading, activeLayers, displayUrl, isC
         overflow="hidden"
         sx={{
           aspectRatio: ratio,
-          height: '100%',          // claim all available column height
-          width: 'auto',           // width derives from aspect-ratio
+          height: '100%',
+          width: 'auto',
           maxWidth: '100%',
           maxHeight: '100%'
         }}
@@ -90,18 +102,31 @@ export function Canvas({ fileUrl, detect, loading, activeLayers, displayUrl, isC
             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
           />
         )}
-        {detect && hasDims && showOverlays && (
+
+        {detect && (
           <Box position="absolute" inset={0} pointerEvents="none">
+            {/* Density + safe-zones come from the variant's matching analysis,
+                which is already in that ratio's coord space — no projection. */}
             {activeLayers.has('density')    && overlay?.densityGrid   && <DensityLayer grid={overlay.densityGrid} />}
             {activeLayers.has('safe-zones') && overlay?.restrictions && <SafeZonesLayer restrictions={overlay.restrictions} />}
-            {activeLayers.has('crops')      && detect.refinedProducts && <CropsLayer refinedProducts={detect.refinedProducts} imgW={w} imgH={h} />}
-            {activeLayers.has('products')   && detect.refinedProducts && <ProductsLayer refinedProducts={detect.refinedProducts} imgW={w} imgH={h} />}
-            {activeLayers.has('people')     && detect.products       && <PeopleLayer yoloProducts={detect.products} imgW={w} imgH={h} />}
-            {activeLayers.has('text')       && detect.text            && <TextLayer regions={detect.text} />}
+
+            {/* Source-frame layers — original or smart-crop only. */}
+            {canShowSourceLayers && activeLayers.has('crops') && isOriginal && detect.refinedProducts && (
+              <CropsLayer refinedProducts={detect.refinedProducts} imgW={w} imgH={h} variant={variant} />
+            )}
+            {canShowSourceLayers && activeLayers.has('products') && detect.refinedProducts && (
+              <ProductsLayer refinedProducts={detect.refinedProducts} imgW={w} imgH={h} variant={variant} />
+            )}
+            {canShowSourceLayers && activeLayers.has('people') && detect.products && (
+              <PeopleLayer yoloProducts={detect.products} imgW={w} imgH={h} variant={variant} />
+            )}
+            {canShowSourceLayers && activeLayers.has('text') && detect.text && (
+              <TextLayer regions={detect.text} imgW={w} imgH={h} variant={variant} />
+            )}
           </Box>
         )}
 
-        {isCroppedView && (
+        {!isOriginal && (
           <Box
             position="absolute"
             top={2}
@@ -114,7 +139,7 @@ export function Canvas({ fileUrl, detect, loading, activeLayers, displayUrl, isC
             color="white"
             fontWeight="600"
           >
-            {cropAspect} crop · overlays hidden
+            {variant.label}{isExtendedCrop ? ' · source overlays hidden (extended)' : ''}
           </Box>
         )}
 
@@ -130,11 +155,12 @@ export function Canvas({ fileUrl, detect, loading, activeLayers, displayUrl, isC
 
 // ── Layers ──────────────────────────────────────────────────────────
 
-function ProductsLayer({ refinedProducts, imgW, imgH }: { refinedProducts: RefinedProduct[]; imgW: number; imgH: number }) {
+function ProductsLayer({ refinedProducts, imgW, imgH, variant }: { refinedProducts: RefinedProduct[]; imgW: number; imgH: number; variant: AspectVariant }) {
   return (
     <>
       {refinedProducts.map(rp => {
-        const box = pixelToPct(rp, imgW, imgH);
+        const box = bboxForVariant(rp, imgW, imgH, variant, false);
+        if (!box) return null;
         return (
           <BboxOverlay
             key={`rp-${rp.id}`}
@@ -148,12 +174,13 @@ function ProductsLayer({ refinedProducts, imgW, imgH }: { refinedProducts: Refin
   );
 }
 
-function PeopleLayer({ yoloProducts, imgW, imgH }: { yoloProducts: YoloProduct[]; imgW: number; imgH: number }) {
+function PeopleLayer({ yoloProducts, imgW, imgH, variant }: { yoloProducts: YoloProduct[]; imgW: number; imgH: number; variant: AspectVariant }) {
   const people = yoloProducts.filter(p => p.className === 'person');
   return (
     <>
       {people.map(p => {
-        const box = pixelToPct(p, imgW, imgH);
+        const box = bboxForVariant(p, imgW, imgH, variant, false);
+        if (!box) return null;
         return (
           <BboxOverlay
             key={`person-${p.id}`}
@@ -167,18 +194,22 @@ function PeopleLayer({ yoloProducts, imgW, imgH }: { yoloProducts: YoloProduct[]
   );
 }
 
-function TextLayer({ regions }: { regions: TextRegion[] }) {
+function TextLayer({ regions, imgW, imgH, variant }: { regions: TextRegion[]; imgW: number; imgH: number; variant: AspectVariant }) {
   return (
     <>
-      {regions.map(t => (
-        <BboxOverlay
-          key={`text-${t.id}`}
-          // text bboxes already normalized 0..1
-          box={t}
-          color="#F57C00"
-          label={`${t.content || 'text'} ${formatPct(t.confidence)}`}
-        />
-      ))}
+      {regions.map(t => {
+        // text bboxes are stored normalized [0,1] (vs. pixel for products/yolo)
+        const box = bboxForVariant(t, imgW, imgH, variant, true);
+        if (!box) return null;
+        return (
+          <BboxOverlay
+            key={`text-${t.id}`}
+            box={box}
+            color="#F57C00"
+            label={`${t.content || 'text'} ${formatPct(t.confidence)}`}
+          />
+        );
+      })}
     </>
   );
 }
@@ -210,7 +241,6 @@ function SafeZonesLayer({ restrictions }: { restrictions: Restriction[] }) {
 function DensityLayer({ grid }: { grid: DensityGrid }) {
   const { cols, rows, cells } = grid;
   if (!cols || !rows || !cells?.length) return null;
-  // Use a CSS grid overlay; one cell per density-grid cell.
   return (
     <Box
       position="absolute"
@@ -228,14 +258,15 @@ function DensityLayer({ grid }: { grid: DensityGrid }) {
   );
 }
 
-function CropsLayer({ refinedProducts, imgW, imgH }: { refinedProducts: RefinedProduct[]; imgW: number; imgH: number }) {
+function CropsLayer({ refinedProducts, imgW, imgH, variant }: { refinedProducts: RefinedProduct[]; imgW: number; imgH: number; variant: AspectVariant }) {
   // Visualizes the smart-crop bbox of each refined product as a dashed
-  // outline — same data as Products layer but rendered without label so
-  // both can stack visually.
+  // outline. Only renders in original view — inside a crop it's
+  // visually noisy and conceptually redundant.
   return (
     <>
       {refinedProducts.map(rp => {
-        const box = pixelToPct(rp, imgW, imgH);
+        const box = bboxForVariant(rp, imgW, imgH, variant, false);
+        if (!box) return null;
         return (
           <Box
             key={`c-${rp.id}`}
@@ -254,6 +285,31 @@ function CropsLayer({ refinedProducts, imgW, imgH }: { refinedProducts: RefinedP
 }
 
 // ── helpers ────────────────────────────────────────────────────────
+
+// Resolve the right normalized [0,1] bbox to render given the active
+// variant. Returns null when the bbox falls entirely outside a smart
+// crop (so the layer can skip it).
+function bboxForVariant(
+  source: { x1: number; y1: number; x2: number; y2: number },
+  imgW: number,
+  imgH: number,
+  variant: AspectVariant,
+  isNormalized: boolean
+): { x1: number; y1: number; x2: number; y2: number } | null {
+  if (variant.kind === 'original') {
+    if (isNormalized) return source;
+    return {
+      x1: imgW > 0 ? source.x1 / imgW : 0,
+      y1: imgH > 0 ? source.y1 / imgH : 0,
+      x2: imgW > 0 ? source.x2 / imgW : 0,
+      y2: imgH > 0 ? source.y2 / imgH : 0
+    };
+  }
+  if (variant.kind === 'smart-crop' && variant.cropBbox) {
+    return projectBboxToCrop(source, variant.cropBbox, imgW, imgH, isNormalized);
+  }
+  return null;   // extended-crop or smart-crop without bbox → don't project
+}
 
 function BboxOverlay({
   box, color, label, fill
@@ -302,24 +358,30 @@ function BboxOverlay({
   );
 }
 
-function pixelToPct(p: { x1: number; y1: number; x2: number; y2: number }, imgW: number, imgH: number) {
-  return {
-    x1: imgW > 0 ? p.x1 / imgW : 0,
-    y1: imgH > 0 ? p.y1 / imgH : 0,
-    x2: imgW > 0 ? p.x2 / imgW : 0,
-    y2: imgH > 0 ? p.y2 / imgH : 0
-  };
-}
-
 function formatPct(v: number): string {
   if (typeof v !== 'number' || !Number.isFinite(v)) return '';
   if (v <= 1) return `${Math.round(v * 100)}%`;
   return `${Math.round(v)}%`;
 }
 
-function pickPrimaryOverlay(detect: DetectResult | null) {
-  if (!detect?.overlayZones) return null;
-  const zones = detect.overlayZones;
+// Pick the overlay-zone analysis to render given the active variant.
+// For original, fall back to the 5:4 base ratio (most representative
+// of the source frame). For a specific variant, prefer that ratio's
+// analysis — already computed in its own 0..1 coord space, so density
+// + safe zones align without re-projection.
+function pickOverlayForVariant(detect: DetectResult | null, variant: AspectVariant): OverlayZoneAnalysis | null {
+  const zones = detect?.overlayZones;
+  if (!zones) return null;
+
+  if (variant.kind !== 'original') {
+    const variants = zones[variant.ratio];
+    if (Array.isArray(variants)) {
+      const v = variants.find(x => x.analysis);
+      if (v?.analysis) return v.analysis;
+    }
+    // fall through to default if the variant ratio has no analysis yet
+  }
+
   for (const ratio of ['5:4', '1:1', '4:5']) {
     const variants = zones[ratio];
     if (Array.isArray(variants)) {

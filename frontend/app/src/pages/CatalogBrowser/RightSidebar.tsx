@@ -152,10 +152,15 @@ function ReviewsTab({ product }: { product: CatalogDetail | null }) {
   const immersive      = product.reviews || [];
   const distribution   = product.ratingDistribution || [];
   const reviewSummary  = (product.reviewSummary as Record<string, unknown> | null) || null;
-  const summaryNarrative = (reviewSummary?.['summary'] as string) || (reviewSummary?.['text'] as string) || null;
-  const summarySources   = (reviewSummary?.['sources'] as string[]) || [];
+  const summaryNarrative = stringField(reviewSummary?.['summary']) || stringField(reviewSummary?.['text']);
+  // Sources can come back as bare strings OR objects (Gemini grounded
+  // search returns { title, url, snippet }; productDetails normalizes
+  // to domains). Coerce to a flat string list before rendering.
+  const summarySources   = normalizeSourceList(reviewSummary?.['sources']);
+  const productReviewSources = normalizeSourceList((productReviews as Record<string, unknown> | null)?.['sources']);
 
-  const hasContent = productReviews?.summary || (productReviews?.quotes?.length ?? 0) > 0
+  const hasContent = (productReviews?.summary && String(productReviews.summary).trim())
+                  || (productReviews?.quotes?.length ?? 0) > 0
                   || immersive.length > 0 || summaryNarrative;
 
   return (
@@ -176,16 +181,16 @@ function ReviewsTab({ product }: { product: CatalogDetail | null }) {
                 <Heading size="xs" mb={2}>Sentiment Summary</Heading>
                 {productReviews?.summary && (
                   <Text fontSize="sm" color="brand.ink" lineHeight="1.55" fontStyle="italic">
-                    "{productReviews.summary}"
+                    "{stringField(productReviews.summary)}"
                   </Text>
                 )}
-                {summaryNarrative && summaryNarrative !== productReviews?.summary && (
+                {summaryNarrative && summaryNarrative !== stringField(productReviews?.summary) && (
                   <Text fontSize="xs" color="brand.muted" mt={2} lineHeight="1.5">{summaryNarrative}</Text>
                 )}
-                {(productReviews?.sources?.length || summarySources.length) ? (
+                {(productReviewSources.length || summarySources.length) ? (
                   <HStack mt={2} spacing={1.5} wrap="wrap">
                     <Text fontSize="9px" color="brand.muted" textTransform="uppercase" letterSpacing="0.04em">Sources:</Text>
-                    {(productReviews?.sources || summarySources).map((s, i) => (
+                    {(productReviewSources.length ? productReviewSources : summarySources).map((s, i) => (
                       <Badge key={i} variant="outline" fontSize="9px" px={1.5} fontWeight="500" textTransform="none">{s}</Badge>
                     ))}
                   </HStack>
@@ -275,17 +280,52 @@ function RatingDistribution({ rows }: { rows: Array<Record<string, unknown>> }) 
 }
 
 function CuratedQuote({ q }: { q: CatalogReviewQuote }) {
+  const text   = stringField(q.text);
+  const author = stringField(q.author);
+  const source = stringField(q.source);
+  if (!text) return null;
   return (
     <Box bg="gray.50" borderRadius="md" p={2.5} borderLeftWidth="3px" borderLeftColor="rsViolet.400">
-      <Text fontSize="sm" color="brand.ink" lineHeight="1.5">"{q.text}"</Text>
-      {(q.author || q.source) && (
+      <Text fontSize="sm" color="brand.ink" lineHeight="1.5">"{text}"</Text>
+      {(author || source) && (
         <HStack mt={1} spacing={2}>
-          {q.author && <Text fontSize="10px" color="brand.muted">— {q.author}</Text>}
-          {q.source && <Text fontSize="10px" color="brand.muted">· {q.source}</Text>}
+          {author && <Text fontSize="10px" color="brand.muted">— {author}</Text>}
+          {source && <Text fontSize="10px" color="brand.muted">· {source}</Text>}
         </HStack>
       )}
     </Box>
   );
+}
+
+// ── safety helpers ─────────────────────────────────────────────────
+
+// Pull a string out of a value that might be a string, an object with
+// a string-y key, or null. Anything else returns null so the caller
+// can skip rendering instead of crashing on object-as-child.
+function stringField(v: unknown): string {
+  if (typeof v === 'string') return v;
+  if (v == null) return '';
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  return '';
+}
+
+// Source lists arrive as either string[] OR Array<{ title?, url?,
+// domain?, name?, snippet? }>. Normalize to a flat string list of
+// human-readable labels (prefer a domain/host > title > name).
+function normalizeSourceList(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v.map(s => {
+    if (typeof s === 'string') return s;
+    if (s && typeof s === 'object') {
+      const o = s as Record<string, unknown>;
+      const url = stringField(o.url) || stringField(o.link);
+      if (url) {
+        try { return new URL(url).hostname.replace(/^www\./, ''); } catch { /* fallthrough */ }
+      }
+      return stringField(o.domain) || stringField(o.title) || stringField(o.name) || '';
+    }
+    return '';
+  }).filter(Boolean);
 }
 
 function ImmersiveRow({ review }: { review: CatalogReviewRow }) {
@@ -352,17 +392,21 @@ function SpecsTab({ product }: { product: CatalogDetail | null }) {
           <Heading size="xs" mb={3}>Details</Heading>
           <VStack align="stretch" spacing={1.5}>
             {flatEntries.slice(0, 30).map(([k, v]) => (
-              <KV key={k} label={String(k)} value={String(v)} />
+              <KV key={k} label={String(k)} value={stringField(v) || String(v)} />
             ))}
           </VStack>
         </CardBody></Card>
       )}
       {groupShape.map((g, gi) => (
         <Card key={gi} variant="outline"><CardBody>
-          <Heading size="xs" mb={3}>{String(g['title'] || g['name'] || 'Specs')}</Heading>
+          <Heading size="xs" mb={3}>{stringField(g['title']) || stringField(g['name']) || 'Specs'}</Heading>
           <VStack align="stretch" spacing={1.5}>
             {((g['items'] as Array<Record<string, unknown>>) || []).slice(0, 30).map((it, i) => (
-              <KV key={i} label={String(it['name'] || it['key'] || '')} value={String(it['value'] || it['text'] || '')} />
+              <KV
+                key={i}
+                label={stringField(it['name']) || stringField(it['key']) || ''}
+                value={stringField(it['value']) || stringField(it['text']) || ''}
+              />
             ))}
           </VStack>
         </CardBody></Card>

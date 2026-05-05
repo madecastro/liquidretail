@@ -16,6 +16,7 @@ import { Sidebar } from './Sidebar';
 import { CatalogHeader } from './Header';
 import { ImageGallery } from './ImageGallery';
 import { RightSidebar } from './RightSidebar';
+import { CatalogErrorBoundary } from './ErrorBoundary';
 import { useCatalogList, useCatalogDetail, useCatalogMatches } from './hooks';
 
 export function CatalogBrowserPage() {
@@ -43,6 +44,7 @@ export function CatalogBrowserPage() {
   };
 
   return (
+    <CatalogErrorBoundary>
     <Flex direction="column" h="calc(100vh - 64px)" mx="-32px" mt={-10} bg="brand.surface" overflow="hidden">
       <Flex flex={1} minH={0}>
         <Sidebar
@@ -101,5 +103,6 @@ export function CatalogBrowserPage() {
         />
       </Flex>
     </Flex>
+    </CatalogErrorBoundary>
   );
 }

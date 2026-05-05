@@ -7,6 +7,7 @@ import { BrandPage } from './pages/Brand';
 import { UploadPage } from './pages/Upload';
 import { DetectPage } from './pages/Detect';
 import { AdGenerationPage } from './pages/AdGeneration';
+import { MediaLibraryPage } from './pages/MediaLibrary';
 
 // Phase 3 wraps everything in AuthProvider + BrandProvider so any
 // component (including the Sidebar's BrandPicker + sign-out) can read
@@ -24,10 +25,11 @@ export function App() {
         <BrowserRouter>
           <Routes>
             <Route element={<PipelineShell />}>
-              <Route path="/brand"  element={<RequireAuth><BrandPage /></RequireAuth>} />
-              <Route path="/upload" element={<RequireAuth><UploadPage /></RequireAuth>} />
-              <Route path="/detect" element={<RequireAuth><DetectPage /></RequireAuth>} />
-              <Route path="/ads"    element={<RequireAuth><AdGenerationPage /></RequireAuth>} />
+              <Route path="/brand"         element={<RequireAuth><BrandPage /></RequireAuth>} />
+              <Route path="/upload"        element={<RequireAuth><UploadPage /></RequireAuth>} />
+              <Route path="/detect"        element={<RequireAuth><DetectPage /></RequireAuth>} />
+              <Route path="/media-library" element={<RequireAuth><MediaLibraryPage /></RequireAuth>} />
+              <Route path="/ads"           element={<RequireAuth><AdGenerationPage /></RequireAuth>} />
             </Route>
             <Route path="/"  element={<Navigate to="/brand" replace />} />
             <Route path="*"  element={<Navigate to="/brand" replace />} />

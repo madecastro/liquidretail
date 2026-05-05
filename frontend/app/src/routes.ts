@@ -26,8 +26,21 @@ export const STEPS: readonly StepDef[] = [
 
 // Phase 2 placeholder: returns "active" for the current route and
 // "pending" for the rest. Phase 3 replaces with real-state derivation.
+//
+// Aliases: /media-library is a Phase A detect-rebuild precursor (sits
+// out of band of the four-step nav), so we map it onto the 'detect'
+// step for the pipeline-header active highlight.
+const ALIAS_TO_STEP: Record<string, StepKey> = {
+  '/media-library': 'detect'
+};
+
 export function statusFromPath(currentPath: string): Record<StepKey, StepStatus> {
-  const active = STEPS.find(s => currentPath.startsWith(s.path))?.key;
+  let active: StepKey | undefined = STEPS.find(s => currentPath.startsWith(s.path))?.key;
+  if (!active) {
+    for (const [alias, step] of Object.entries(ALIAS_TO_STEP)) {
+      if (currentPath.startsWith(alias)) { active = step; break; }
+    }
+  }
   const out = {} as Record<StepKey, StepStatus>;
   for (const s of STEPS) out[s.key] = s.key === active ? 'active' : 'pending';
   return out;

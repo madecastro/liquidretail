@@ -82,6 +82,24 @@ export function qualityBucket(score: number | null | undefined): { label: 'High'
   return            { label: 'Low',    tone: '#DC2626' };
 }
 
+// Build a Cloudinary `c_crop` transform URL on the fly from the source
+// image + a pixel-coord bbox. Smart-crop output stores coordinates
+// only; the legacy detect view computed transform URLs the same way.
+// Returns null when sourceUrl isn't a Cloudinary upload URL we can
+// transform, so the caller can fall back to "not yet generated".
+export function buildCloudinaryCropUrl(
+  sourceUrl: string | null | undefined,
+  bbox: { x1: number; y1: number; x2: number; y2: number } | null | undefined
+): string | null {
+  if (!sourceUrl || !bbox) return null;
+  if (!sourceUrl.includes('/upload/')) return null;
+  const w = Math.max(1, Math.round(bbox.x2 - bbox.x1));
+  const h = Math.max(1, Math.round(bbox.y2 - bbox.y1));
+  const x = Math.max(0, Math.round(bbox.x1));
+  const y = Math.max(0, Math.round(bbox.y1));
+  return sourceUrl.replace('/upload/', `/upload/c_crop,w_${w},h_${h},x_${x},y_${y}/`);
+}
+
 // Density grid → CSS color for a single cell. White at 0, red at 1.
 export function densityCellColor(v: number): string {
   const x = Math.max(0, Math.min(1, v));

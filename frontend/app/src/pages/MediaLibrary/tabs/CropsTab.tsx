@@ -6,10 +6,11 @@
 
 import { Box, Card, CardBody, Heading, HStack, VStack, Text, Image, Badge, SimpleGrid } from '@chakra-ui/react';
 import type { DetectResult } from '../types';
-import { qualityBucket } from '../format';
+import { qualityBucket, buildCloudinaryCropUrl } from '../format';
 
 export function CropsTab({ detect }: { detect: DetectResult | null }) {
   if (!detect) return <Text fontSize="sm" color="brand.muted">No detect data yet.</Text>;
+  const sourceUrl = detect.imageUrl || null;
 
   const smartCrops = (detect.crops as Record<string, Array<Record<string, unknown>>> | undefined) || {};
   const extended   = (detect.extendedCrops as Record<string, Array<Record<string, unknown>>> | undefined) || {};
@@ -40,7 +41,16 @@ export function CropsTab({ detect }: { detect: DetectResult | null }) {
                     <SimpleGrid columns={3} spacing={2}>
                       {crops.map((c, i) => {
                         const isWinner = c['id'] === j?.winnerId;
-                        const url = c['imageUrl'] as string | undefined;
+                        // Smart crops are coordinate-only — derive the
+                        // preview URL from the source image's Cloudinary
+                        // upload URL (no re-upload, just a transform).
+                        const inlineUrl = c['imageUrl'] as string | undefined;
+                        const url = inlineUrl || buildCloudinaryCropUrl(sourceUrl, {
+                          x1: Number(c['x1']),
+                          y1: Number(c['y1']),
+                          x2: Number(c['x2']),
+                          y2: Number(c['y2'])
+                        });
                         return (
                           <Box
                             key={i}

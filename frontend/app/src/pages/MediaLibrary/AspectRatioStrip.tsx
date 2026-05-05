@@ -5,7 +5,7 @@
 // extendedCropsService doesn't produce it yet (existing backlog row).
 
 import { HStack, VStack, Box, Text, Badge, Image } from '@chakra-ui/react';
-import { qualityBucket } from './format';
+import { qualityBucket, buildCloudinaryCropUrl } from './format';
 import type { DetectResult } from './types';
 
 type Variant = {
@@ -94,11 +94,23 @@ function buildVariantList(fileUrl: string, detect: DetectResult | null): Variant
     const winnerScore = judge[b.judgeKey]?.winnerScore ?? null;
     const list = cropsMap[b.cropKey] || [];
     const winner = list.find(c => c['id'] === winnerId) || list[0];
+    // Smart crops are stored as coordinate-only objects (no imageUrl).
+    // Build a Cloudinary c_crop transform URL on the fly from the
+    // source image so the strip shows actual previews.
+    let imageUrl: string | null = typeof winner?.['imageUrl'] === 'string' ? winner['imageUrl'] as string : null;
+    if (!imageUrl && winner) {
+      imageUrl = buildCloudinaryCropUrl(fileUrl, {
+        x1: Number(winner['x1']),
+        y1: Number(winner['y1']),
+        x2: Number(winner['x2']),
+        y2: Number(winner['y2'])
+      });
+    }
     out.push({
       ratio: b.ratio,
       label: b.label,
-      imageUrl: typeof winner?.['imageUrl'] === 'string' ? winner['imageUrl'] as string : null,
-      score:    typeof winnerScore === 'number' ? winnerScore : null
+      imageUrl,
+      score: typeof winnerScore === 'number' ? winnerScore : null
     });
   }
 

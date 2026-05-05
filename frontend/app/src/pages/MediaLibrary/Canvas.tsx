@@ -4,7 +4,7 @@
 // the underlying media's intrinsic dimensions are known; if not we
 // degrade to "image only, no overlays" rather than risk misaligned bboxes.
 
-import { Box, Spinner, Text, Flex, VStack, AspectRatio } from '@chakra-ui/react';
+import { Box, Spinner, Text, Flex, VStack } from '@chakra-ui/react';
 import type {
   DetectResult,
   LayerKey,
@@ -31,6 +31,16 @@ export function Canvas({ fileUrl, detect, loading, activeLayers }: Props) {
   // any). Used by Safe Zones + Density layers.
   const overlay = pickPrimaryOverlay(detect);
 
+  // CSS aspect-ratio container. We pin the height (so the box always
+  // claims usable space inside the flex column) and let the width
+  // follow from the image's intrinsic ratio. maxWidth caps overflow on
+  // wide images; maxHeight caps very tall images so the bottom strip
+  // stays visible. AspectRatio (Chakra) was collapsing to 0 width when
+  // width was "auto" inside a flex-centered parent — switched to raw
+  // CSS aspect-ratio which Chrome / Safari / Firefox all support.
+  const ratio = w && h ? `${w} / ${h}` : '4 / 5';
+  const hasDims = w > 0 && h > 0;
+
   return (
     <Box
       flex={1}
@@ -42,37 +52,39 @@ export function Canvas({ fileUrl, detect, loading, activeLayers }: Props) {
       p={5}
       overflow="auto"
     >
-      <Box position="relative" maxW="100%" maxH="100%">
+      <Box
+        position="relative"
+        bg="gray.100"
+        borderRadius="md"
+        overflow="hidden"
+        sx={{
+          aspectRatio: ratio,
+          height: '100%',          // claim all available column height
+          width: 'auto',           // width derives from aspect-ratio
+          maxWidth: '100%',
+          maxHeight: '100%'
+        }}
+      >
         {fileUrl && (
-          // Fixed aspect-ratio frame so overlays line up before the image
-          // resolves intrinsic size on slow networks.
-          <AspectRatio
-            ratio={w && h ? w / h : 4 / 5}
-            w="auto"
-            maxH="78vh"
-          >
-            <Box position="relative" h="100%">
-              <img
-                src={fileUrl}
-                alt="media"
-                style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 8 }}
-              />
-              {detect && w > 0 && h > 0 && (
-                <Box position="absolute" inset={0} pointerEvents="none">
-                  {activeLayers.has('density')   && overlay?.densityGrid   && <DensityLayer grid={overlay.densityGrid} />}
-                  {activeLayers.has('safe-zones') && overlay?.restrictions && <SafeZonesLayer restrictions={overlay.restrictions} />}
-                  {activeLayers.has('crops')     && detect.refinedProducts && <CropsLayer refinedProducts={detect.refinedProducts} imgW={w} imgH={h} />}
-                  {activeLayers.has('products')  && detect.refinedProducts && <ProductsLayer refinedProducts={detect.refinedProducts} imgW={w} imgH={h} />}
-                  {activeLayers.has('people')    && detect.products       && <PeopleLayer yoloProducts={detect.products} imgW={w} imgH={h} />}
-                  {activeLayers.has('text')      && detect.text            && <TextLayer regions={detect.text} />}
-                </Box>
-              )}
-            </Box>
-          </AspectRatio>
+          <img
+            src={fileUrl}
+            alt="media"
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          />
+        )}
+        {detect && hasDims && (
+          <Box position="absolute" inset={0} pointerEvents="none">
+            {activeLayers.has('density')    && overlay?.densityGrid   && <DensityLayer grid={overlay.densityGrid} />}
+            {activeLayers.has('safe-zones') && overlay?.restrictions && <SafeZonesLayer restrictions={overlay.restrictions} />}
+            {activeLayers.has('crops')      && detect.refinedProducts && <CropsLayer refinedProducts={detect.refinedProducts} imgW={w} imgH={h} />}
+            {activeLayers.has('products')   && detect.refinedProducts && <ProductsLayer refinedProducts={detect.refinedProducts} imgW={w} imgH={h} />}
+            {activeLayers.has('people')     && detect.products       && <PeopleLayer yoloProducts={detect.products} imgW={w} imgH={h} />}
+            {activeLayers.has('text')       && detect.text            && <TextLayer regions={detect.text} />}
+          </Box>
         )}
 
         {loading && (
-          <Flex position="absolute" inset={0} align="center" justify="center" bg="whiteAlpha.700" borderRadius="md">
+          <Flex position="absolute" inset={0} align="center" justify="center" bg="whiteAlpha.700">
             <VStack><Spinner /><Text fontSize="xs" color="brand.muted">Loading detect data…</Text></VStack>
           </Flex>
         )}

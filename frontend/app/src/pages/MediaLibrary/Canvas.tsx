@@ -17,15 +17,25 @@ import type {
 import { densityCellColor } from './format';
 
 type Props = {
-  fileUrl:      string;
-  detect:       DetectResult | null;
-  loading:      boolean;
-  activeLayers: Set<LayerKey>;
+  fileUrl:        string;
+  detect:         DetectResult | null;
+  loading:        boolean;
+  activeLayers:   Set<LayerKey>;
+  // When a non-original aspect-ratio variant is selected, the canvas
+  // swaps to the cropped image and suppresses overlays — the bbox
+  // coords were computed against the source frame, so they no longer
+  // align inside the cropped view. Set both fields together; if
+  // displayUrl is null/undefined, the canvas falls back to fileUrl
+  // and shows overlays as usual.
+  displayUrl?:    string | null;
+  isCroppedView?: boolean;
+  cropAspect?:    string | null;
 };
 
-export function Canvas({ fileUrl, detect, loading, activeLayers }: Props) {
+export function Canvas({ fileUrl, detect, loading, activeLayers, displayUrl, isCroppedView, cropAspect }: Props) {
   const w = detect?.width  || 0;
   const h = detect?.height || 0;
+  const renderUrl = displayUrl || fileUrl;
 
   // Pull the canonical overlay-zone analysis (5:4 base, falling back to
   // any). Used by Safe Zones + Density layers.
@@ -38,8 +48,16 @@ export function Canvas({ fileUrl, detect, loading, activeLayers }: Props) {
   // stays visible. AspectRatio (Chakra) was collapsing to 0 width when
   // width was "auto" inside a flex-centered parent — switched to raw
   // CSS aspect-ratio which Chrome / Safari / Firefox all support.
-  const ratio = w && h ? `${w} / ${h}` : '4 / 5';
+  //
+  // When a cropped variant is selected, the container's aspect-ratio
+  // switches to that variant so the cropped image fills it correctly
+  // (otherwise the crop would letterbox/pillarbox inside the source
+  // frame's ratio).
+  const ratio = isCroppedView && cropAspect
+    ? cropAspect.replace(':', ' / ')
+    : (w && h ? `${w} / ${h}` : '4 / 5');
   const hasDims = w > 0 && h > 0;
+  const showOverlays = !isCroppedView;
 
   return (
     <Box
@@ -65,14 +83,14 @@ export function Canvas({ fileUrl, detect, loading, activeLayers }: Props) {
           maxHeight: '100%'
         }}
       >
-        {fileUrl && (
+        {renderUrl && (
           <img
-            src={fileUrl}
+            src={renderUrl}
             alt="media"
             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
           />
         )}
-        {detect && hasDims && (
+        {detect && hasDims && showOverlays && (
           <Box position="absolute" inset={0} pointerEvents="none">
             {activeLayers.has('density')    && overlay?.densityGrid   && <DensityLayer grid={overlay.densityGrid} />}
             {activeLayers.has('safe-zones') && overlay?.restrictions && <SafeZonesLayer restrictions={overlay.restrictions} />}
@@ -80,6 +98,23 @@ export function Canvas({ fileUrl, detect, loading, activeLayers }: Props) {
             {activeLayers.has('products')   && detect.refinedProducts && <ProductsLayer refinedProducts={detect.refinedProducts} imgW={w} imgH={h} />}
             {activeLayers.has('people')     && detect.products       && <PeopleLayer yoloProducts={detect.products} imgW={w} imgH={h} />}
             {activeLayers.has('text')       && detect.text            && <TextLayer regions={detect.text} />}
+          </Box>
+        )}
+
+        {isCroppedView && (
+          <Box
+            position="absolute"
+            top={2}
+            left={2}
+            px={2}
+            py={1}
+            bg="blackAlpha.700"
+            borderRadius="md"
+            fontSize="10px"
+            color="white"
+            fontWeight="600"
+          >
+            {cropAspect} crop · overlays hidden
           </Box>
         )}
 

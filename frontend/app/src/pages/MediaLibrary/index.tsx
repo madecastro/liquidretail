@@ -21,7 +21,7 @@ import { Sidebar } from './Sidebar';
 import { MediaHeader } from './MediaHeader';
 import { FilterChips } from './FilterChips';
 import { Canvas } from './Canvas';
-import { AspectRatioStrip } from './AspectRatioStrip';
+import { AspectRatioStrip, type AspectVariant } from './AspectRatioStrip';
 import { BottomBar } from './BottomBar';
 import { RightSidebar } from './RightSidebar';
 import { useMediaList, useMediaDetail, deleteMedia } from './hooks';
@@ -59,6 +59,19 @@ export function MediaLibraryPage() {
       return next;
     });
   };
+
+  // Active aspect-ratio variant — drives what the canvas displays.
+  // Defaults to 'original' (full source frame, overlays visible).
+  // Selecting a crop variant shows the cropped image and hides overlays
+  // since their bbox math was computed against the source frame.
+  const [activeVariant, setActiveVariant] = useState<AspectVariant>(
+    { ratio: 'original', label: 'Original', imageUrl: null, score: null }
+  );
+  // Reset to Original whenever the selected media changes — otherwise
+  // a 1:1 crop selection from the previous media bleeds over.
+  useEffect(() => {
+    setActiveVariant({ ratio: 'original', label: 'Original', imageUrl: null, score: null });
+  }, [selectedId]);
 
   const handleSelect = (mediaId: string) => {
     setParams({ mediaId }, { replace: false });
@@ -107,8 +120,16 @@ export function MediaLibraryPage() {
                 detect={detail.data?.result || null}
                 loading={detail.loading}
                 activeLayers={activeLayers}
+                displayUrl={activeVariant.ratio === 'original' ? null : activeVariant.imageUrl}
+                isCroppedView={activeVariant.ratio !== 'original'}
+                cropAspect={activeVariant.ratio !== 'original' ? activeVariant.ratio : null}
               />
-              <AspectRatioStrip fileUrl={selectedRow.fileUrl} detect={detail.data?.result || null} />
+              <AspectRatioStrip
+                fileUrl={selectedRow.fileUrl}
+                detect={detail.data?.result || null}
+                value={activeVariant.ratio}
+                onChange={setActiveVariant}
+              />
             </>
           ) : (
             <Flex flex={1} align="center" justify="center" bg="gray.50">

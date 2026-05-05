@@ -21,6 +21,8 @@ import { BrandHeader } from './Header';
 import { BrandVoiceCard } from './BrandVoiceCard';
 import { VisualIdentityCard } from './VisualIdentityCard';
 import { AudiencePersonasCard } from './AudiencePersonasCard';
+import { IntegrationsCard } from './IntegrationsCard';
+import { AutomationEngineCard } from './AutomationEngineCard';
 import { DangerZone } from './DangerZone';
 import { SaveBar } from './SaveBar';
 import { PlaceholderCard } from './PlaceholderCard';
@@ -62,20 +64,10 @@ export function BrandPage() {
       <VStack align="stretch" spacing={5} mt={3} pb={20}>
         <BrandHeader brand={brand} edit={edit} onChanged={refresh} />
 
-        <PlaceholderCard
-          title="Integrations"
-          phase="Phase 4c"
-          iconColor="#0B84D8"
-          description="Connect Instagram, Meta Ads, Google Merchant, TikTok Shop. Status, manage/disconnect, last-synced timestamps, and Sync Now CTA. Wires against the existing IntegrationCredential collection."
-        />
+        <IntegrationsCard brand={brand} />
 
         <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={5}>
-          <PlaceholderCard
-            title="Automation Engine"
-            phase="Phase 4c"
-            iconColor="#7A35E8"
-            description="Auto-reply on matches · Auto-create products from detect · Auto-sync schedule. Wires existing Brand.commentReply / uploadSettings.autoCreateFromDetect / syncSettings."
-          />
+          <AutomationEngineCard brand={brand} onChanged={refresh} />
           <PlaceholderCard
             title="Brand Safety"
             phase="Phase 4d"

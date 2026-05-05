@@ -15,6 +15,7 @@
 
 import { Box, VStack, HStack, SimpleGrid, Text, Spinner, Card, CardBody, useToast } from '@chakra-ui/react';
 import { useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useBrandDetail } from './useBrandDetail';
 import { useBrandEdit } from './useBrandEdit';
 import { BrandHeader } from './Header';
@@ -40,6 +41,33 @@ export function BrandPage() {
       toast({ title: 'Save failed', description: edit.error, status: 'error', duration: 4000 });
     }
   }, [edit.error, toast]);
+
+  // Consume post-OAuth bounce query params from /api/integrations/*/callback
+  // (see services/frontendOriginValidator). The new app is now in the
+  // allowlist so callbacks land here on /brand?ig_status=...&ig_setup=...
+  // (or ads_status=... for Meta Ads). Show a toast based on status,
+  // refresh integrations, then strip the params so a page reload
+  // doesn't re-toast.
+  useSearchParamsConsumer({
+    onConsume: ({ status, kind, msg, setupId }) => {
+      if (status === 'denied') {
+        toast({ title: `${kind} not connected`, description: 'You declined the consent screen.', status: 'warning', duration: 4000 });
+      } else if (status === 'error') {
+        toast({ title: `${kind} connect failed`, description: msg || 'Unknown error', status: 'error', duration: 5000 });
+      } else if (status === 'pending') {
+        toast({
+          title: `${kind} token captured`,
+          description: 'Setup needs Page/IG/catalog selection — finish on the legacy /brand.html for now (picker rebuild is a separate ticket).',
+          status: 'info',
+          duration: 7000
+        });
+      } else if (status === 'connected' || status === 'active') {
+        toast({ title: `${kind} connected`, status: 'success', duration: 2500 });
+      }
+      void setupId;        // not consumed yet — picker modal rebuild reads it
+      void refresh;
+    }
+  });
 
   if (loading && !brand) {
     return <Card variant="outline"><CardBody><HStack><Spinner /><Text fontSize="sm" color="brand.muted">Loading brand…</Text></HStack></CardBody></Card>;
@@ -106,4 +134,38 @@ function Breadcrumb({ brandName }: { brandName: string }) {
       <Text color="brand.ink" fontWeight="600">{brandName}</Text>
     </HStack>
   );
+}
+
+// Consume the post-OAuth bounce query params (ig_status / ig_setup
+// from Instagram, ads_status / ads_setup from Meta Ads) once on mount,
+// then strip them from the URL so a refresh doesn't re-fire the toast.
+// The provider/state-purpose distinction is encoded in the param
+// prefix; this hook normalizes them into a single shape.
+function useSearchParamsConsumer({
+  onConsume
+}: {
+  onConsume: (event: { status: string; kind: 'Instagram' | 'Meta Ads'; msg: string | null; setupId: string | null }) => void;
+}) {
+  const [params, setParams] = useSearchParams();
+
+  useEffect(() => {
+    const igStatus  = params.get('ig_status');
+    const adsStatus = params.get('ads_status');
+    if (!igStatus && !adsStatus) return;
+
+    const status   = igStatus || adsStatus || '';
+    const kind: 'Instagram' | 'Meta Ads' = igStatus ? 'Instagram' : 'Meta Ads';
+    const msg      = params.get('ig_msg')   || params.get('ads_msg')   || null;
+    const setupId  = params.get('ig_setup') || params.get('ads_setup') || null;
+
+    onConsume({ status, kind, msg, setupId });
+
+    // Strip OAuth bounce params; preserve any other query params the
+    // page might be using. Replace history entry so back-button doesn't
+    // resurrect the params.
+    const next = new URLSearchParams(params);
+    ['ig_status', 'ig_msg', 'ig_setup', 'ads_status', 'ads_msg', 'ads_setup'].forEach(k => next.delete(k));
+    setParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 }

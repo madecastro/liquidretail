@@ -74,10 +74,14 @@ export function IntegrationsCard({ brand }: Props) {
     if (kind !== 'instagram' && kind !== 'meta-ads') return;
     try {
       const path = kind === 'instagram' ? '/api/integrations/instagram/connect' : '/api/integrations/meta-ads/connect';
+      // Tell the backend where to bounce back after OAuth. The server
+      // validates against FRONTEND_URLS allowlist and round-trips
+      // through the OAuth state — see services/frontendOriginValidator.
+      const redirect = typeof window !== 'undefined' ? window.location.origin : null;
       const res = await apiJson<{ authorizeUrl: string }>(path, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
+        body: JSON.stringify({ redirect })
       });
       window.location.assign(res.authorizeUrl);
     } catch (err: unknown) {

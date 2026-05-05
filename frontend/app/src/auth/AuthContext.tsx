@@ -9,6 +9,15 @@ import type { User } from './types';
 // `#token=...` in the URL hash (Google callback redirected here),
 // extract + persist + clean the URL before the rest of the app reads
 // localStorage.
+//
+// IMPORTANT: hash consumption runs at module-LOAD time (the line
+// below), not in AuthProvider's useEffect. Reason: <Navigate> from
+// react-router-dom calls history.replace synchronously in its own
+// effect, which runs BEFORE the parent AuthProvider's effect (React
+// runs child effects first). The replace strips the hash, so by the
+// time consumeHashToken would have run inside useEffect, the token
+// is gone. Doing it at import time guarantees we beat all React
+// effects to the URL.
 
 type AuthState =
   | { status: 'loading' }
@@ -42,15 +51,19 @@ function buildLogoutLandingUrl(): string {
   return '/';
 }
 
+// Consume the OAuth bounce hash NOW, before any component (including
+// the Router's <Navigate> children) gets a chance to mutate the URL.
+// Idempotent — runs once at import; subsequent calls are no-ops.
+if (typeof window !== 'undefined') {
+  consumeHashToken();
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({ status: 'loading' });
 
   useEffect(() => {
-    // 1. Pick up an OAuth bounce token from the URL hash if present.
-    consumeHashToken();
-
-    // 2. Read whatever's in localStorage now (including anything just
-    //    stashed from the hash) and decide auth state.
+    // The hash was already consumed at module load. Just read the
+    // resulting localStorage state and decide auth state.
     const token = localStorage.getItem('token');
     if (!token) {
       setState({ status: 'unauthenticated' });

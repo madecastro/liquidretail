@@ -13,24 +13,30 @@
   command = "npm run build"
   publish = "dist"
 
-# SPA fallback — every route falls through to index.html so
-# /brand, /upload, /detect, /ads, etc. all hydrate the React app.
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
+# RULE ORDER MATTERS — Netlify processes redirects top-to-bottom and
+# the first match wins. The /api/* and /auth/* proxies must come
+# BEFORE the SPA fallback or the catch-all swallows them and returns
+# index.html (which causes React-Router to bounce to /brand and the
+# OAuth flow silently breaks).
 
-# API + auth pass-through to the Render backend so the dev SPA
-# doesn't need CORS exemptions. Adjust the target if your dev
-# backend lives elsewhere.
+# API pass-through to the Render backend.
 [[redirects]]
   from = "/api/*"
   to = "https://liquidretail-backend.onrender.com/api/:splat"
   status = 200
   force = true
 
+# Auth pass-through (Google OAuth start + callback both proxy here).
 [[redirects]]
   from = "/auth/*"
   to = "https://liquidretail-backend.onrender.com/auth/:splat"
   status = 200
   force = true
+
+# SPA fallback — every OTHER unmatched path serves index.html so
+# /brand, /upload, /detect, /media-library, /ads etc. hydrate the
+# React app. Must stay last.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

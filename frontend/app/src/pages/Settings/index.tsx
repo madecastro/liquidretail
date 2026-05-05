@@ -1,12 +1,12 @@
-// Settings — workspace-level configuration stub.
+// Settings — workspace-level configuration stub + Danger Zone.
 //
-// Placeholder for advertiser-level settings (members, billing,
-// integration management across brands, API keys). Brand-level
-// settings stay on /brand. The real surface lands once we have a
-// concrete config to expose.
+// The advertiser-level rebuild (members, billing, API access) is on
+// the backlog; for now this page hosts the self-service Delete Account
+// flow so users have a way out without contacting support.
 
 import { Card, CardBody, VStack, Text } from '@chakra-ui/react';
 import { PageHeader } from '../../shell/PageHeader';
+import { DeleteAccountSection } from './DeleteAccountSection';
 
 export function SettingsPage() {
   return (
@@ -18,7 +18,7 @@ export function SettingsPage() {
       />
       <Card variant="outline">
         <CardBody>
-          <VStack align="stretch" spacing={3} py={8} textAlign="center">
+          <VStack align="stretch" spacing={3} py={6} textAlign="center">
             <Text fontSize="sm" color="brand.muted" fontWeight="700" textTransform="uppercase" letterSpacing="0.06em">
               Coming soon
             </Text>
@@ -33,6 +33,8 @@ export function SettingsPage() {
           </VStack>
         </CardBody>
       </Card>
+
+      <DeleteAccountSection />
     </VStack>
   );
 }

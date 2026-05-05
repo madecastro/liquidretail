@@ -25,6 +25,7 @@ import { IntegrationsCard } from './IntegrationsCard';
 import { AutomationEngineCard } from './AutomationEngineCard';
 import { BrandSafetyCard } from './BrandSafetyCard';
 import { PreviewCard } from './PreviewCard';
+import { BrandReviewsCard } from './BrandReviewsCard';
 import { DangerZone } from './DangerZone';
 import { SaveBar } from './SaveBar';
 
@@ -73,6 +74,8 @@ export function BrandPage() {
         </SimpleGrid>
 
         <BrandVoiceCard brand={brand} edit={edit} />
+
+        <BrandReviewsCard brand={brand} onChanged={refresh} />
 
         <SimpleGrid columns={{ base: 1, lg: 3 }} spacing={5}>
           <VisualIdentityCard brand={brand} edit={edit} />

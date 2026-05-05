@@ -31,7 +31,8 @@ export const STEPS: readonly StepDef[] = [
 // out of band of the four-step nav), so we map it onto the 'detect'
 // step for the pipeline-header active highlight.
 const ALIAS_TO_STEP: Record<string, StepKey> = {
-  '/media-library': 'detect'
+  '/media-library': 'detect',
+  '/catalog':       'brand'
 };
 
 export function statusFromPath(currentPath: string): Record<StepKey, StepStatus> {

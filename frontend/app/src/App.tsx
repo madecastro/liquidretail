@@ -8,6 +8,7 @@ import { UploadPage } from './pages/Upload';
 import { DetectPage } from './pages/Detect';
 import { AdGenerationPage } from './pages/AdGeneration';
 import { MediaLibraryPage } from './pages/MediaLibrary';
+import { CatalogBrowserPage } from './pages/CatalogBrowser';
 
 // Phase 3 wraps everything in AuthProvider + BrandProvider so any
 // component (including the Sidebar's BrandPicker + sign-out) can read
@@ -29,6 +30,7 @@ export function App() {
               <Route path="/upload"        element={<RequireAuth><UploadPage /></RequireAuth>} />
               <Route path="/detect"        element={<RequireAuth><DetectPage /></RequireAuth>} />
               <Route path="/media-library" element={<RequireAuth><MediaLibraryPage /></RequireAuth>} />
+              <Route path="/catalog"       element={<RequireAuth><CatalogBrowserPage /></RequireAuth>} />
               <Route path="/ads"           element={<RequireAuth><AdGenerationPage /></RequireAuth>} />
             </Route>
             <Route path="/"  element={<Navigate to="/brand" replace />} />

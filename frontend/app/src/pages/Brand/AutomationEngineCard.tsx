@@ -142,14 +142,11 @@ export function AutomationEngineCard({ brand, onChanged }: Props) {
             variant="outline"
             size="sm"
             w="100%"
-            onClick={() => navigate('/media-library')}
+            onClick={() => navigate('/catalog')}
             rightIcon={<ArrowIcon />}
           >
             Open Catalog Browser
           </Button>
-          <Text fontSize="9px" color="brand.muted" mt={1.5} textAlign="center">
-            Catalog browser inside Phase 4 lands as a dedicated tab — for now this jumps to the Media Library.
-          </Text>
         </Box>
       </CardBody>
     </Card>

@@ -69,7 +69,14 @@ function ConfirmDeleteModal({ isOpen, onClose, brand }: { isOpen: boolean; onClo
     if (!matches) return;
     setBusy(true);
     try {
-      await apiJson(`/api/brand/${brand._id}`, { method: 'DELETE' });
+      // Backend has its own type-to-confirm gate (DELETE /api/brand/:id
+      // requires { confirmName } in the body matching brand.name exactly).
+      // Pass through the typed string the user just confirmed against.
+      await apiJson(`/api/brand/${brand._id}`, {
+        method:  'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ confirmName: brand.name })
+      });
       // BrandContext refreshes its brand list and picks a new active
       // brand if the deleted one was active. Brand-id selection
       // happens in the picker.

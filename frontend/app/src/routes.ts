@@ -26,14 +26,26 @@ export const STEPS: readonly StepDef[] = [
   { key: 'ads',       path: '/ads',       label: 'Ads',       description: 'Rendered creatives' }
 ] as const;
 
+// Secondary destinations — utility pages that aren't part of the
+// pipeline narrative but the operator reaches often. Rendered below
+// the numbered STEPS in the sidebar with simpler styling.
+export type SecondaryNavItem = {
+  path:  string;
+  label: string;
+};
+
+export const SECONDARY_NAV: readonly SecondaryNavItem[] = [
+  { path: '/catalog',       label: 'Product Catalog' },
+  { path: '/media-library', label: 'Media Library' },
+  { path: '/settings',      label: 'Settings' }
+] as const;
+
 // Out-of-band routes that should still highlight one of the primary
 // nav items when the user lands on them (deep links + the wizard).
 const ALIAS_TO_STEP: Record<string, StepKey> = {
   '/generate-ads':  'campaigns',
   '/upload':        'campaigns',
-  '/detect':        'campaigns',
-  '/media-library': 'campaigns',
-  '/catalog':       'campaigns'
+  '/detect':        'campaigns'
 };
 
 export function statusFromPath(currentPath: string): Record<StepKey, StepStatus> {

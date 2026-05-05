@@ -1,6 +1,6 @@
-import { Box, Flex, Text, VStack, Badge, Button, HStack, Avatar } from '@chakra-ui/react';
+import { Box, Flex, Text, VStack, Badge, Button, HStack, Avatar, Divider } from '@chakra-ui/react';
 import { NavLink } from 'react-router-dom';
-import { STEPS, type StepStatus } from '../routes';
+import { STEPS, SECONDARY_NAV, type StepStatus } from '../routes';
 import { rsGradient } from '../theme/reachSocialTheme';
 import { useAuth } from '../auth/AuthContext';
 import { BrandPicker } from './BrandPicker';
@@ -49,7 +49,18 @@ export function Sidebar({ stepStatuses }: Props) {
         })}
       </VStack>
 
-      <Box mt="auto" pt={6} borderTopWidth="1px" borderTopColor="brand.border">
+      <Box mt="auto">
+        <Divider my={4} />
+        <VStack as="nav" align="stretch" spacing={0.5}>
+          {SECONDARY_NAV.map(item => (
+            <NavLink key={item.path} to={item.path} style={{ textDecoration: 'none' }}>
+              {({ isActive }) => <SecondaryNavItem label={item.label} isActive={isActive} />}
+            </NavLink>
+          ))}
+        </VStack>
+      </Box>
+
+      <Box pt={6} mt={4} borderTopWidth="1px" borderTopColor="brand.border">
         {auth.status === 'authenticated' ? (
           <HStack spacing={3}>
             <Avatar name={auth.user.name} src={auth.user.photo ?? undefined} size="sm" />
@@ -137,6 +148,29 @@ function NavItem({
         </Text>
       </Box>
       <StatusBadge status={status} />
+    </Flex>
+  );
+}
+
+function SecondaryNavItem({ label, isActive }: { label: string; isActive: boolean }) {
+  return (
+    <Flex
+      align="center"
+      px={3}
+      py={2}
+      borderRadius="md"
+      bg={isActive ? 'rsViolet.50' : 'transparent'}
+      transition="background 120ms"
+      _hover={{ bg: isActive ? 'rsViolet.50' : 'gray.50' }}
+    >
+      <Text
+        fontSize="sm"
+        fontWeight={isActive ? '700' : '600'}
+        color={isActive ? 'rsViolet.700' : 'brand.muted'}
+        lineHeight="1.2"
+      >
+        {label}
+      </Text>
     </Flex>
   );
 }

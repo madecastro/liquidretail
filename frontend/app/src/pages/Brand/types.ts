@@ -75,6 +75,7 @@ export type Brand = {
     dailyDetectRunCap?:  number;
     catalogCadenceHours?: number;
     postsCadenceHours?:  number;
+    campaignCadenceHours?: number;
   };
   commentReply?: {
     enabled?:        boolean;

@@ -219,7 +219,7 @@ export const IntegrationsCard = forwardRef<IntegrationsCardHandle, Props>(functi
               </Text>
               <Text fontSize="xs" color="brand.muted">
                 {brand.syncSettings?.autoSyncEnabled
-                  ? `Catalog every ${brand.syncSettings?.catalogCadenceHours || 24}h · Posts every ${brand.syncSettings?.postsCadenceHours || 1}h`
+                  ? `Catalog every ${brand.syncSettings?.catalogCadenceHours || 24}h · Posts every ${brand.syncSettings?.postsCadenceHours || 1}h · Campaigns every ${brand.syncSettings?.campaignCadenceHours || 6}h`
                   : 'Schedule disabled — toggle it in Automation Engine'}
               </Text>
             </Box>

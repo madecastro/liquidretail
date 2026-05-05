@@ -23,6 +23,7 @@ type Campaign = {
   budget:        { dailyMicros: number | null; lifetimeMicros: number | null; currency: string | null } | null;
   schedule:      { start: string | null; end: string | null } | null;
   productSetIds: string[];
+  matchedProductCount: number;
   adSetCount:    number;
   adCount:       number;
   lastSyncedAt:  string | null;
@@ -184,6 +185,12 @@ function CampaignRow({ campaign: c }: { campaign: Campaign }) {
                 <>
                   <Text>·</Text>
                   <Text>{productSetCount} product set{productSetCount === 1 ? '' : 's'}</Text>
+                </>
+              )}
+              {c.matchedProductCount > 0 && (
+                <>
+                  <Text>·</Text>
+                  <Text>{c.matchedProductCount} matched product{c.matchedProductCount === 1 ? '' : 's'}</Text>
                 </>
               )}
               {dailyBudget && (

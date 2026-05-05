@@ -86,7 +86,16 @@ export function GenerateAdsWizard() {
     if (i < STEPS.length - 1) goTo(STEPS[i + 1].key);
   };
 
-  const update = (patch: Partial<WizardSelections>) => setSelections(prev => ({ ...prev, ...patch }));
+  const update = (patch: Partial<WizardSelections>) =>
+    setSelections(prev => {
+      // Changing the campaign invalidates downstream selections —
+      // products are scoped to the previous campaign, so clear them
+      // so Step 2's auto-select can re-fire against the new match set.
+      if (patch.campaignId !== undefined && patch.campaignId !== prev.campaignId) {
+        return { ...prev, ...patch, productIds: [] };
+      }
+      return { ...prev, ...patch };
+    });
 
   // Step → can-proceed gate. Each step decides what it requires; the
   // wizard footer reads this to enable/disable Next.

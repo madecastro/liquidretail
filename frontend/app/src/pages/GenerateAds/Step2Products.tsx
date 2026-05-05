@@ -1,29 +1,32 @@
 // Step 2 — Products select.
 //
-// Pulls the brand's catalog filtered to products detected in any media
-// linked to the chosen campaign. All matched products start selected;
-// the operator can deselect any they don't want included.
+// Pulls the brand's catalog filtered to products this campaign is
+// promoting, as resolved by the Meta Ads creative matcher (URL +
+// text similarity against ad creatives → CatalogProduct.productUrl /
+// title). The matched set lands pre-selected; the operator can
+// deselect any they don't want included.
 //
 // Empty states:
-//   no products in campaign → upload media to generate matches
+//   no products in campaign → upload media or pick a different campaign
 //   campaign not yet picked → bounce back to Step 1
 //
-// Backend filter (TODO): GET /api/catalog?brandId=X&campaignId=Y or a
-// dedicated /api/campaigns/:id/products endpoint that joins on the
-// detected ProductMatchArtifacts.
+// Backend: GET /api/campaigns/:id/products returns the hydrated rows
+// + per-product matchMethod ('url' | 'text' | 'mixed').
 
-import { useEffect, useMemo } from 'react';
-import { Box, VStack, HStack, Text, Button, Card, CardBody, Checkbox, Image } from '@chakra-ui/react';
+import { useEffect, useMemo, useState } from 'react';
+import { Box, VStack, HStack, Text, Button, Card, CardBody, Checkbox, Image, Badge, Spinner } from '@chakra-ui/react';
 import { Link as RouterLink } from 'react-router-dom';
 import type { WizardSelections } from './index';
 import { StepShell } from './index';
+import { apiJson } from '../../auth/apiFetch';
 
 type Product = {
-  id:        string;
-  title:     string;
-  imageUrl:  string | null;
-  category:  string | null;
-  detectedIn?: number;       // count of media in the campaign that detected this SKU
+  id:          string;
+  title:       string;
+  imageUrl:    string | null;
+  category:    string | null;
+  productUrl:  string | null;
+  matchMethod: 'url' | 'text' | 'mixed' | null;
 };
 
 type Props = {
@@ -32,21 +35,38 @@ type Props = {
 };
 
 export function Step2Products({ value, onChange }: Props) {
-  // TODO(wizard backend): fetch by campaign — for now stub empty list.
-  const products: Product[] = [];
+  const campaignId = value.campaignId;
+  const [products, setProducts] = useState<Product[] | null>(null);
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState<string | null>(null);
 
-  // Auto-select every detected product the first time we see them.
-  // The operator can toggle any off; subsequent renders honor their
-  // current selection.
   useEffect(() => {
-    if (products.length === 0) return;
+    if (!campaignId) { setProducts(null); return; }
+    setLoading(true);
+    setError(null);
+    void (async () => {
+      try {
+        const res = await apiJson<{ products: Product[] }>(`/api/campaigns/${campaignId}/products`);
+        setProducts(res.products || []);
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Failed to load campaign products');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [campaignId]);
+
+  // First-time auto-select — every matched product starts checked.
+  // Re-runs when the campaign changes (productIds reset by step nav).
+  useEffect(() => {
+    if (!products || products.length === 0) return;
     if (value.productIds.length > 0) return;
     onChange({ productIds: products.map(p => p.id) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [products.length]);
+  }, [products]);
 
   const allSelected = useMemo(
-    () => products.length > 0 && value.productIds.length === products.length,
+    () => !!products && products.length > 0 && value.productIds.length === products.length,
     [products, value.productIds]
   );
 
@@ -55,47 +75,61 @@ export function Step2Products({ value, onChange }: Props) {
     if (set.has(id)) set.delete(id); else set.add(id);
     onChange({ productIds: Array.from(set) });
   };
-
   const toggleAll = () => {
+    if (!products) return;
     onChange({ productIds: allSelected ? [] : products.map(p => p.id) });
   };
 
-  if (!value.campaignId) {
+  if (!campaignId) {
     return (
-      <StepShell heading="Pick products" helper="Pick a campaign first — its detected products will populate this step.">
+      <StepShell heading="Pick products" helper="Pick a campaign first — its matched products will populate this step.">
         <Card variant="outline">
           <CardBody>
-            <Text fontSize="sm" color="brand.muted">
-              No campaign selected. Go back to Step 1 to choose one.
-            </Text>
+            <Text fontSize="sm" color="brand.muted">No campaign selected. Go back to Step 1 to choose one.</Text>
           </CardBody>
         </Card>
       </StepShell>
     );
   }
 
-  if (products.length === 0) {
+  if (loading) {
     return (
-      <StepShell heading="Pick products" helper="Products detected in this campaign's media.">
+      <StepShell heading="Pick products">
+        <HStack py={6} justify="center"><Spinner size="sm" /><Text fontSize="sm" color="brand.muted">Loading matched products…</Text></HStack>
+      </StepShell>
+    );
+  }
+
+  if (error) {
+    return (
+      <StepShell heading="Pick products">
+        <Card variant="outline"><CardBody><Text color="red.600" fontSize="sm">{error}</Text></CardBody></Card>
+      </StepShell>
+    );
+  }
+
+  if (!products || products.length === 0) {
+    return (
+      <StepShell heading="Pick products" helper="Products this campaign's creatives are promoting.">
         <Card variant="outline">
           <CardBody>
             <VStack align="stretch" spacing={3} py={6} textAlign="center">
               <Text fontSize="sm" color="brand.muted" fontWeight="700" textTransform="uppercase" letterSpacing="0.06em">
-                No detected products
+                No products matched
               </Text>
               <Text color="brand.ink" fontWeight="600" fontSize="md">
-                We haven't detected any products in this campaign's media yet.
+                We couldn't match this campaign's creatives to any of your catalog products.
               </Text>
-              <Text fontSize="sm" color="brand.muted" maxW="440px" mx="auto">
-                Upload media for the campaign so the detect pipeline can find product
-                matches — or pick a different campaign in Step 1.
+              <Text fontSize="sm" color="brand.muted" maxW="480px" mx="auto">
+                Make sure your catalog has product URLs and titles that align with what the
+                ads link to and describe — or pick a different campaign in Step 1.
               </Text>
               <HStack justify="center" pt={2}>
-                <Button as={RouterLink} to="/upload" variant="brand" size="sm">
-                  Upload media
-                </Button>
                 <Button as={RouterLink} to="/catalog" variant="outline" size="sm">
                   Browse catalog
+                </Button>
+                <Button as={RouterLink} to="/upload" variant="brand" size="sm">
+                  Upload media
                 </Button>
               </HStack>
             </VStack>
@@ -108,7 +142,7 @@ export function Step2Products({ value, onChange }: Props) {
   return (
     <StepShell
       heading="Pick products"
-      helper={`${value.productIds.length} of ${products.length} selected · auto-selected from products detected in the campaign's media.`}
+      helper={`${value.productIds.length} of ${products.length} selected · matched via the ad creatives' link URL + caption text.`}
     >
       <HStack justify="space-between" mb={3}>
         <Button size="xs" variant="outline" onClick={toggleAll}>
@@ -134,6 +168,15 @@ export function Step2Products({ value, onChange }: Props) {
 }
 
 function ProductRow({ product, selected, onToggle }: { product: Product; selected: boolean; onToggle: () => void }) {
+  const methodColor = product.matchMethod === 'url' ? 'green'
+                    : product.matchMethod === 'mixed' ? 'purple'
+                    : product.matchMethod === 'text' ? 'blue'
+                    : 'gray';
+  const methodLabel = product.matchMethod === 'url' ? 'URL match'
+                    : product.matchMethod === 'mixed' ? 'URL + text'
+                    : product.matchMethod === 'text' ? 'Text match'
+                    : null;
+
   return (
     <Box
       borderWidth="1px"
@@ -150,15 +193,27 @@ function ProductRow({ product, selected, onToggle }: { product: Product; selecte
           <Box w="44px" h="44px" borderRadius="md" bg="gray.100" />
         )}
         <Box flex={1} minW={0}>
-          <Text fontSize="sm" fontWeight="700" color="brand.ink" noOfLines={1}>{product.title}</Text>
+          <HStack spacing={2}>
+            <Text fontSize="sm" fontWeight="700" color="brand.ink" noOfLines={1}>{product.title}</Text>
+            {methodLabel && (
+              <Badge fontSize="9px" colorScheme={methodColor} variant="subtle">{methodLabel}</Badge>
+            )}
+          </HStack>
           <HStack spacing={2}>
             {product.category && <Text fontSize="11px" color="brand.muted" noOfLines={1}>{product.category}</Text>}
-            {product.detectedIn != null && (
-              <Text fontSize="10px" color="brand.muted">· detected in {product.detectedIn} media</Text>
-            )}
+            {product.productUrl && <Text fontSize="10px" color="brand.muted" noOfLines={1}>· {shortUrl(product.productUrl)}</Text>}
           </HStack>
         </Box>
       </HStack>
     </Box>
   );
+}
+
+function shortUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    return u.hostname.replace(/^www\./, '') + u.pathname;
+  } catch {
+    return url;
+  }
 }

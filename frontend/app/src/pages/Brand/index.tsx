@@ -40,7 +40,7 @@ export function BrandPage() {
   // immediately on landing, without the user having to click "Finish
   // setup" on the tile.
   const integrationsRef = useRef<IntegrationsCardHandle>(null);
-  const [pendingSetup, setPendingSetup] = useState<{ kind: 'Instagram' | 'Meta Ads'; id: string } | null>(null);
+  const [pendingSetup, setPendingSetup] = useState<{ kind: 'Instagram' | 'Meta Ads' | 'Google Ads'; id: string } | null>(null);
 
   // Surface save errors via toast (also rendered inline in SaveBar)
   useEffect(() => {
@@ -76,8 +76,9 @@ export function BrandPage() {
   // setupId from the OAuth bounce.
   useEffect(() => {
     if (!pendingSetup || !brand || !integrationsRef.current) return;
-    if (pendingSetup.kind === 'Instagram') integrationsRef.current.openIGPicker(pendingSetup.id);
-    else integrationsRef.current.openAdsPicker(pendingSetup.id);
+    if (pendingSetup.kind === 'Instagram')      integrationsRef.current.openIGPicker(pendingSetup.id);
+    else if (pendingSetup.kind === 'Meta Ads')  integrationsRef.current.openAdsPicker(pendingSetup.id);
+    else if (pendingSetup.kind === 'Google Ads') integrationsRef.current.openGoogleAdsPicker(pendingSetup.id);
     setPendingSetup(null);
   }, [pendingSetup, brand]);
 
@@ -148,27 +149,31 @@ function Breadcrumb({ brandName }: { brandName: string }) {
   );
 }
 
-// Consume the post-OAuth bounce query params (ig_status / ig_setup
-// from Instagram, ads_status / ads_setup from Meta Ads) once on mount,
-// then strip them from the URL so a refresh doesn't re-fire the toast.
+// Consume the post-OAuth bounce query params (ig_* from Instagram,
+// ads_* from Meta Ads, gads_* from Google Ads) once on mount, then
+// strip them from the URL so a refresh doesn't re-fire the toast.
 // The provider/state-purpose distinction is encoded in the param
 // prefix; this hook normalizes them into a single shape.
 function useSearchParamsConsumer({
   onConsume
 }: {
-  onConsume: (event: { status: string; kind: 'Instagram' | 'Meta Ads'; msg: string | null; setupId: string | null }) => void;
+  onConsume: (event: { status: string; kind: 'Instagram' | 'Meta Ads' | 'Google Ads'; msg: string | null; setupId: string | null }) => void;
 }) {
   const [params, setParams] = useSearchParams();
 
   useEffect(() => {
-    const igStatus  = params.get('ig_status');
-    const adsStatus = params.get('ads_status');
-    if (!igStatus && !adsStatus) return;
+    const igStatus   = params.get('ig_status');
+    const adsStatus  = params.get('ads_status');
+    const gadsStatus = params.get('gads_status');
+    if (!igStatus && !adsStatus && !gadsStatus) return;
 
-    const status   = igStatus || adsStatus || '';
-    const kind: 'Instagram' | 'Meta Ads' = igStatus ? 'Instagram' : 'Meta Ads';
-    const msg      = params.get('ig_msg')   || params.get('ads_msg')   || null;
-    const setupId  = params.get('ig_setup') || params.get('ads_setup') || null;
+    const status   = igStatus || adsStatus || gadsStatus || '';
+    const kind: 'Instagram' | 'Meta Ads' | 'Google Ads'
+      = igStatus  ? 'Instagram'
+      : adsStatus ? 'Meta Ads'
+      :             'Google Ads';
+    const msg      = params.get('ig_msg')   || params.get('ads_msg')   || params.get('gads_msg')   || null;
+    const setupId  = params.get('ig_setup') || params.get('ads_setup') || params.get('gads_setup') || null;
 
     onConsume({ status, kind, msg, setupId });
 
@@ -176,7 +181,9 @@ function useSearchParamsConsumer({
     // page might be using. Replace history entry so back-button doesn't
     // resurrect the params.
     const next = new URLSearchParams(params);
-    ['ig_status', 'ig_msg', 'ig_setup', 'ads_status', 'ads_msg', 'ads_setup'].forEach(k => next.delete(k));
+    ['ig_status', 'ig_msg', 'ig_setup',
+     'ads_status', 'ads_msg', 'ads_setup',
+     'gads_status', 'gads_msg', 'gads_setup'].forEach(k => next.delete(k));
     setParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

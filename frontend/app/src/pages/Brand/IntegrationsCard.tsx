@@ -28,16 +28,18 @@ import { apiJson } from '../../auth/apiFetch';
 import type { Brand } from './types';
 import { IGPickerModal } from './IGPickerModal';
 import { AdsPickerModal } from './AdsPickerModal';
+import { GoogleAdsPickerModal } from './GoogleAdsPickerModal';
 
 // Imperative handle exposed by IntegrationsCard so parents (like the
 // /brand page) can pop the picker open after the post-OAuth bounce
 // — see the useSearchParamsConsumer wiring in Brand/index.tsx.
 export type IntegrationsCardHandle = {
-  openIGPicker:  (credentialId: string) => void;
-  openAdsPicker: (credentialId: string) => void;
+  openIGPicker:        (credentialId: string) => void;
+  openAdsPicker:       (credentialId: string) => void;
+  openGoogleAdsPicker: (credentialId: string) => void;
 };
 
-type IntegrationKind = 'instagram' | 'meta-ads' | 'google-merchant' | 'tiktok-shop';
+type IntegrationKind = 'instagram' | 'meta-ads' | 'google-ads' | 'tiktok-shop';
 
 type StatusRow = {
   configured: boolean;
@@ -61,25 +63,30 @@ export const IntegrationsCard = forwardRef<IntegrationsCardHandle, Props>(functi
   const toast = useToast();
   const [igStatus,    setIgStatus]    = useState<StatusRow | null>(null);
   const [metaStatus,  setMetaStatus]  = useState<StatusRow | null>(null);
+  const [googleStatus, setGoogleStatus] = useState<StatusRow | null>(null);
   const [loading,     setLoading]     = useState(true);
   const [syncing,     setSyncing]     = useState(false);
-  const [igPickerCredId,  setIgPickerCredId]  = useState<string | null>(null);
-  const [adsPickerCredId, setAdsPickerCredId] = useState<string | null>(null);
+  const [igPickerCredId,        setIgPickerCredId]        = useState<string | null>(null);
+  const [adsPickerCredId,       setAdsPickerCredId]       = useState<string | null>(null);
+  const [googleAdsPickerCredId, setGoogleAdsPickerCredId] = useState<string | null>(null);
 
   useImperativeHandle(ref, () => ({
-    openIGPicker:  (credId) => setIgPickerCredId(credId),
-    openAdsPicker: (credId) => setAdsPickerCredId(credId)
+    openIGPicker:        (credId) => setIgPickerCredId(credId),
+    openAdsPicker:       (credId) => setAdsPickerCredId(credId),
+    openGoogleAdsPicker: (credId) => setGoogleAdsPickerCredId(credId)
   }), []);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [ig, meta] = await Promise.allSettled([
+      const [ig, meta, google] = await Promise.allSettled([
         apiJson<StatusRow>('/api/integrations/instagram/status'),
-        apiJson<{ configured: boolean; credential: StatusRow['credential'] }>('/api/integrations/meta-ads/status')
+        apiJson<{ configured: boolean; credential: StatusRow['credential'] }>('/api/integrations/meta-ads/status'),
+        apiJson<{ configured: boolean; credential: StatusRow['credential'] }>('/api/integrations/google-ads/status')
       ]);
-      setIgStatus(ig.status   === 'fulfilled' ? ig.value   : null);
-      setMetaStatus(meta.status === 'fulfilled' ? meta.value : null);
+      setIgStatus(ig.status         === 'fulfilled' ? ig.value     : null);
+      setMetaStatus(meta.status     === 'fulfilled' ? meta.value   : null);
+      setGoogleStatus(google.status === 'fulfilled' ? google.value : null);
     } finally {
       setLoading(false);
     }
@@ -88,9 +95,11 @@ export const IntegrationsCard = forwardRef<IntegrationsCardHandle, Props>(functi
   useEffect(() => { void refresh(); }, [refresh]);
 
   const connect = async (kind: IntegrationKind) => {
-    if (kind !== 'instagram' && kind !== 'meta-ads') return;
+    if (kind !== 'instagram' && kind !== 'meta-ads' && kind !== 'google-ads') return;
     try {
-      const path = kind === 'instagram' ? '/api/integrations/instagram/connect' : '/api/integrations/meta-ads/connect';
+      const path = kind === 'instagram'  ? '/api/integrations/instagram/connect'
+                 : kind === 'meta-ads'   ? '/api/integrations/meta-ads/connect'
+                 :                         '/api/integrations/google-ads/connect';
       // Tell the backend where to bounce back after OAuth. The server
       // validates against FRONTEND_URLS allowlist and round-trips
       // through the OAuth state — see services/frontendOriginValidator.
@@ -111,7 +120,7 @@ export const IntegrationsCard = forwardRef<IntegrationsCardHandle, Props>(functi
     }
   };
 
-  const disconnect = async (kind: 'instagram' | 'meta-ads', credentialId: string, name: string) => {
+  const disconnect = async (kind: 'instagram' | 'meta-ads' | 'google-ads', credentialId: string, name: string) => {
     const ok = window.confirm(`Disconnect ${name}? This stops syncs and removes the credential.`);
     if (!ok) return;
     try {
@@ -192,11 +201,13 @@ export const IntegrationsCard = forwardRef<IntegrationsCardHandle, Props>(functi
               onManage={(id) => setAdsPickerCredId(id)}
             />
             <IntegrationTile
-              kind="google-merchant"
-              label="Google Merchant Center"
+              kind="google-ads"
+              label="Google Ads"
               gradient="linear-gradient(135deg, #4285F4, #34A853, #FBBC05, #EA4335)"
-              status={null}
-              comingSoon
+              status={googleStatus}
+              onConnect={() => connect('google-ads')}
+              onDisconnect={(id) => disconnect('google-ads', id, 'Google Ads')}
+              onManage={(id) => setGoogleAdsPickerCredId(id)}
             />
             <IntegrationTile
               kind="tiktok-shop"
@@ -240,6 +251,12 @@ export const IntegrationsCard = forwardRef<IntegrationsCardHandle, Props>(functi
         isOpen={!!adsPickerCredId}
         onClose={() => setAdsPickerCredId(null)}
         credentialId={adsPickerCredId}
+        onCompleted={refresh}
+      />
+      <GoogleAdsPickerModal
+        isOpen={!!googleAdsPickerCredId}
+        onClose={() => setGoogleAdsPickerCredId(null)}
+        credentialId={googleAdsPickerCredId}
         onCompleted={refresh}
       />
     </Card>

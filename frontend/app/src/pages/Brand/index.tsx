@@ -14,7 +14,7 @@
 //   SaveBar (sticky, surfaces only when editing/dirty)
 
 import { Box, VStack, HStack, SimpleGrid, Text, Spinner, Card, CardBody, useToast } from '@chakra-ui/react';
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useBrandDetail } from './useBrandDetail';
 import { useBrandEdit } from './useBrandEdit';
@@ -22,7 +22,7 @@ import { BrandHeader } from './Header';
 import { BrandVoiceCard } from './BrandVoiceCard';
 import { VisualIdentityCard } from './VisualIdentityCard';
 import { AudiencePersonasCard } from './AudiencePersonasCard';
-import { IntegrationsCard } from './IntegrationsCard';
+import { IntegrationsCard, type IntegrationsCardHandle } from './IntegrationsCard';
 import { AutomationEngineCard } from './AutomationEngineCard';
 import { BrandSafetyCard } from './BrandSafetyCard';
 import { PreviewCard } from './PreviewCard';
@@ -35,6 +35,13 @@ export function BrandPage() {
   const edit = useBrandEdit(brand, refresh);
   const toast = useToast();
 
+  // Imperative handle into IntegrationsCard so the post-OAuth bounce
+  // params (ig_setup / ads_setup) can pop the appropriate picker open
+  // immediately on landing, without the user having to click "Finish
+  // setup" on the tile.
+  const integrationsRef = useRef<IntegrationsCardHandle>(null);
+  const [pendingSetup, setPendingSetup] = useState<{ kind: 'Instagram' | 'Meta Ads'; id: string } | null>(null);
+
   // Surface save errors via toast (also rendered inline in SaveBar)
   useEffect(() => {
     if (edit.error) {
@@ -46,28 +53,33 @@ export function BrandPage() {
   // (see services/frontendOriginValidator). The new app is now in the
   // allowlist so callbacks land here on /brand?ig_status=...&ig_setup=...
   // (or ads_status=... for Meta Ads). Show a toast based on status,
-  // refresh integrations, then strip the params so a page reload
-  // doesn't re-toast.
+  // stash any setupId for the picker auto-open effect, then strip the
+  // params so a page reload doesn't re-toast.
   useSearchParamsConsumer({
     onConsume: ({ status, kind, msg, setupId }) => {
       if (status === 'denied') {
         toast({ title: `${kind} not connected`, description: 'You declined the consent screen.', status: 'warning', duration: 4000 });
       } else if (status === 'error') {
         toast({ title: `${kind} connect failed`, description: msg || 'Unknown error', status: 'error', duration: 5000 });
-      } else if (status === 'pending') {
-        toast({
-          title: `${kind} token captured`,
-          description: 'Setup needs Page/IG/catalog selection — finish on the legacy /brand.html for now (picker rebuild is a separate ticket).',
-          status: 'info',
-          duration: 7000
-        });
       } else if (status === 'connected' || status === 'active') {
         toast({ title: `${kind} connected`, status: 'success', duration: 2500 });
       }
-      void setupId;        // not consumed yet — picker modal rebuild reads it
-      void refresh;
+      // 'pending' yields no toast — the picker modal popping open is
+      // sufficient feedback. Stash the setupId; the effect below pops
+      // the picker once IntegrationsCard has mounted.
+      if (setupId) setPendingSetup({ kind, id: setupId });
     }
   });
+
+  // Pop the picker once both the brand has loaded (so IntegrationsCard
+  // is mounted and the imperative ref is wired) and we have a stashed
+  // setupId from the OAuth bounce.
+  useEffect(() => {
+    if (!pendingSetup || !brand || !integrationsRef.current) return;
+    if (pendingSetup.kind === 'Instagram') integrationsRef.current.openIGPicker(pendingSetup.id);
+    else integrationsRef.current.openAdsPicker(pendingSetup.id);
+    setPendingSetup(null);
+  }, [pendingSetup, brand]);
 
   if (loading && !brand) {
     return <Card variant="outline"><CardBody><HStack><Spinner /><Text fontSize="sm" color="brand.muted">Loading brand…</Text></HStack></CardBody></Card>;
@@ -94,7 +106,7 @@ export function BrandPage() {
       <VStack align="stretch" spacing={5} mt={3} pb={20}>
         <BrandHeader brand={brand} edit={edit} onChanged={refresh} />
 
-        <IntegrationsCard brand={brand} />
+        <IntegrationsCard ref={integrationsRef} brand={brand} />
 
         <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={5}>
           <AutomationEngineCard brand={brand} onChanged={refresh} />

@@ -19,13 +19,23 @@
 // cadences) with a Sync Now button that triggers an immediate
 // catalog + posts sync via the existing endpoints.
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import {
   Card, CardBody, HStack, VStack, Text, Heading, Box, Button, Badge,
   SimpleGrid, Flex, Divider, useToast, Icon, Spinner
 } from '@chakra-ui/react';
 import { apiJson } from '../../auth/apiFetch';
 import type { Brand } from './types';
+import { IGPickerModal } from './IGPickerModal';
+import { AdsPickerModal } from './AdsPickerModal';
+
+// Imperative handle exposed by IntegrationsCard so parents (like the
+// /brand page) can pop the picker open after the post-OAuth bounce
+// — see the useSearchParamsConsumer wiring in Brand/index.tsx.
+export type IntegrationsCardHandle = {
+  openIGPicker:  (credentialId: string) => void;
+  openAdsPicker: (credentialId: string) => void;
+};
 
 type IntegrationKind = 'instagram' | 'meta-ads' | 'google-merchant' | 'tiktok-shop';
 
@@ -47,12 +57,19 @@ type Props = {
   brand: Brand;
 };
 
-export function IntegrationsCard({ brand }: Props) {
+export const IntegrationsCard = forwardRef<IntegrationsCardHandle, Props>(function IntegrationsCard({ brand }, ref) {
   const toast = useToast();
   const [igStatus,    setIgStatus]    = useState<StatusRow | null>(null);
   const [metaStatus,  setMetaStatus]  = useState<StatusRow | null>(null);
   const [loading,     setLoading]     = useState(true);
   const [syncing,     setSyncing]     = useState(false);
+  const [igPickerCredId,  setIgPickerCredId]  = useState<string | null>(null);
+  const [adsPickerCredId, setAdsPickerCredId] = useState<string | null>(null);
+
+  useImperativeHandle(ref, () => ({
+    openIGPicker:  (credId) => setIgPickerCredId(credId),
+    openAdsPicker: (credId) => setAdsPickerCredId(credId)
+  }), []);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -163,6 +180,7 @@ export function IntegrationsCard({ brand }: Props) {
               status={igStatus}
               onConnect={() => connect('instagram')}
               onDisconnect={(id) => disconnect('instagram', id, 'Instagram')}
+              onManage={(id) => setIgPickerCredId(id)}
             />
             <IntegrationTile
               kind="meta-ads"
@@ -171,6 +189,7 @@ export function IntegrationsCard({ brand }: Props) {
               status={metaStatus}
               onConnect={() => connect('meta-ads')}
               onDisconnect={(id) => disconnect('meta-ads', id, 'Meta Ads')}
+              onManage={(id) => setAdsPickerCredId(id)}
             />
             <IntegrationTile
               kind="google-merchant"
@@ -210,20 +229,34 @@ export function IntegrationsCard({ brand }: Props) {
           </Button>
         </HStack>
       </CardBody>
+
+      <IGPickerModal
+        isOpen={!!igPickerCredId}
+        onClose={() => setIgPickerCredId(null)}
+        credentialId={igPickerCredId}
+        onCompleted={refresh}
+      />
+      <AdsPickerModal
+        isOpen={!!adsPickerCredId}
+        onClose={() => setAdsPickerCredId(null)}
+        credentialId={adsPickerCredId}
+        onCompleted={refresh}
+      />
     </Card>
   );
-}
+});
 
 function IntegrationTile({
-  label, gradient, status, onConnect, onDisconnect, comingSoon
+  label, gradient, status, onConnect, onDisconnect, onManage, comingSoon
 }: {
   kind: IntegrationKind;       // accepted for caller readability; not used inside
   label: string;
   gradient: string;
   status: StatusRow | null;
-  onConnect?: () => void;
+  onConnect?:    () => void;
   onDisconnect?: (credentialId: string) => void;
-  comingSoon?: boolean;
+  onManage?:     (credentialId: string) => void;
+  comingSoon?:   boolean;
 }) {
   const cred = status?.credential || null;
   const isConnected = !!cred && cred.status === 'active';
@@ -287,12 +320,11 @@ function IntegrationTile({
         <HStack spacing={2}>
           <Button
             size="xs"
-            variant="outline"
+            variant={isPending ? 'brand' : 'outline'}
             flex={1}
-            isDisabled
-            title="Manage panel ships in a follow-up — use legacy /brand.html for now"
+            onClick={() => cred && onManage?.(cred.id)}
           >
-            Manage
+            {isPending ? 'Finish setup' : 'Manage'}
           </Button>
           <Button
             size="xs"

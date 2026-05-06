@@ -9,7 +9,12 @@
   <script src="brandPicker.js" defer></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <style>
-    * { font-family: 'Inter', system-ui, sans-serif; }
+    /* Default UI font for the page chrome only — scoped to body so
+       .tp-stage descendants can pick up var(--brand-font). The previous
+       universal selector won the cascade against .tp-stage's font-family
+       rule because * applies to every element including descendants,
+       which masked the brand font in every preview. */
+    body { font-family: 'Inter', system-ui, sans-serif; }
     body { background: #0a0a0a; color: #f0f0f0; }
     nav  { background: #111; border-bottom: 1px solid #1f1f1f; }
 
@@ -527,10 +532,14 @@
       display: flex; align-items: center;
     }
 
-    /* Quote cards retain the white surface for readability but carry a
-       brand-accent accent bar on the left so they read as a brand element. */
+    /* Quote cards bind to brand.secondary_color (per
+       style_bindings.card_bg) with a brand-accent accent bar on the
+       left. --brand-text-on-secondary is the readable foreground
+       computed by the renderer (white on dark surfaces, near-black on
+       light ones via tpReadableOn). */
     .tp-zone.kind-quote_card {
-      background: rgba(255,255,255,0.97); color: #0a0a0a;
+      background: var(--brand-secondary, rgba(255,255,255,0.97));
+      color: var(--brand-text-on-secondary, #0a0a0a);
       padding: 0.55em 0.75em 0.55em calc(0.75em + 4px);
       font-size: 0.95em; line-height: 1.3;
       border-radius: 8px;
@@ -550,8 +559,11 @@
     .tp-zone.kind-logo { display: flex; align-items: center; justify-content: flex-start; }
     .tp-zone.kind-logo img { object-fit: contain; }
 
+    /* Proof bar binds to brand.primary_color (per style_bindings.proof_bar_bg).
+       Falls back to a translucent black for unbranded stubs. */
     .tp-zone.kind-proof_bar {
-      background: rgba(0,0,0,0.7); color: var(--brand-text-on);
+      background: var(--brand-primary, rgba(0,0,0,0.7));
+      color: var(--brand-text-on-primary, var(--brand-text-on));
       padding: 0.35em 0.7em; font-size: 0.85em;
       border-radius: 999px;
       display: flex; align-items: center; gap: 0.6em; white-space: nowrap;
@@ -581,7 +593,8 @@
 
     .tp-zone.kind-review_stack { display: flex; flex-direction: column; gap: 0.4em; }
     .tp-review-bubble {
-      background: rgba(255,255,255,0.97); color: #0a0a0a;
+      background: var(--brand-secondary, rgba(255,255,255,0.97));
+      color: var(--brand-text-on-secondary, #0a0a0a);
       border-radius: 8px;
       border-left: 3px solid var(--brand-accent);
       padding: 0.4em 0.55em 0.4em calc(0.55em + 3px);
@@ -604,7 +617,8 @@
       display: flex; gap: 0.4em; align-items: center; flex-wrap: wrap;
     }
     .tp-chip-mini {
-      background: rgba(0,0,0,0.7); color: var(--brand-text-on);
+      background: var(--brand-primary, rgba(0,0,0,0.7));
+      color: var(--brand-text-on-primary, var(--brand-text-on));
       padding: 0.25em 0.7em; border-radius: 999px;
       font-size: 0.85em; font-weight: 600; white-space: nowrap;
       backdrop-filter: blur(6px);

@@ -797,6 +797,15 @@
     stage.style.setProperty('--brand-secondary', secondary);
     stage.style.setProperty('--brand-accent',    accent);
     stage.style.setProperty('--brand-text-on',   textOn);
+    // Per-surface readable foregrounds. Quote cards and proof bars
+    // bind to brand.secondary_color and brand.primary_color
+    // respectively (per style_bindings); the renderer needs the
+    // contrast-correct text color for each so dark-on-dark or
+    // light-on-light doesn't happen when a brand's palette only
+    // populates one of the three tokens.
+    stage.style.setProperty('--brand-text-on-primary',   tpReadableOn(primary));
+    stage.style.setProperty('--brand-text-on-secondary', tpReadableOn(secondary));
+    stage.style.setProperty('--brand-text-on-accent',    tpReadableOn(accent));
     stage.style.setProperty('--brand-font',      fontStack);
 
     // Canvas background — derive from spec + brand palette. 'solid' and

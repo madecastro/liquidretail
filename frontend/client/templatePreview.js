@@ -825,6 +825,7 @@
     // pixel width, so em units render at production sizes regardless of
     // how the stage is visually scaled afterward.
 
+    const zoneEls = [];
     for (const zone of (canvas.zones || [])) {
       const el = document.createElement('div');
       el.className = `tp-zone kind-${zone.kind}`;
@@ -836,7 +837,22 @@
 
       el.innerHTML = resolveZoneContent(zone, input);
       stage.appendChild(el);
+      zoneEls.push({ zone, el });
     }
+
+    // Auto-fit text zones — measure overflow and shrink font-size in 5%
+    // steps until content fits within zone.h, then re-apply line-clamp
+    // as the hard cap. Pass runs after layout (RAF) so scrollHeight
+    // reflects rendered geometry. Headline / quote_card / product_meta
+    // get this treatment; cta truncates via max_chars instead so the
+    // button copy is never font-shrunk.
+    requestAnimationFrame(() => {
+      for (const { zone, el } of zoneEls) {
+        if (zone.kind === 'text' || zone.kind === 'quote_card') {
+          fitAndClampZone(el, zone.max_lines || 4);
+        }
+      }
+    });
 
     // Restriction layer for canonical templates. Canonical templates today
     // don't carry a placement.analysis block — the restriction data only
@@ -1536,6 +1552,45 @@
     }
   }
 
+  // Fit a canonical-mode text/quote_card zone:
+  //   1. Temporarily drop the inner div's line-clamp so scrollHeight
+  //      reflects the FULL untruncated text.
+  //   2. Shrink the zone's font-size in 5% steps (down to 0.6×) until
+  //      the wrapped text fits within zone.height.
+  //   3. Restore line-clamp as the hard cap. If even at 0.6× the text
+  //      still overflows N lines, line-clamp kicks in with ellipsis —
+  //      no mid-word breaks.
+  // The line-clamp lives on an inner div that resolveZoneContent wrote
+  // with inline `display: -webkit-box; -webkit-line-clamp: N`; we toggle
+  // those via inline style overrides so the original markup is preserved.
+  function fitAndClampZone(zoneEl, maxLines, minScale = 0.6) {
+    if (!zoneEl) return;
+    const inner = zoneEl.querySelector('[style*="line-clamp"]');
+    let savedDisplay = '', savedClamp = '';
+    if (inner) {
+      savedDisplay = inner.style.display;
+      savedClamp   = inner.style.webkitLineClamp || inner.style['-webkit-line-clamp'] || '';
+      inner.style.display = 'block';
+      inner.style.webkitLineClamp = 'unset';
+    }
+
+    const baseFontPx = parseFloat(window.getComputedStyle(zoneEl).fontSize);
+    if (baseFontPx) {
+      let scale = 1.0;
+      let attempts = 14;
+      while (scale > minScale && attempts-- > 0) {
+        if (zoneEl.scrollHeight <= zoneEl.clientHeight + 1 && zoneEl.scrollWidth <= zoneEl.clientWidth + 1) break;
+        scale -= 0.05;
+        zoneEl.style.fontSize = `${baseFontPx * scale}px`;
+      }
+    }
+
+    if (inner) {
+      inner.style.display = savedDisplay || '-webkit-box';
+      inner.style.webkitLineClamp = savedClamp || String(maxLines);
+    }
+  }
+
   // Resolve a zone's content based on its kind + slot(s).
   function resolveZoneContent(zone, input) {
     switch (zone.kind) {
@@ -1592,7 +1647,12 @@
         return `<div style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:${zone.max_lines||4};-webkit-box-orient:vertical;">${escapeHtml(txt)}</div>${author}`;
       }
       case 'cta': {
-        return escapeHtml(input.cta?.text || input.defaults?.cta_text || 'Shop');
+        const raw = input.cta?.text || input.defaults?.cta_text || 'Shop';
+        const cap = zone.max_chars;
+        const txt = (cap && raw.length > cap)
+          ? raw.slice(0, Math.max(1, cap - 1)).trimEnd() + '…'
+          : raw;
+        return escapeHtml(txt);
       }
       case 'logo': {
         const logo = tpGet(input, zone.slot);

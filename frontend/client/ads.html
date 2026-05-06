@@ -711,7 +711,11 @@
       gap: 0.5em;
       color: var(--brand-text-on-primary, #ffffff);
       font-family: var(--tp-style-font-family-body, Inter, system-ui, sans-serif);
-      font-size: 0.28em;
+      /* font-size multiplied by --tp-zone-scale so the renderer can
+         dial this whole element up/down per (template × ratio) via the
+         canvas's zone_scalers map. Inner em-relative descendants
+         cascade automatically. */
+      font-size: calc(0.28em * var(--tp-zone-scale, 1));
       font-weight: 700;
       letter-spacing: 0.18em;
       text-transform: uppercase;
@@ -801,7 +805,10 @@
       backdrop-filter: none;
       gap: 0.45em;
       padding: 0.4em 0.8em;
-      font-size: 0.28em;
+      /* font-size multiplied by --tp-zone-scale (canvas zone_scalers).
+         The 1.1em rating / 0.85em reviews / 1.05em stars descendants
+         are em-relative so they scale together with the parent. */
+      font-size: calc(0.28em * var(--tp-zone-scale, 1));
       font-weight: 600;
     }
     .tp-zone.kind-proof_bar.style-with_verified_buyers .tp-proof-stars {
@@ -910,7 +917,11 @@
     .tp-zone.kind-badge_row.style-callouts .tp-callout {
       display: inline-flex; align-items: center; gap: 0.4em;
       flex: 0 0 auto;
-      font-size: 0.21em; font-weight: 700;
+      /* font-size multiplied by --tp-zone-scale. The 2.95em glyph and
+         the 1em label are em-relative so the icon and text both scale
+         together when the canvas zone_scaler bumps badge_row. */
+      font-size: calc(0.21em * var(--tp-zone-scale, 1));
+      font-weight: 700;
       color: #FFFFFF;
       text-transform: uppercase;
       letter-spacing: 0.05em;

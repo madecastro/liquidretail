@@ -777,10 +777,38 @@
   }
 
   function drawTpCanvas(stage, input, canvas) {
+    // Deep-clone so per-draw mutations (zone_scalers application,
+    // reflow rect adjustments) don't compound across redraws. The
+    // stored TP_STATE.lastCanvas keeps the pristine spec; this local
+    // copy is the working canvas for THIS draw.
+    canvas = JSON.parse(JSON.stringify(canvas));
     const w = canvas.canvas.width, h = canvas.canvas.height;
     stage.innerHTML = '';
     // WYSIWYG: render at full canvas pixel size and scale via CSS.
     applyCanvasSize(w, h);
+
+    // Apply per-(template × ratio) zone_scalers from the canvas spec
+    // BEFORE the zone-paint loop, so the rect-to-percent conversion
+    // already reflects the scaled height. Each zone with an entry in
+    // canvas.zone_scalers gets:
+    //   - rect.h × scale   (slot grows vertically)
+    //   - --tp-zone-scale CSS var on the element (font-size rules in
+    //     ads.html consume this via calc(<base>em * var(--tp-zone-scale,
+    //     1)) so the rendered font + em-relative descendants — rating
+    //     digits, callout glyphs, eyebrow text — all scale together).
+    // The match key prefers zone.id, falls back to zone.kind so a
+    // scaler keyed on either form lands.
+    const zoneScalers = canvas.zone_scalers || {};
+    const zoneScaleFor = (zone) => zoneScalers[zone.id] || zoneScalers[zone.kind] || 1;
+    for (const zone of (canvas.zones || [])) {
+      // Stash design (un-scaled) height so reflow can compute proportional
+      // slack distribution against pre-scaler weights — a tall quote_card
+      // should still get more slack than a thin proof_bar even when both
+      // are scaled equally.
+      zone._design_h = zone.rect.h;
+      const s = zoneScaleFor(zone);
+      if (s !== 1) zone.rect.h = zone.rect.h * s;
+    }
 
     // Pull brand tokens once. Primary/secondary/accent all fall back to
     // sensible neutrals so the preview still renders when a Brand stub
@@ -842,6 +870,11 @@
       el.style.top    = `${(zone.rect.y / h * 100).toFixed(2)}%`;
       el.style.width  = `${(zone.rect.w / w * 100).toFixed(2)}%`;
       el.style.height = `${(zone.rect.h / h * 100).toFixed(2)}%`;
+      // Project the per-zone scaler as a CSS var so the matching CSS
+      // font-size rules in ads.html (eyebrow_rules / proof_bar /
+      // badge_row callouts) read it via calc(<base>em * var(...)).
+      const zScale = zoneScaleFor(zone);
+      if (zScale !== 1) el.style.setProperty('--tp-zone-scale', String(zScale));
       // Don't clip the radius for landscape variants — the new layout
       // uses radius up to 24px on cards, which the prior 18px cap broke.
       if (typeof zone.radius === 'number') el.style.borderRadius = `${zone.radius}px`;
@@ -1664,30 +1697,10 @@
 
     const hZone = headline.zone;
     const hEl   = headline.el;
+    // Headline isn't scaled, so rect.h here is its design height.
     const orig  = { x: hZone.rect.x, y: hZone.rect.y, w: hZone.rect.w, h: hZone.rect.h };
 
-    // Measure natural content height at design font. style.height='auto'
-    // forces the element to size to its content; we grab the resulting
-    // height in canvas-normalized units (== CSS px on the unscaled
-    // stage) and restore the original % height immediately so the
-    // intermediate state doesn't paint.
-    const savedH = hEl.style.height;
-    hEl.style.height = 'auto';
-    const naturalPx = hEl.getBoundingClientRect().height;
-    hEl.style.height = savedH;
-
-    // Floor at 50% of the original slot — protects against pathological
-    // 1-word headlines that would otherwise collapse the slot to a
-    // sliver. The cap (orig.h) is the design budget — we never expand
-    // beyond what the canvas spec allocated.
-    const minH    = orig.h * 0.5;
-    const targetH = Math.max(minH, Math.min(orig.h, naturalPx));
-    const delta   = orig.h - targetH;
-    if (delta < 2) return; // sub-pixel deltas aren't worth a reflow
-
-    // Find dependent zones — anything in the same column that sits
-    // entirely below the headline. We compare against the ORIGINAL rect
-    // (not yet mutated) so the test is stable.
+    // Find dependent zones — same column, entirely below headline.
     const oldRight  = orig.x + orig.w;
     const oldBottom = orig.y + orig.h;
     const dependents = zoneEls
@@ -1700,40 +1713,83 @@
       })
       .sort((a, b) => a.zone.rect.y - b.zone.rect.y);
 
-    // Snapshot dep originals so we can compute proportional growth and
-    // gap preservation against immutable values.
+    // Snapshot deps with both their design (pre-scale) and current
+    // (post-scale) heights. designH drives the proportional slack
+    // distribution; scaledH is the floor a dep can never go below
+    // (the canvas spec said "this slot is 2× the design").
     const deps = dependents.map(d => ({
-      handle: d,
-      orig:   { x: d.zone.rect.x, y: d.zone.rect.y, w: d.zone.rect.w, h: d.zone.rect.h }
+      handle:  d,
+      designH: d.zone._design_h ?? d.zone.rect.h,
+      scaledH: d.zone.rect.h,
+      origY:   d.zone.rect.y
     }));
 
-    // Apply the new headline rect.
-    hZone.rect.h = targetH;
+    // depDelta = total vertical the column GREW from the zone_scalers
+    // pass. The headline must shrink by at least depDelta to keep the
+    // column packing the canvas — that's the column-overflow case.
+    const depDelta = deps.reduce((s, d) => s + (d.scaledH - d.designH), 0);
+
+    // Measure headline natural content at design font.
+    const savedH = hEl.style.height;
+    hEl.style.height = 'auto';
+    const naturalPx = hEl.getBoundingClientRect().height;
+    hEl.style.height = savedH;
+
+    // Floor at 50% of the design slot — protects against pathological
+    // 1-word headlines collapsing to a sliver. orig.h is always the
+    // upper bound; we never expand the headline past its design.
+    const minH = orig.h * 0.5;
+
+    // requiredH = the largest the headline can be while still letting
+    // the scaled deps fit inside the original column budget. If
+    // depDelta is 0 (no scalers), requiredH == orig.h and this term
+    // disappears.
+    const requiredH = Math.max(minH, orig.h - depDelta);
+
+    // naturalFit = headline content's preferred height, clamped to the
+    // [floor, design] band.
+    const naturalFit = Math.max(minH, Math.min(orig.h, naturalPx));
+
+    // Final headline = whichever is smaller. If natural fits inside
+    // requiredH there's slack to redistribute; otherwise headline
+    // shrinks just enough to make room for the scaled deps.
+    const finalH = Math.min(requiredH, naturalFit);
+
+    const totalShrink  = orig.h - finalH;          // total headline gave up
+    const slackForDeps = totalShrink - depDelta;   // savings beyond what scaling demanded
+
+    // Bail out only when neither pressure is in play.
+    if (Math.abs(totalShrink) < 2 && depDelta < 2) return;
+
+    // Apply new headline rect.
+    hZone.rect.h = finalH;
     applyZoneRect(hEl, hZone.rect, canvasW, canvasH);
 
     if (!deps.length) return;
 
-    // Distribute the freed delta across deps in proportion to their
-    // ORIGINAL heights. Gap preservation: each dep's original distance
-    // from the previous element's bottom (or the headline's bottom for
-    // the first dep) is kept verbatim so the column rhythm stays
-    // intact — only the slots themselves grow.
-    const totalDepH = deps.reduce((s, d) => s + d.orig.h, 0);
+    // Distribute slack proportionally to design heights so a tall
+    // quote_card grabs more breathing room than a thin proof_bar.
+    // When slackForDeps ≤ 0 (column packed exactly, or overflowing
+    // because scaling outran the headline's floor), deps stay at
+    // their scaled height — overflow is left to fitAndClampZone.
+    const totalDesignH = deps.reduce((s, d) => s + d.designH, 0);
 
-    let prevBottomNew  = orig.y + targetH;
+    let prevBottomNew  = orig.y + finalH;
     let prevBottomOrig = oldBottom;
     for (const d of deps) {
-      const gap   = d.orig.y - prevBottomOrig;
-      const grow  = delta * (d.orig.h / totalDepH);
-      const newH  = d.orig.h + grow;
-      const newY  = prevBottomNew + gap;
+      const gap  = d.origY - prevBottomOrig;
+      const grow = (slackForDeps > 0 ? slackForDeps * (d.designH / totalDesignH) : 0);
+      const newH = d.scaledH + grow;
+      const newY = prevBottomNew + gap;
 
       d.handle.zone.rect.y = newY;
       d.handle.zone.rect.h = newH;
       applyZoneRect(d.handle.el, d.handle.zone.rect, canvasW, canvasH);
 
       prevBottomNew  = newY + newH;
-      prevBottomOrig = d.orig.y + d.orig.h;
+      // Track design bottom (not scaled) so original inter-zone gaps
+      // are preserved by their spec values.
+      prevBottomOrig = d.origY + d.designH;
     }
   }
 

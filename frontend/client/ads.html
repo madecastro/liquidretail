@@ -866,7 +866,11 @@
       column-gap: 0.5em;
       row-gap: 0.4em;
       position: relative;
-      font-size: 0.35em; line-height: 1.3;
+      /* font-size multiplied by --tp-zone-scale (canvas zone_scalers
+         font factor). The 3.3em glyph / 0.78em author-name / 0.7em
+         placeholder-letter / 0.65em verified-tag descendants are
+         em-relative so they scale together with the parent. */
+      font-size: calc(0.35em * var(--tp-zone-scale, 1)); line-height: 1.3;
     }
     .tp-zone.kind-quote_card.style-with_author_photo .tp-quote-glyph {
       color: var(--tp-style-open-quote-glyph-color, var(--brand-accent, #FF6B35));

@@ -798,16 +798,33 @@
     //     digits, callout glyphs, eyebrow text — all scale together).
     // The match key prefers zone.id, falls back to zone.kind so a
     // scaler keyed on either form lands.
+    // Per-zone scalers come from canvas.zone_scalers. Two shapes:
+    //   numeric N         → shorthand for { slot: N, font: N } (legacy)
+    //   { slot, font }    → fine-grained — slot scales rect.h, font
+    //                       scales the --tp-zone-scale CSS var. Either
+    //                       key can be omitted (defaults to 1).
+    // Used so a zone can scale its TEXT to match a sibling (e.g.
+    // quote_card font 1.6 to match the eyebrow's effective size at
+    // scale 2) without scaling the slot height — the reflow pass
+    // shrinks the slot to fit content instead.
     const zoneScalers = canvas.zone_scalers || {};
-    const zoneScaleFor = (zone) => zoneScalers[zone.id] || zoneScalers[zone.kind] || 1;
+    const resolveZoneScale = (raw) => {
+      if (typeof raw === 'number') return { slot: raw, font: raw };
+      if (raw && typeof raw === 'object') {
+        return { slot: raw.slot ?? 1, font: raw.font ?? 1 };
+      }
+      return { slot: 1, font: 1 };
+    };
+    const zoneScaleFor = (zone) =>
+      resolveZoneScale(zoneScalers[zone.id] ?? zoneScalers[zone.kind]);
     for (const zone of (canvas.zones || [])) {
       // Stash design (un-scaled) height so reflow can compute proportional
       // slack distribution against pre-scaler weights — a tall quote_card
       // should still get more slack than a thin proof_bar even when both
       // are scaled equally.
       zone._design_h = zone.rect.h;
-      const s = zoneScaleFor(zone);
-      if (s !== 1) zone.rect.h = zone.rect.h * s;
+      const { slot } = zoneScaleFor(zone);
+      if (slot !== 1) zone.rect.h = zone.rect.h * slot;
     }
 
     // Pull brand tokens once. Primary/secondary/accent all fall back to
@@ -880,11 +897,13 @@
       el.style.top    = `${(zone.rect.y / h * 100).toFixed(2)}%`;
       el.style.width  = `${(zone.rect.w / w * 100).toFixed(2)}%`;
       el.style.height = `${(zone.rect.h / h * 100).toFixed(2)}%`;
-      // Project the per-zone scaler as a CSS var so the matching CSS
+      // Project the FONT scaler as a CSS var so the matching CSS
       // font-size rules in ads.html (eyebrow_rules / proof_bar /
-      // badge_row callouts) read it via calc(<base>em * var(...)).
-      const zScale = zoneScaleFor(zone);
-      if (zScale !== 1) el.style.setProperty('--tp-zone-scale', String(zScale));
+      // badge_row callouts / quote_card with_author_photo) read it
+      // via calc(<base>em * var(--tp-zone-scale, 1)). Slot scaling
+      // already happened above on rect.h.
+      const { font: fontScale } = zoneScaleFor(zone);
+      if (fontScale !== 1) el.style.setProperty('--tp-zone-scale', String(fontScale));
       // Don't clip the radius for landscape variants — the new layout
       // uses radius up to 24px on cards, which the prior 18px cap broke.
       if (typeof zone.radius === 'number') el.style.borderRadius = `${zone.radius}px`;
@@ -907,7 +926,18 @@
     // auto-fit measures against the redistributed (taller) below-slot
     // rects and lets bigger content like the quote_card breathe.
     requestAnimationFrame(() => {
+      // 1. Headline-driven pass — handles depDelta from zone_scalers
+      //    (eyebrow / proof_bar / badge_row growth) and short-content
+      //    headline shrinkage. Touches all deps including cta.
+      // 2. Quote_card-driven pass — shrinks the quote slot to its
+      //    natural rendered text height (after the font scaler is
+      //    applied) and pushes the freed space into ONLY the slots
+      //    below it in the same column (excludes cta — the bottom-
+      //    pinned anchor). Runs second so it sees the post-headline
+      //    geometry and the natural-height measurement reflects the
+      //    scaled font.
       reflowColumnUnderHeadline(zoneEls, w, h);
+      reflowColumnUnderQuoteCard(zoneEls, w, h);
 
       for (const { zone, el } of zoneEls) {
         if (zone.kind === 'text' || zone.kind === 'quote_card') {
@@ -1701,20 +1731,44 @@
   // pixel dimensions, getBoundingClientRect / scrollHeight return values
   // in the same units — no conversion needed.
   function reflowColumnUnderHeadline(zoneEls, canvasW, canvasH) {
-    const headline = zoneEls.find(({ zone }) =>
+    return reflowColumnUnderAnchor(zoneEls, canvasW, canvasH, ({ zone }) =>
       zone.id === 'headline' && zone.style_variant === 'display_script');
-    if (!headline) return;
+  }
 
-    const hZone = headline.zone;
-    const hEl   = headline.el;
-    // Headline isn't scaled, so rect.h here is its design height.
-    const orig  = { x: hZone.rect.x, y: hZone.rect.y, w: hZone.rect.w, h: hZone.rect.h };
+  // Shrink the quote_card to its natural rendered height (after the
+  // font scaler has been applied) and redistribute the freed vertical
+  // to the slots beneath it in the same column. Excludes cta — cta
+  // is an anchor element that the design pins to the bottom; it
+  // shouldn't grow when an upstream zone has slack.
+  function reflowColumnUnderQuoteCard(zoneEls, canvasW, canvasH) {
+    return reflowColumnUnderAnchor(zoneEls, canvasW, canvasH,
+      ({ zone }) => zone.kind === 'quote_card',
+      { excludeKinds: ['cta'] });
+  }
 
-    // Find dependent zones — same column, entirely below headline.
+  // Generic column-reflow under an anchor zone. The anchor's natural
+  // content height is measured at design font (after CSS scalers
+  // resolve); if shorter than the design slot, the anchor shrinks and
+  // freed vertical redistributes proportionally to dependent zones in
+  // the same column. options.excludeKinds keeps anchor zones (cta) out
+  // of the redistribution. options.minHFraction is the floor as a
+  // fraction of design height (default 0.5).
+  function reflowColumnUnderAnchor(zoneEls, canvasW, canvasH, anchorPredicate, options = {}) {
+    const { excludeKinds = [], minHFraction = 0.5 } = options;
+
+    const anchor = zoneEls.find(anchorPredicate);
+    if (!anchor) return;
+
+    const aZone = anchor.zone;
+    const aEl   = anchor.el;
+    const orig  = { x: aZone.rect.x, y: aZone.rect.y, w: aZone.rect.w, h: aZone.rect.h };
+
+    // Find dependent zones — same column, entirely below anchor.
     const oldRight  = orig.x + orig.w;
     const oldBottom = orig.y + orig.h;
     const dependents = zoneEls
-      .filter(z => z !== headline)
+      .filter(z => z !== anchor)
+      .filter(z => !excludeKinds.includes(z.zone.kind))
       .filter(z => {
         const r = z.zone.rect;
         const xOverlap = r.x < oldRight && (r.x + r.w) > orig.x;
@@ -1745,13 +1799,13 @@
     // while RIGHT only has 1; LEFT is the binding constraint).
     const depDelta = deps.reduce((s, d) => s + (d.scaledH - d.designH), 0);
 
-    // Measure headline natural content at design font.
-    const savedH = hEl.style.height;
-    hEl.style.height = 'auto';
-    const naturalPx = hEl.getBoundingClientRect().height;
-    hEl.style.height = savedH;
+    // Measure anchor natural content at design font.
+    const savedH = aEl.style.height;
+    aEl.style.height = 'auto';
+    const naturalPx = aEl.getBoundingClientRect().height;
+    aEl.style.height = savedH;
 
-    const minH       = orig.h * 0.5;
+    const minH       = orig.h * minHFraction;
     const requiredH  = Math.max(minH, orig.h - depDelta);
     const naturalFit = Math.max(minH, Math.min(orig.h, naturalPx));
     const finalH     = Math.min(requiredH, naturalFit);
@@ -1761,11 +1815,11 @@
 
     if (Math.abs(totalShrink) < 2 && depDelta < 2) return;
 
-    // Apply new headline rect.
-    hZone.rect.h = finalH;
-    applyZoneRect(hEl, hZone.rect, canvasW, canvasH);
+    // Apply new anchor rect.
+    aZone.rect.h = finalH;
+    applyZoneRect(aEl, aZone.rect, canvasW, canvasH);
 
-    // Split deps: full-width band (no column) cascades from headline
+    // Split deps: full-width band (no column) cascades from anchor
     // bottom; column-tagged zones cascade INDEPENDENTLY from the
     // band's bottom (one cursor per column). This prevents a
     // two-column layout's parallel tracks (left col proof_bar at the

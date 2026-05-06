@@ -865,7 +865,17 @@
       // text section_header, badge_row callouts). Renders as 'style-<variant>'
       // class so CSS can scope on '.tp-zone.kind-X.style-Y'.
       const variantCls = zone.style_variant ? ` style-${zone.style_variant}` : '';
-      el.className = `tp-zone kind-${zone.kind}${variantCls}`;
+      // When the resolved headline_text_color falls through to its white
+      // default (palette was monochromatic / mono-hue / failed contrast
+      // gate), tag the zone so CSS can disable the top→bottom gradient
+      // that would otherwise turn white into #B3B3B3 at the bottom.
+      // Vibrant picks (flame orange in the HCO reference) keep the
+      // gradient because the depth effect actually reads on saturated
+      // colors. Hex compare is case-insensitive.
+      const isWhiteHeadline = zone.style_variant === 'display_script'
+        && /^#?ffffff$/i.test(String(TP_STATE.lastStyleBindings?.headline_text_color || '#FFFFFF'));
+      const solidCls = isWhiteHeadline ? ' solid-headline' : '';
+      el.className = `tp-zone kind-${zone.kind}${variantCls}${solidCls}`;
       el.style.left   = `${(zone.rect.x / w * 100).toFixed(2)}%`;
       el.style.top    = `${(zone.rect.y / h * 100).toFixed(2)}%`;
       el.style.width  = `${(zone.rect.w / w * 100).toFixed(2)}%`;

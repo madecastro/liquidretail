@@ -763,6 +763,20 @@
       align-items: center;
       justify-content: center;
     }
+    /* Solid-color override for white-default headlines. The gradient
+       above mixes the source color with 30% black at the bottom which
+       reads as a depth effect on saturated colors (HCO flame orange)
+       but turns plain white into #B3B3B3 at the bottom — visibly
+       dimmer than the other white text on the panel. The renderer
+       adds `.solid-headline` when the resolved headline_text_color
+       fell through to #FFFFFF; this rule paints a flat white instead. */
+    .tp-zone.kind-text.style-display_script.solid-headline {
+      background: none;
+      color: var(--tp-style-headline-text-color, #FFFFFF);
+      -webkit-text-fill-color: var(--tp-style-headline-text-color, #FFFFFF);
+              text-fill-color: var(--tp-style-headline-text-color, #FFFFFF);
+    }
+
     /* Lead clause = 50% of main clause (per reference: SOMETHING NEW IS
        sized half of COMING IN HOT). display:block stacks them. line-height
        tightened on the lead so the whitespace between clauses doesn't

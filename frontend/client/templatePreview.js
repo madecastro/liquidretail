@@ -833,12 +833,18 @@
     const zoneEls = [];
     for (const zone of (canvas.zones || [])) {
       const el = document.createElement('div');
-      el.className = `tp-zone kind-${zone.kind}`;
+      // style_variant is per-zone styling pivot (e.g. quote_card with_author_photo,
+      // text section_header, badge_row callouts). Renders as 'style-<variant>'
+      // class so CSS can scope on '.tp-zone.kind-X.style-Y'.
+      const variantCls = zone.style_variant ? ` style-${zone.style_variant}` : '';
+      el.className = `tp-zone kind-${zone.kind}${variantCls}`;
       el.style.left   = `${(zone.rect.x / w * 100).toFixed(2)}%`;
       el.style.top    = `${(zone.rect.y / h * 100).toFixed(2)}%`;
       el.style.width  = `${(zone.rect.w / w * 100).toFixed(2)}%`;
       el.style.height = `${(zone.rect.h / h * 100).toFixed(2)}%`;
-      if (typeof zone.radius === 'number') el.style.borderRadius = `${Math.min(zone.radius, 18)}px`;
+      // Don't clip the radius for landscape variants — the new layout
+      // uses radius up to 24px on cards, which the prior 18px cap broke.
+      if (typeof zone.radius === 'number') el.style.borderRadius = `${zone.radius}px`;
 
       el.innerHTML = resolveZoneContent(zone, input);
       stage.appendChild(el);
@@ -1612,9 +1618,44 @@
     }
   }
 
+  // Map a callout label to a glyph icon. Pattern-matched against
+  // common product-feature vocabulary. Used by badge_row's
+  // 'callouts' style_variant when the badge data is a plain string
+  // (no structured icon_id) — the LLM's defaultBadgesFromSignal
+  // outputs 'Top rated' / '1k+ reviews' / etc. which map cleanly.
+  // Falls back to '•' for unmatched labels.
+  function calloutGlyphForLabel(label) {
+    const s = String(label || '').toLowerCase();
+    if (/heat|hot|fire|spic/.test(s))                     return '🔥';
+    if (/flavor|bold|taste/.test(s))                      return '🌶';
+    if (/ingredient|premium|natural|organ|fresh/.test(s)) return '🍃';
+    if (/limited|drop|exclusive|time|now/.test(s))        return '⏰';
+    if (/rated|top|best|award/.test(s))                   return '⭐';
+    if (/verified|trust|certif|approv/.test(s))           return '✓';
+    if (/review|customer|loved/.test(s))                  return '💬';
+    if (/ship|deliver|fast/.test(s))                      return '🚚';
+    return '•';
+  }
+
   // Resolve a zone's content based on its kind + slot(s).
   function resolveZoneContent(zone, input) {
     switch (zone.kind) {
+      case 'panel': {
+        // Solid surface zone — paints the right-side content panel for
+        // landscape split layouts. Background color comes via the
+        // --tp-style-panel-bg CSS var (resolved from style_bindings).
+        // No content; just the colored rectangle.
+        return '';
+      }
+      case 'eyebrow_rules': {
+        // Centered text with horizontal-rule lines on each side
+        // (decorative bookend). Used for the subheadline in landscape
+        // testimonial_spotlight ("REAL HEAT. REAL FLAVOR. REAL RESULTS.").
+        const paths = Array.isArray(zone.slot) ? zone.slot : (zone.slot ? [zone.slot] : []);
+        const txt = paths.map(p => tpGet(input, p)).find(v => typeof v === 'string' && v.trim());
+        if (!txt) return `<div class="tp-placeholder">${escapeHtml(paths.join(' / ') || zone.kind)}</div>`;
+        return `<span class="tp-rule-line"></span><span class="tp-eyebrow-text">${escapeHtml(txt)}</span><span class="tp-rule-line"></span>`;
+      }
       case 'media': {
         const media = tpGet(input, zone.slot);
         // Prefer video when the media object carries one (source Media
@@ -1662,10 +1703,35 @@
         }
         const txt = bits.filter(Boolean).join(' · ');
         if (!txt) return `<div class="tp-placeholder">${escapeHtml(paths.join(' / ') || zone.kind)}</div>`;
-        const author = (first && typeof first === 'object' && first.author_name)
+
+        // Quote card with author photo — adds an oversized open-quote
+        // glyph at the top-left, the quote text, then a footer row with
+        // the author avatar (creator.portrait_media if available),
+        // author name, and a verified-customer mark when the quote
+        // carries verified=true.
+        if (zone.kind === 'quote_card' && zone.style_variant === 'with_author_photo') {
+          const quote = (first && typeof first === 'object') ? first : {};
+          const author = quote.author_name || tpGet(input, 'creator.name') || null;
+          const verified = !!quote.verified;
+          const portrait = tpGet(input, 'creator.portrait_media')?.image
+                       || tpGet(input, 'ugc.media')?.image
+                       || null;
+          const photoHtml = portrait
+            ? `<img class="tp-quote-avatar" src="${escapeHtml(portrait)}" alt="${escapeHtml(author || '')}" />`
+            : `<div class="tp-quote-avatar tp-quote-avatar-placeholder">${escapeHtml((author || '').slice(0, 1).toUpperCase())}</div>`;
+          const verifiedMark = verified ? `<span class="tp-quote-verified" title="Verified customer">✓</span>` : '';
+          const verifiedTag = verified ? `<span class="tp-quote-verified-tag">VERIFIED CUSTOMER</span>` : '';
+          return (
+            `<span class="tp-quote-glyph">"</span>` +
+            `<div class="tp-quote-text" style="display:-webkit-box;-webkit-line-clamp:${zone.max_lines||3};-webkit-box-orient:vertical;overflow:hidden;">${escapeHtml(txt)}</div>` +
+            (author ? `<div class="tp-quote-author-row">${photoHtml}<div class="tp-quote-author-meta"><div class="tp-quote-author-name">${escapeHtml(author)}${verifiedMark}</div>${verifiedTag}</div></div>` : '')
+          );
+        }
+
+        const authorFooter = (first && typeof first === 'object' && first.author_name)
           ? `<div style="font-size:8px;color:#555;margin-top:3px;">— ${escapeHtml(first.author_name)}</div>`
           : '';
-        return `<div style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:${zone.max_lines||4};-webkit-box-orient:vertical;">${escapeHtml(txt)}</div>${author}`;
+        return `<div style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:${zone.max_lines||4};-webkit-box-orient:vertical;">${escapeHtml(txt)}</div>${authorFooter}`;
       }
       case 'cta': {
         const raw = input.cta?.text || input.defaults?.cta_text || 'Shop';
@@ -1682,10 +1748,29 @@
       }
       case 'proof_bar': {
         const parts = tpMultiGet(input, zone.slot);
-        const bits = [];
         const rating = tpGet(input, 'social_proof.rating_value');
         const reviews = tpGet(input, 'social_proof.review_count');
         const trustedBy = tpGet(input, 'trust.trusted_by_text') || tpGet(input, 'social_proof.trusted_by_text');
+
+        // with_verified_buyers variant — stars + rating + (review count) +
+        // divider + shield "VERIFIED BUYERS" badge. Used by landscape
+        // testimonial_spotlight per reference.
+        if (zone.style_variant === 'with_verified_buyers') {
+          const stars = typeof rating === 'number'
+            ? '★'.repeat(Math.max(0, Math.min(5, Math.round(rating))))
+            : '★★★★★';
+          const ratingNum = typeof rating === 'number' ? rating.toFixed(1) : null;
+          const reviewsTxt = typeof reviews === 'number' ? `(${reviews.toLocaleString()} REVIEWS)` : null;
+          return (
+            `<span class="tp-proof-stars">${stars}</span>` +
+            (ratingNum ? `<span class="tp-proof-rating">${ratingNum}</span>` : '') +
+            (reviewsTxt ? `<span class="tp-proof-reviews">${escapeHtml(reviewsTxt)}</span>` : '') +
+            `<span class="tp-proof-divider"></span>` +
+            `<span class="tp-proof-verified"><span class="tp-proof-shield">🛡</span>VERIFIED BUYERS</span>`
+          );
+        }
+
+        const bits = [];
         if (typeof rating === 'number') bits.push(`${rating.toFixed(1)}★`);
         if (typeof reviews === 'number') bits.push(`${reviews.toLocaleString()} reviews`);
         if (trustedBy)                   bits.push(trustedBy);
@@ -1720,10 +1805,24 @@
         return `${name ? escapeHtml(name) : ''}${handle ? ` <span class="tp-handle">@${escapeHtml(handle)}</span>` : ''}`;
       }
       case 'badge_row': {
+        const badges = tpGet(input, 'social_proof.proof_badges') || tpGet(input, 'product.badges') || [];
+
+        // 'callouts' variant — icon + label pairs (no chip background).
+        // Pattern-matches the badge label to a glyph via
+        // calloutGlyphForLabel. Caps at zone.max_items.
+        if (zone.style_variant === 'callouts') {
+          const items = (Array.isArray(badges) ? badges : []).slice(0, zone.max_items || 4);
+          if (!items.length) return `<div class="tp-placeholder">callouts</div>`;
+          return items.map(b => {
+            const label = String(b || '').toUpperCase();
+            const glyph = calloutGlyphForLabel(b);
+            return `<span class="tp-callout"><span class="tp-callout-glyph">${glyph}</span><span class="tp-callout-label">${escapeHtml(label)}</span></span>`;
+          }).join('');
+        }
+
         const chips = [];
         const likes    = tpGet(input, 'ugc.likes');
         const comments = tpGet(input, 'ugc.comments');
-        const badges   = tpGet(input, 'social_proof.proof_badges') || tpGet(input, 'product.badges') || [];
         if (typeof likes === 'number')    chips.push(`♥ ${likes.toLocaleString()}`);
         if (typeof comments === 'number') chips.push(`💬 ${comments.toLocaleString()}`);
         for (const b of (Array.isArray(badges) ? badges : []).slice(0, 2)) chips.push(b);

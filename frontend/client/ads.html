@@ -8,6 +8,12 @@
   <script src="auth.js"></script>
   <script src="brandPicker.js" defer></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <!-- Display fonts for testimonial_spotlight's landscape headline.
+       Knewave is a brushy display face that approximates the reference's
+       hand-painted look; Bungee is the bold-display fallback. Loaded
+       page-wide so any preview can swap fonts at render time without a
+       fetch round-trip. -->
+  <link href="https://fonts.googleapis.com/css2?family=Knewave&family=Bungee&display=swap" rel="stylesheet" />
   <style>
     /* Default UI font for the page chrome only — scoped to body so
        .tp-stage descendants can pick up var(--brand-font). The previous
@@ -549,7 +555,8 @@
     }
 
     .tp-zone.kind-cta {
-      background: var(--brand-accent); color: var(--brand-text-on);
+      background: var(--tp-style-cta-button-bg, var(--brand-accent));
+      color: var(--brand-text-on);
       display: flex; align-items: center; justify-content: center;
       font-weight: 800; font-size: 1em; letter-spacing: 0.04em;
       border-radius: 999px;
@@ -665,6 +672,211 @@
        distinguish from overlay-mode placement boxes. */
     .tp-debug-box.kind-canvas-zone       { border-color: #67e8f9; }
     .tp-debug-box.kind-canvas-zone .tp-debug-label { background: rgba(103,232,249,0.92); color: #083344; }
+
+    /* ── New zone kinds for the landscape testimonial_spotlight layout ── */
+
+    /* Solid surface zone — paints the right-side content panel for the
+       landscape split layout. Color comes from the resolved
+       style_bindings via --tp-style-panel-bg (set in drawTpCanvas).
+       Falls back to brand primary when the binding wasn't resolved.
+       z-index 0 so this sits behind every content zone. */
+    .tp-zone.kind-panel {
+      background: var(--tp-style-panel-bg, var(--brand-primary, #0B0B0B));
+      z-index: 0;
+    }
+    /* Make every other zone sit above the panel layer. */
+    .tp-zone:not(.kind-panel) { z-index: 1; }
+
+    /* Eyebrow with bookend horizontal lines — used for the subheadline
+       in landscape testimonial_spotlight ("REAL HEAT. REAL FLAVOR. REAL
+       RESULTS."). The two .tp-rule-line spans flank the centered
+       text; both are colored with the accent palette via
+       --tp-style-accent-border-color. */
+    .tp-zone.kind-eyebrow_rules {
+      display: flex; align-items: center; justify-content: center;
+      gap: 0.5em;
+      color: var(--brand-text-on-primary, #ffffff);
+      font-size: 0.65em;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .tp-zone.kind-eyebrow_rules .tp-rule-line {
+      flex: 1 1 auto; height: 1px;
+      background: var(--tp-style-accent-border-color, var(--brand-accent, #FF6B35));
+      opacity: 0.85;
+    }
+    .tp-zone.kind-eyebrow_rules .tp-eyebrow-text { flex: 0 0 auto; }
+
+    /* Display script headline — large, brushy, palette-gradient text
+       used for the "SOMETHING NEW IS COMING IN HOT" headline in
+       landscape testimonial_spotlight. Knewave gives the brushy look;
+       Bungee falls back as bold display. Gradient is palette-driven via
+       --tp-style-headline-text-color so the headline reads as part of
+       the source media's mood. */
+    .tp-zone.kind-text.style-display_script {
+      font-family: 'Knewave', 'Bungee', cursive, system-ui;
+      font-size: 2.6em;
+      line-height: 0.95;
+      letter-spacing: 0;
+      text-transform: uppercase;
+      text-align: left;
+      background: linear-gradient(
+        180deg,
+        var(--tp-style-headline-text-color, var(--brand-accent, #FF6B35)) 0%,
+        color-mix(in srgb, var(--tp-style-headline-text-color, var(--brand-accent, #FF6B35)) 60%, #B91C1C 40%) 100%
+      );
+      -webkit-background-clip: text;
+              background-clip: text;
+      color: transparent;
+      -webkit-text-fill-color: transparent;
+      text-shadow: none;
+      padding: 0;
+    }
+
+    /* Section header — orange uppercase, rendered as a small eyebrow
+       above the body description ("BUILT FOR HEAT LOVERS"). */
+    .tp-zone.kind-text.style-section_header {
+      color: var(--tp-style-section-header-color, var(--brand-accent, #FF6B35));
+      font-size: 0.78em;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      text-shadow: none;
+      padding: 0;
+      align-items: flex-end;
+    }
+
+    /* Proof bar variant — outlined pill with stars + rating + verified-
+       buyers tag, used by landscape testimonial_spotlight per reference.
+       Palette-accent border around a darker pill bg; dot divider mid-row. */
+    .tp-zone.kind-proof_bar.style-with_verified_buyers {
+      background: var(--tp-style-proof-bar-bg, #1F1F1F);
+      color: var(--brand-text-on-primary, #ffffff);
+      border: 1px solid var(--tp-style-proof-bar-border, var(--brand-accent, #FF6B35));
+      backdrop-filter: none;
+      gap: 0.5em;
+      padding: 0.4em 0.9em;
+      font-size: 0.78em;
+      font-weight: 600;
+    }
+    .tp-zone.kind-proof_bar.style-with_verified_buyers .tp-proof-stars {
+      color: var(--tp-style-rating-star-color, #FFD400);
+      letter-spacing: 0.04em; font-size: 1.05em;
+    }
+    .tp-zone.kind-proof_bar.style-with_verified_buyers .tp-proof-rating {
+      font-weight: 800; font-size: 1.1em;
+    }
+    .tp-zone.kind-proof_bar.style-with_verified_buyers .tp-proof-reviews {
+      opacity: 0.85; font-size: 0.85em;
+    }
+    .tp-zone.kind-proof_bar.style-with_verified_buyers .tp-proof-divider {
+      flex: 0 0 auto; width: 1px; height: 1.4em; background: rgba(255,255,255,0.25); margin: 0 0.3em;
+    }
+    .tp-zone.kind-proof_bar.style-with_verified_buyers .tp-proof-verified {
+      display: inline-flex; align-items: center; gap: 0.3em;
+      letter-spacing: 0.06em; font-weight: 700; text-transform: uppercase;
+    }
+    .tp-zone.kind-proof_bar.style-with_verified_buyers .tp-proof-shield {
+      color: var(--tp-style-accent-border-color, var(--brand-accent, #FF6B35));
+      font-size: 1em;
+    }
+
+    /* Quote card variant — left orange accent bar + oversized open-quote
+       glyph + author photo footer. Used by landscape testimonial_spotlight
+       per reference. Background draws from --tp-style-card-bg (palette-led). */
+    .tp-zone.kind-quote_card.style-with_author_photo {
+      background: var(--tp-style-card-bg, #1A1A1A);
+      color: var(--brand-text-on-primary, #ffffff);
+      border-left: 3px solid var(--tp-style-accent-border-color, var(--brand-accent, #FF6B35));
+      border-radius: 6px;
+      padding: 0.5em 0.7em 0.5em calc(0.7em + 3px);
+      box-shadow: none;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      grid-template-columns: 1fr;
+      gap: 0.25em;
+      position: relative;
+      font-size: 0.85em; line-height: 1.3;
+    }
+    .tp-zone.kind-quote_card.style-with_author_photo .tp-quote-glyph {
+      color: var(--tp-style-open-quote-glyph-color, var(--brand-accent, #FF6B35));
+      font-family: 'Times New Roman', serif;
+      font-size: 2.4em; font-weight: 800;
+      line-height: 0.6;
+      grid-row: 1; grid-column: 1;
+      margin: 0; padding: 0;
+    }
+    .tp-zone.kind-quote_card.style-with_author_photo .tp-quote-text {
+      grid-row: 2; grid-column: 1;
+      font-style: italic;
+      font-weight: 600;
+      align-self: center;
+    }
+    .tp-zone.kind-quote_card.style-with_author_photo .tp-quote-author-row {
+      grid-row: 3; grid-column: 1;
+      display: flex; align-items: center; gap: 0.5em;
+      margin-top: 0.3em;
+    }
+    .tp-zone.kind-quote_card.style-with_author_photo .tp-quote-avatar {
+      width: 1.8em; height: 1.8em; border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid var(--tp-style-accent-border-color, var(--brand-accent, #FF6B35));
+    }
+    .tp-zone.kind-quote_card.style-with_author_photo .tp-quote-avatar-placeholder {
+      display: inline-flex; align-items: center; justify-content: center;
+      background: rgba(255,255,255,0.12);
+      color: var(--brand-text-on-primary, #ffffff);
+      font-weight: 700; font-size: 0.7em;
+    }
+    .tp-zone.kind-quote_card.style-with_author_photo .tp-quote-author-meta {
+      display: flex; flex-direction: column; gap: 0.1em; line-height: 1;
+    }
+    .tp-zone.kind-quote_card.style-with_author_photo .tp-quote-author-name {
+      color: var(--tp-style-accent-border-color, var(--brand-accent, #FF6B35));
+      font-weight: 800; font-size: 0.78em; letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .tp-zone.kind-quote_card.style-with_author_photo .tp-quote-verified {
+      display: inline-block; margin-left: 0.3em;
+      color: var(--tp-style-accent-border-color, var(--brand-accent, #FF6B35));
+      font-weight: 800;
+    }
+    .tp-zone.kind-quote_card.style-with_author_photo .tp-quote-verified-tag {
+      color: rgba(255,255,255,0.7); font-size: 0.65em; letter-spacing: 0.05em;
+      text-transform: uppercase; font-weight: 600;
+    }
+
+    /* Badge row 'callouts' variant — icon + uppercase label pairs (no
+       chip background). Used by landscape testimonial_spotlight for the
+       BOLD FLAVOR / SERIOUS HEAT / PREMIUM INGREDIENTS / LIMITED DROP
+       row. Glyph is mapped from the badge label keyword via
+       calloutGlyphForLabel — falls back to '•'. */
+    .tp-zone.kind-badge_row.style-callouts {
+      display: flex; flex-wrap: nowrap;
+      align-items: center; justify-content: space-between;
+      gap: 0.7em;
+    }
+    .tp-zone.kind-badge_row.style-callouts .tp-callout {
+      display: inline-flex; align-items: center; gap: 0.35em;
+      flex: 0 0 auto;
+      font-size: 0.7em; font-weight: 700;
+      color: var(--brand-text-on-primary, #ffffff);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      line-height: 1.1;
+      white-space: normal;
+      max-width: 24%;
+    }
+    .tp-zone.kind-badge_row.style-callouts .tp-callout-glyph {
+      color: var(--tp-style-accent-border-color, var(--brand-accent, #FF6B35));
+      font-size: 1.15em; line-height: 1;
+      flex: 0 0 auto;
+    }
+    .tp-zone.kind-badge_row.style-callouts .tp-callout-label {
+      flex: 1 1 auto;
+    }
 
     /* Restriction/keep-out overlay (from OverlayZoneArtifact analysis).
        Solid-ish colored tint so the keep-outs are visually distinct from

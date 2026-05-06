@@ -91,7 +91,7 @@ type Product = {
   imageUrl:    string | null;
   category:    string | null;
   productUrl:  string | null;
-  matchMethod: 'product-set' | 'url' | 'mixed' | 'collection' | 'text' | null;
+  matchMethod: 'product-set' | 'url' | 'mixed' | 'collection' | 'text' | 'category-sibling' | null;
 };
 
 type Catalog = {
@@ -113,18 +113,20 @@ export function Step2Products({ value, onChange }: Props) {
   const campaignId = value.campaignId;
   const [campaign, setCampaign] = useState<CampaignMeta | null>(null);
   const [products, setProducts] = useState<Product[] | null>(null);
+  const [categoryPool, setCategoryPool] = useState<Product[]>([]);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState<string | null>(null);
 
   useEffect(() => {
-    if (!campaignId) { setCampaign(null); setProducts(null); return; }
+    if (!campaignId) { setCampaign(null); setProducts(null); setCategoryPool([]); return; }
     setLoading(true);
     setError(null);
     void (async () => {
       try {
-        const res = await apiJson<{ campaign: CampaignMeta; products: Product[] }>(`/api/campaigns/${campaignId}/products`);
+        const res = await apiJson<{ campaign: CampaignMeta; products: Product[]; categoryPoolProducts?: Product[] }>(`/api/campaigns/${campaignId}/products`);
         setCampaign(res.campaign);
         setProducts(res.products || []);
+        setCategoryPool(res.categoryPoolProducts || []);
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : 'Failed to load campaign products');
       } finally {
@@ -187,16 +189,76 @@ export function Step2Products({ value, onChange }: Props) {
             onChange={onChange}
           />
         ) : products && products.length > 0 ? (
-          <MatchedProductsList
-            products={products}
-            value={value}
-            onChange={onChange}
-          />
+          <>
+            <MatchedProductsList
+              products={products}
+              value={value}
+              onChange={onChange}
+            />
+            {categoryPool.length > 0 && (
+              <CategoryPoolList
+                products={categoryPool}
+                value={value}
+                onChange={onChange}
+              />
+            )}
+          </>
         ) : (
           <NoMatchesFallback />
         )}
       </VStack>
     </StepShell>
+  );
+}
+
+// ── Category-sibling pool (sister SKUs from matched categories) ────
+
+function CategoryPoolList({
+  products, value, onChange
+}: {
+  products: Product[];
+  value:    WizardSelections;
+  onChange: (patch: Partial<WizardSelections>) => void;
+}) {
+  const toggle = (id: string) => {
+    const set = new Set(value.productIds);
+    if (set.has(id)) set.delete(id); else set.add(id);
+    onChange({ productIds: Array.from(set) });
+  };
+  const allSelected = products.every(p => value.productIds.includes(p.id));
+  const toggleAll = () => {
+    const set = new Set(value.productIds);
+    if (allSelected) for (const p of products) set.delete(p.id);
+    else             for (const p of products) set.add(p.id);
+    onChange({ productIds: Array.from(set) });
+  };
+
+  return (
+    <Box>
+      <HStack justify="space-between" mb={2}>
+        <Box>
+          <Text fontSize="xs" fontWeight="700" color="brand.muted" textTransform="uppercase" letterSpacing="0.04em">
+            Also in matched categories
+          </Text>
+          <Text fontSize="11px" color="brand.muted">
+            Sibling products in the same categories the campaign's matched products belong to. None pre-selected; opt them in if you want broader coverage.
+          </Text>
+        </Box>
+        <Button size="xs" variant="outline" onClick={toggleAll}>
+          {allSelected ? 'Deselect all' : 'Add all'}
+        </Button>
+      </HStack>
+      <VStack align="stretch" spacing={2}>
+        {products.map(p => (
+          <ProductRow
+            key={p.id}
+            product={p}
+            selected={value.productIds.includes(p.id)}
+            onToggle={() => toggle(p.id)}
+          />
+        ))}
+      </VStack>
+    </Box>
   );
 }
 
@@ -445,12 +507,14 @@ function ProductRow({ product, selected, onToggle }: { product: Product; selecte
                     : product.matchMethod === 'mixed' ? 'purple'
                     : product.matchMethod === 'collection' ? 'blue'
                     : product.matchMethod === 'text' ? 'cyan'
+                    : product.matchMethod === 'category-sibling' ? 'gray'
                     : 'gray';
   const methodLabel = product.matchMethod === 'product-set' ? 'Product set'
                     : product.matchMethod === 'url' ? 'URL match'
                     : product.matchMethod === 'mixed' ? 'URL + text'
                     : product.matchMethod === 'collection' ? 'Collection'
                     : product.matchMethod === 'text' ? 'Text match'
+                    : product.matchMethod === 'category-sibling' ? 'Same category'
                     : null;
 
   return (

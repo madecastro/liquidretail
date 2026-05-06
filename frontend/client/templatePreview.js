@@ -860,7 +860,12 @@
     requestAnimationFrame(() => {
       for (const { zone, el } of zoneEls) {
         if (zone.kind === 'text' || zone.kind === 'quote_card') {
-          fitAndClampZone(el, zone.max_lines || 4);
+          // Display-script headlines need a lower minScale floor so a
+          // 4-line word break can collapse hard into the 180-200px zone.
+          // Generic text/quote zones keep the 0.6 default to preserve
+          // legibility.
+          const minScale = zone.style_variant === 'display_script' ? 0.40 : 0.6;
+          fitAndClampZone(el, zone.max_lines || 4, minScale);
         }
       }
     });

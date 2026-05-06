@@ -525,10 +525,12 @@
     .tp-zone.kind-media img { border-radius: inherit; }
 
     /* Plain text zones sit directly on the stage background (headline,
-       eyebrow, product_meta). Use the brand's on-color with a subtle
-       shadow so readable on any bg. */
+       eyebrow, product_meta). Body font fixed Inter via the
+       --tp-style-font-family-body var; the responsive brand font ONLY
+       applies to display_script via --tp-style-font-family-headline. */
     .tp-zone.kind-text {
       color: var(--brand-text-on);
+      font-family: var(--tp-style-font-family-body, Inter, system-ui, sans-serif);
       font-weight: 800;
       font-size: 1.1em;
       line-height: 1.15;
@@ -536,6 +538,16 @@
       padding: 0.2em 0;
       text-shadow: 0 1px 3px rgba(0,0,0,0.55);
       display: flex; align-items: center;
+    }
+    /* Body description variant — used in landscape testimonial_spotlight
+       for the 2-line product/brand copy below the section header. */
+    .tp-zone.kind-text.style-body_description {
+      font-weight: 500;
+      font-size: 0.55em;
+      line-height: 1.3;
+      letter-spacing: 0;
+      padding: 0;
+      text-shadow: none;
     }
 
     /* Quote cards bind to brand.secondary_color (per
@@ -557,8 +569,10 @@
     .tp-zone.kind-cta {
       background: var(--tp-style-cta-button-bg, var(--brand-accent));
       color: var(--brand-text-on);
+      font-family: var(--tp-style-font-family-body, Inter, system-ui, sans-serif);
       display: flex; align-items: center; justify-content: center;
-      font-weight: 800; font-size: 1em; letter-spacing: 0.04em;
+      font-weight: 800; font-size: 0.85em; letter-spacing: 0.06em;
+      text-transform: uppercase;
       border-radius: 999px;
       box-shadow: 0 4px 14px rgba(0,0,0,0.35);
     }
@@ -696,7 +710,8 @@
       display: flex; align-items: center; justify-content: center;
       gap: 0.5em;
       color: var(--brand-text-on-primary, #ffffff);
-      font-size: 0.65em;
+      font-family: var(--tp-style-font-family-body, Inter, system-ui, sans-serif);
+      font-size: 0.55em;
       font-weight: 700;
       letter-spacing: 0.18em;
       text-transform: uppercase;
@@ -709,15 +724,20 @@
     }
     .tp-zone.kind-eyebrow_rules .tp-eyebrow-text { flex: 0 0 auto; }
 
-    /* Display script headline — large, brushy, palette-gradient text
-       used for the "SOMETHING NEW IS COMING IN HOT" headline in
-       landscape testimonial_spotlight. Knewave gives the brushy look;
-       Bungee falls back as bold display. Gradient is palette-driven via
-       --tp-style-headline-text-color so the headline reads as part of
-       the source media's mood. */
+    /* Display script headline — palette-gradient text used for the
+       "SOMETHING NEW IS COMING IN HOT" headline in landscape
+       testimonial_spotlight. Brand-curated font (var(--tp-style-font-family-headline))
+       wins; Knewave/Bungee fall through as the brushy display stack.
+       Base font sized for ~3 lines fitting in the 192px (16:9) /
+       180px (1.91:1) zone — auto-fit shrinks further when the
+       text is longer (4 lines hit), with a 0.40 floor below the
+       global fitAndClampZone default so the headline can collapse
+       hard if needed. Gradient blends from palette_vibrant down 30%
+       toward darker — gives the reference's flame-orange-to-deep-red
+       feel without obliterating the source color. */
     .tp-zone.kind-text.style-display_script {
-      font-family: 'Knewave', 'Bungee', cursive, system-ui;
-      font-size: 2.6em;
+      font-family: var(--tp-style-font-family-headline, 'Knewave', 'Bungee', cursive, system-ui);
+      font-size: 1.55em;
       line-height: 0.95;
       letter-spacing: 0;
       text-transform: uppercase;
@@ -725,7 +745,7 @@
       background: linear-gradient(
         180deg,
         var(--tp-style-headline-text-color, var(--brand-accent, #FF6B35)) 0%,
-        color-mix(in srgb, var(--tp-style-headline-text-color, var(--brand-accent, #FF6B35)) 60%, #B91C1C 40%) 100%
+        color-mix(in srgb, var(--tp-style-headline-text-color, var(--brand-accent, #FF6B35)) 70%, #000 30%) 100%
       );
       -webkit-background-clip: text;
               background-clip: text;
@@ -739,7 +759,8 @@
        above the body description ("BUILT FOR HEAT LOVERS"). */
     .tp-zone.kind-text.style-section_header {
       color: var(--tp-style-section-header-color, var(--brand-accent, #FF6B35));
-      font-size: 0.78em;
+      font-family: var(--tp-style-font-family-body, Inter, system-ui, sans-serif);
+      font-size: 0.55em;
       font-weight: 800;
       letter-spacing: 0.06em;
       text-transform: uppercase;
@@ -749,16 +770,20 @@
     }
 
     /* Proof bar variant — outlined pill with stars + rating + verified-
-       buyers tag, used by landscape testimonial_spotlight per reference.
-       Palette-accent border around a darker pill bg; dot divider mid-row. */
+       buyers tag. Palette-accent border around a slightly-lifted dark
+       bg (color-mix lifts panel_bg by 8% white so the bar reads as a
+       discrete element on top of the panel without a separate palette
+       slot). Body font fixed Inter — only headline gets the brand-
+       responsive font. */
     .tp-zone.kind-proof_bar.style-with_verified_buyers {
-      background: var(--tp-style-proof-bar-bg, #1F1F1F);
+      background: color-mix(in srgb, var(--tp-style-proof-bar-bg, #1F1F1F) 92%, #ffffff 8%);
       color: var(--brand-text-on-primary, #ffffff);
+      font-family: var(--tp-style-font-family-body, Inter, system-ui, sans-serif);
       border: 1px solid var(--tp-style-proof-bar-border, var(--brand-accent, #FF6B35));
       backdrop-filter: none;
-      gap: 0.5em;
-      padding: 0.4em 0.9em;
-      font-size: 0.78em;
+      gap: 0.4em;
+      padding: 0.35em 0.7em;
+      font-size: 0.55em;
       font-weight: 600;
     }
     .tp-zone.kind-proof_bar.style-with_verified_buyers .tp-proof-stars {
@@ -789,35 +814,38 @@
     .tp-zone.kind-quote_card.style-with_author_photo {
       background: var(--tp-style-card-bg, #1A1A1A);
       color: var(--brand-text-on-primary, #ffffff);
+      font-family: var(--tp-style-font-family-body, Inter, system-ui, sans-serif);
       border-left: 3px solid var(--tp-style-accent-border-color, var(--brand-accent, #FF6B35));
       border-radius: 6px;
-      padding: 0.5em 0.7em 0.5em calc(0.7em + 3px);
+      padding: 0.45em 0.55em 0.45em calc(0.55em + 3px);
       box-shadow: none;
       display: grid;
-      grid-template-rows: auto 1fr auto;
-      grid-template-columns: 1fr;
-      gap: 0.25em;
+      grid-template-columns: auto 1fr;
+      grid-template-rows: 1fr auto;
+      column-gap: 0.4em;
+      row-gap: 0.3em;
       position: relative;
-      font-size: 0.85em; line-height: 1.3;
+      font-size: 0.55em; line-height: 1.3;
     }
     .tp-zone.kind-quote_card.style-with_author_photo .tp-quote-glyph {
       color: var(--tp-style-open-quote-glyph-color, var(--brand-accent, #FF6B35));
       font-family: 'Times New Roman', serif;
-      font-size: 2.4em; font-weight: 800;
-      line-height: 0.6;
+      font-size: 2.2em; font-weight: 900;
+      line-height: 0.7;
       grid-row: 1; grid-column: 1;
       margin: 0; padding: 0;
+      align-self: start;
     }
     .tp-zone.kind-quote_card.style-with_author_photo .tp-quote-text {
-      grid-row: 2; grid-column: 1;
+      grid-row: 1; grid-column: 2;
       font-style: italic;
-      font-weight: 600;
+      font-weight: 500;
       align-self: center;
     }
     .tp-zone.kind-quote_card.style-with_author_photo .tp-quote-author-row {
-      grid-row: 3; grid-column: 1;
+      grid-row: 2; grid-column: 1 / span 2;
       display: flex; align-items: center; gap: 0.5em;
-      margin-top: 0.3em;
+      margin-top: 0.2em;
     }
     .tp-zone.kind-quote_card.style-with_author_photo .tp-quote-avatar {
       width: 1.8em; height: 1.8em; border-radius: 50%;
@@ -857,6 +885,7 @@
       display: flex; flex-wrap: nowrap;
       align-items: center; justify-content: space-between;
       gap: 0.7em;
+      font-family: var(--tp-style-font-family-body, Inter, system-ui, sans-serif);
     }
     .tp-zone.kind-badge_row.style-callouts .tp-callout {
       display: inline-flex; align-items: center; gap: 0.35em;

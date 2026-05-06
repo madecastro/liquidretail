@@ -743,7 +743,10 @@
        feel without obliterating the source color. */
     .tp-zone.kind-text.style-display_script {
       font-family: var(--tp-style-font-family-headline, 'Knewave', 'Bungee', cursive, system-ui);
-      font-size: 1.85em;
+      /* font-size multiplied by --tp-zone-scale (canvas zone_scalers
+         font factor). The 0.5em lead / 1em main inner spans are
+         em-relative so they scale together with the parent. */
+      font-size: calc(1.85em * var(--tp-zone-scale, 1));
       line-height: 0.95;
       letter-spacing: 0;
       text-transform: uppercase;

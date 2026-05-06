@@ -1623,6 +1623,41 @@
     }
   }
 
+  // Split a display_script headline into a smaller "lead" phrase + a
+  // larger "main" phrase. The reference layout has the lead at half
+  // the size of the main ("SOMETHING NEW IS" small, "COMING IN HOT"
+  // huge). Heuristic, in priority order:
+  //   1. Split at first sentence-break punctuation (, . ; : — –)
+  //   2. Split at first conjugated bridge verb (is/are/was/were/will/gets/now)
+  //   3. Fallback: split at ~40% word boundary
+  // Returns { lead: '...', main: '...' }. When the headline is too
+  // short or no split point is found, lead is empty and main holds
+  // the full text — caller renders only the main span.
+  function splitHeadlineForDisplayScript(text) {
+    const t = (text || '').trim();
+    if (!t) return { lead: '', main: '' };
+
+    // 1. Punctuation split — keep punct out of the lead.
+    const punct = t.match(/^([^,.;:—–]+)[,.;:—–]\s+(.+)$/);
+    if (punct) return { lead: punct[1].trim(), main: punct[2].trim() };
+
+    // 2. Bridge-verb split — captures "Something new IS coming in hot",
+    //    "We are launching now", etc.
+    const verb = t.match(/^(.+?\s+(?:is|are|was|were|will\s+be|will|gets|now|gets|aren't|isn't))\s+(.+)$/i);
+    if (verb) return { lead: verb[1].trim(), main: verb[2].trim() };
+
+    // 3. Fallback — ~40% word boundary, only when there are ≥4 words
+    //    (avoids clipping short slogans).
+    const words = t.split(/\s+/);
+    if (words.length >= 4) {
+      // Round up so a 4-word phrase splits 2/2 rather than 1/3 — a
+      // single-word lead reads awkwardly at half-size.
+      const splitAt = Math.max(1, Math.round(words.length * 0.4));
+      return { lead: words.slice(0, splitAt).join(' '), main: words.slice(splitAt).join(' ') };
+    }
+    return { lead: '', main: t };
+  }
+
   // Map a callout label to a glyph icon. Pattern-matched against
   // common product-feature vocabulary. Used by badge_row's
   // 'callouts' style_variant when the badge data is a plain string
@@ -1708,6 +1743,22 @@
         }
         const txt = bits.filter(Boolean).join(' · ');
         if (!txt) return `<div class="tp-placeholder">${escapeHtml(paths.join(' / ') || zone.kind)}</div>`;
+
+        // Display-script headline: split into a lead phrase + main
+        // phrase rendered at half / full size respectively per the
+        // reference layout ("SOMETHING NEW IS" small, "COMING IN HOT"
+        // big). Splitter degrades gracefully — if no natural break
+        // exists, lead is empty and only main renders.
+        if (zone.kind === 'text' && zone.style_variant === 'display_script') {
+          const split = splitHeadlineForDisplayScript(txt);
+          if (split.lead) {
+            return (
+              `<span class="tp-headline-lead">${escapeHtml(split.lead)}</span>` +
+              `<span class="tp-headline-main">${escapeHtml(split.main)}</span>`
+            );
+          }
+          return `<span class="tp-headline-main">${escapeHtml(split.main || txt)}</span>`;
+        }
 
         // Quote card with author photo — adds an oversized open-quote
         // glyph at the top-left, the quote text, then a footer row with

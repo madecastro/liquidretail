@@ -722,7 +722,9 @@
       background: var(--tp-style-accent-border-color, var(--brand-accent, #FF6B35));
       opacity: 0.85;
     }
-    .tp-zone.kind-eyebrow_rules .tp-eyebrow-text { flex: 0 0 auto; }
+    /* White text inside eyebrow_rules — sits on the dark panel. Always
+       white regardless of brand-text-on inheritance. */
+    .tp-zone.kind-eyebrow_rules .tp-eyebrow-text { flex: 0 0 auto; color: #FFFFFF; }
 
     /* Display script headline — palette-gradient text used for the
        "SOMETHING NEW IS COMING IN HOT" headline in landscape
@@ -753,6 +755,22 @@
       -webkit-text-fill-color: transparent;
       text-shadow: none;
       padding: 0;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    /* Lead clause = 50% of main clause (per reference: SOMETHING NEW IS
+       sized half of COMING IN HOT). display:block stacks them. line-height
+       tightened on the lead so the whitespace between clauses doesn't
+       eat the headline budget. */
+    .tp-zone.kind-text.style-display_script .tp-headline-lead {
+      display: block;
+      font-size: 0.5em;
+      line-height: 1.0;
+      margin-bottom: 0.05em;
+    }
+    .tp-zone.kind-text.style-display_script .tp-headline-main {
+      display: block;
+      font-size: 1em;
     }
 
     /* Section header — orange uppercase, rendered as a small eyebrow
@@ -790,17 +808,18 @@
       color: var(--tp-style-rating-star-color, #FFD400);
       letter-spacing: 0.04em; font-size: 1.05em;
     }
-    .tp-zone.kind-proof_bar.style-with_verified_buyers .tp-proof-rating {
-      font-weight: 800; font-size: 1.1em;
-    }
-    .tp-zone.kind-proof_bar.style-with_verified_buyers .tp-proof-reviews {
-      opacity: 0.85; font-size: 0.85em;
-    }
+    /* All proof_bar text reads white on the dark lifted panel — only
+       the stars stay yellow. Hardcoded to avoid brightness-derived
+       inheritance returning a non-white value when the resolved bg
+       happens to be light. */
+    .tp-zone.kind-proof_bar.style-with_verified_buyers .tp-proof-rating  { color: #FFFFFF; font-weight: 800; font-size: 1.1em; }
+    .tp-zone.kind-proof_bar.style-with_verified_buyers .tp-proof-reviews { color: #FFFFFF; opacity: 0.85; font-size: 0.85em; }
     .tp-zone.kind-proof_bar.style-with_verified_buyers .tp-proof-divider {
       flex: 0 0 auto; width: 1px; height: 1.4em; background: rgba(255,255,255,0.25); margin: 0 0.3em;
     }
     .tp-zone.kind-proof_bar.style-with_verified_buyers .tp-proof-verified {
       display: inline-flex; align-items: center; gap: 0.3em;
+      color: #FFFFFF;
       letter-spacing: 0.06em; font-weight: 700; text-transform: uppercase;
     }
     .tp-zone.kind-proof_bar.style-with_verified_buyers .tp-proof-shield {
@@ -840,6 +859,7 @@
       grid-row: 1; grid-column: 2;
       font-style: italic;
       font-weight: 500;
+      color: #FFFFFF;
       align-self: center;
     }
     .tp-zone.kind-quote_card.style-with_author_photo .tp-quote-author-row {
@@ -891,7 +911,7 @@
       display: inline-flex; align-items: center; gap: 0.35em;
       flex: 0 0 auto;
       font-size: 0.7em; font-weight: 700;
-      color: var(--brand-text-on-primary, #ffffff);
+      color: #FFFFFF;
       text-transform: uppercase;
       letter-spacing: 0.05em;
       line-height: 1.1;

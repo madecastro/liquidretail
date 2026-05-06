@@ -868,6 +868,22 @@
     }
   }
 
+  // Append a slot-aware Cloudinary transform to chain after any
+  // existing transforms (e.g. the upstream c_crop,w_X,h_Y from
+  // layoutInputService.buildCloudinaryCropUrl). c_fill,g_auto crops
+  // the delivered image to the slot's exact dimensions using
+  // subject-aware gravity. No-op for non-Cloudinary URLs (the browser
+  // falls back to object-fit:cover via the .tp-zone img CSS rule).
+  function slotFitCloudinaryUrl(url, slotW, slotH) {
+    if (!url || typeof url !== 'string') return url;
+    if (!url.includes('/upload/')) return url;
+    if (!Number.isFinite(slotW) || !Number.isFinite(slotH)) return url;
+    if (slotW <= 0 || slotH <= 0) return url;
+    const t = `c_fill,g_auto,w_${slotW},h_${slotH}`;
+    if (/\/v\d+\//.test(url)) return url.replace(/\/(v\d+\/)/, `/${t}/$1`);
+    return url.replace('/upload/', `/upload/${t}/`);
+  }
+
   function isHex(s) { return typeof s === 'string' && /^#[0-9a-f]{6}$/i.test(s); }
 
   // Darken a hex color by `amount` (0..1). Returns the original if malformed.
@@ -1528,8 +1544,18 @@
         // Prefer video when the media object carries one (source Media
         // is a video); use the image as poster. Falls back to a plain
         // <img> tag when only an image is available.
-        const videoSrc = media?.video || null;
-        const imgSrc   = media?.image || media?.video_poster || null;
+        const videoSrcRaw = media?.video || null;
+        const imgSrcRaw   = media?.image || media?.video_poster || null;
+        // Slot-fit on Cloudinary URLs. The upstream crop is canvas-
+        // aspect-shaped (e.g. 1000×1000 smart-crop for 1:1) but the
+        // slot is rect.w × rect.h. Chaining c_fill,g_auto rounds out
+        // the delivered image to the slot's exact dimensions with
+        // subject-aware gravity — sharper than letting the browser
+        // object-fit:cover a canvas-sized image into a smaller box.
+        const slotW = Math.round(zone.rect?.w || 0);
+        const slotH = Math.round(zone.rect?.h || 0);
+        const videoSrc = slotFitCloudinaryUrl(videoSrcRaw, slotW, slotH);
+        const imgSrc   = slotFitCloudinaryUrl(imgSrcRaw,   slotW, slotH);
         if (videoSrc) {
           return `<video src="${escapeHtml(videoSrc)}"` +
                  (imgSrc ? ` poster="${escapeHtml(imgSrc)}"` : '') +

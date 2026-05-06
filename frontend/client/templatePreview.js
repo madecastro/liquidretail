@@ -404,6 +404,7 @@
 
       TP_STATE.lastInput  = data.input;
       TP_STATE.lastCanvas = data.canvas;
+      TP_STATE.lastStyleBindings = data.style_bindings || {};
 
       // Overlay-mode templates (testimonial_overlay) ship a `placement`
       // block with pre-computed element rects + text colors + scrim
@@ -797,16 +798,20 @@
     stage.style.setProperty('--brand-secondary', secondary);
     stage.style.setProperty('--brand-accent',    accent);
     stage.style.setProperty('--brand-text-on',   textOn);
-    // Per-surface readable foregrounds. Quote cards and proof bars
-    // bind to brand.secondary_color and brand.primary_color
-    // respectively (per style_bindings); the renderer needs the
-    // contrast-correct text color for each so dark-on-dark or
-    // light-on-light doesn't happen when a brand's palette only
-    // populates one of the three tokens.
+    // Per-surface readable foregrounds.
     stage.style.setProperty('--brand-text-on-primary',   tpReadableOn(primary));
     stage.style.setProperty('--brand-text-on-secondary', tpReadableOn(secondary));
     stage.style.setProperty('--brand-text-on-accent',    tpReadableOn(accent));
     stage.style.setProperty('--brand-font',      fontStack);
+
+    // Apply the resolved style_bindings (image-led palette for
+    // testimonial_overlay, brand-led for the others). The backend walks
+    // source_priority chains per template; we just project the result
+    // as --tp-style-<name> CSS vars so per-template CSS rules can opt
+    // to read them via var(--tp-style-..., var(--brand-...)). The
+    // 'auto-from-brightness' sentinel stays a string in the var; CSS
+    // checks for it and falls back to the brightness-derived var.
+    applyStyleBindingsToStage(stage, TP_STATE.lastStyleBindings || {});
 
     // Canvas background — derive from spec + brand palette. 'solid' and
     // 'brand_fill' paint the brand primary; 'gradient' interpolates primary
@@ -881,6 +886,22 @@
         layer.appendChild(box);
       }
       stage.appendChild(layer);
+    }
+  }
+
+  // Project the backend's resolved style_bindings onto CSS custom
+  // properties so per-template CSS can read them via
+  // var(--tp-style-<name>). Names are kebab-cased — scrim_tint →
+  // --tp-style-scrim-tint. Skips 'auto-from-brightness' (sentinel
+  // for renderer-computed contrast) so CSS fallback chains still
+  // resolve to the brightness-derived var.
+  function applyStyleBindingsToStage(stage, bindings) {
+    if (!stage || !bindings) return;
+    for (const [name, value] of Object.entries(bindings)) {
+      if (value == null) continue;
+      if (typeof value === 'string' && value === 'auto-from-brightness') continue;
+      const cssName = '--tp-style-' + name.replace(/_/g, '-');
+      stage.style.setProperty(cssName, String(value));
     }
   }
 

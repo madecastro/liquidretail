@@ -851,13 +851,21 @@
       zoneEls.push({ zone, el });
     }
 
-    // Auto-fit text zones — measure overflow and shrink font-size in 5%
-    // steps until content fits within zone.h, then re-apply line-clamp
-    // as the hard cap. Pass runs after layout (RAF) so scrollHeight
-    // reflects rendered geometry. Headline / quote_card / product_meta
-    // get this treatment; cta truncates via max_chars instead so the
-    // button copy is never font-shrunk.
+    // Reflow pass — when the headline content is shorter than its
+    // budgeted slot height (Gemini wrote a 1- or 2-line headline into a
+    // 3-line slot), shrink the headline rect to its natural content
+    // height and redistribute the freed vertical to slots BELOW it in
+    // the same column. Below-slots move up to keep their original gaps
+    // and grow proportionally to their original heights, so the dark
+    // panel stays balanced instead of leaving a dead band under a
+    // short headline.
+    //
+    // Order matters: reflow MUST run before fitAndClampZone so the
+    // auto-fit measures against the redistributed (taller) below-slot
+    // rects and lets bigger content like the quote_card breathe.
     requestAnimationFrame(() => {
+      reflowColumnUnderHeadline(zoneEls, w, h);
+
       for (const { zone, el } of zoneEls) {
         if (zone.kind === 'text' || zone.kind === 'quote_card') {
           // Display-script headlines need a lower minScale floor so a
@@ -1621,6 +1629,122 @@
       inner.style.display = savedDisplay || '-webkit-box';
       inner.style.webkitLineClamp = savedClamp || String(maxLines);
     }
+  }
+
+  // Reflow the right-side column of a landscape layout when the headline
+  // content is shorter than its budgeted slot. Reasoning:
+  //   - The derivation prompt asks Gemini to write a multi-line headline
+  //     that fills the design slot (lead + 2-line main, etc.).
+  //   - When Gemini writes a SHORTER headline (1-line main, or a single
+  //     word), the original slot leaves a dead band of vertical space
+  //     above the eyebrow / proof_bar / quote_card, and the column reads
+  //     unbalanced against the full-bleed image on the left.
+  //   - Solution: snapshot the column's original geometry, measure the
+  //     headline's natural rendered height at design font, shrink the
+  //     headline rect to fit the content (never above the original
+  //     budget), and redistribute the freed vertical to below-slots in
+  //     proportion to their original heights, preserving inter-slot
+  //     gaps.
+  //
+  // "Below" = same column = x-overlapping the headline AND y >= headline
+  // bottom. This catches the right-panel stack (eyebrow_rules → proof_bar
+  // → quote_card → section_header → product_meta → badge_row → cta) on
+  // testimonial_spotlight 16:9 / 1.91:1 without any canvas-spec changes.
+  // Logo / support_media live on the left and are correctly excluded by
+  // the x-overlap test.
+  //
+  // canvasW / canvasH are the canvas spec dimensions (normalized 1000-
+  // unit space). Since applyCanvasSize sets the stage to those exact
+  // pixel dimensions, getBoundingClientRect / scrollHeight return values
+  // in the same units — no conversion needed.
+  function reflowColumnUnderHeadline(zoneEls, canvasW, canvasH) {
+    const headline = zoneEls.find(({ zone }) =>
+      zone.id === 'headline' && zone.style_variant === 'display_script');
+    if (!headline) return;
+
+    const hZone = headline.zone;
+    const hEl   = headline.el;
+    const orig  = { x: hZone.rect.x, y: hZone.rect.y, w: hZone.rect.w, h: hZone.rect.h };
+
+    // Measure natural content height at design font. style.height='auto'
+    // forces the element to size to its content; we grab the resulting
+    // height in canvas-normalized units (== CSS px on the unscaled
+    // stage) and restore the original % height immediately so the
+    // intermediate state doesn't paint.
+    const savedH = hEl.style.height;
+    hEl.style.height = 'auto';
+    const naturalPx = hEl.getBoundingClientRect().height;
+    hEl.style.height = savedH;
+
+    // Floor at 50% of the original slot — protects against pathological
+    // 1-word headlines that would otherwise collapse the slot to a
+    // sliver. The cap (orig.h) is the design budget — we never expand
+    // beyond what the canvas spec allocated.
+    const minH    = orig.h * 0.5;
+    const targetH = Math.max(minH, Math.min(orig.h, naturalPx));
+    const delta   = orig.h - targetH;
+    if (delta < 2) return; // sub-pixel deltas aren't worth a reflow
+
+    // Find dependent zones — anything in the same column that sits
+    // entirely below the headline. We compare against the ORIGINAL rect
+    // (not yet mutated) so the test is stable.
+    const oldRight  = orig.x + orig.w;
+    const oldBottom = orig.y + orig.h;
+    const dependents = zoneEls
+      .filter(z => z !== headline)
+      .filter(z => {
+        const r = z.zone.rect;
+        const xOverlap = r.x < oldRight && (r.x + r.w) > orig.x;
+        const below    = r.y >= oldBottom - 1;
+        return xOverlap && below;
+      })
+      .sort((a, b) => a.zone.rect.y - b.zone.rect.y);
+
+    // Snapshot dep originals so we can compute proportional growth and
+    // gap preservation against immutable values.
+    const deps = dependents.map(d => ({
+      handle: d,
+      orig:   { x: d.zone.rect.x, y: d.zone.rect.y, w: d.zone.rect.w, h: d.zone.rect.h }
+    }));
+
+    // Apply the new headline rect.
+    hZone.rect.h = targetH;
+    applyZoneRect(hEl, hZone.rect, canvasW, canvasH);
+
+    if (!deps.length) return;
+
+    // Distribute the freed delta across deps in proportion to their
+    // ORIGINAL heights. Gap preservation: each dep's original distance
+    // from the previous element's bottom (or the headline's bottom for
+    // the first dep) is kept verbatim so the column rhythm stays
+    // intact — only the slots themselves grow.
+    const totalDepH = deps.reduce((s, d) => s + d.orig.h, 0);
+
+    let prevBottomNew  = orig.y + targetH;
+    let prevBottomOrig = oldBottom;
+    for (const d of deps) {
+      const gap   = d.orig.y - prevBottomOrig;
+      const grow  = delta * (d.orig.h / totalDepH);
+      const newH  = d.orig.h + grow;
+      const newY  = prevBottomNew + gap;
+
+      d.handle.zone.rect.y = newY;
+      d.handle.zone.rect.h = newH;
+      applyZoneRect(d.handle.el, d.handle.zone.rect, canvasW, canvasH);
+
+      prevBottomNew  = newY + newH;
+      prevBottomOrig = d.orig.y + d.orig.h;
+    }
+  }
+
+  // Re-apply a zone rect to its DOM element using the same percent-of-
+  // canvas units the initial draw uses. Centralized so reflow stays in
+  // sync with the loop in drawTpCanvas.
+  function applyZoneRect(el, rect, canvasW, canvasH) {
+    el.style.left   = `${(rect.x / canvasW * 100).toFixed(2)}%`;
+    el.style.top    = `${(rect.y / canvasH * 100).toFixed(2)}%`;
+    el.style.width  = `${(rect.w / canvasW * 100).toFixed(2)}%`;
+    el.style.height = `${(rect.h / canvasH * 100).toFixed(2)}%`;
   }
 
   // Split a display_script headline into a smaller "lead" phrase + a

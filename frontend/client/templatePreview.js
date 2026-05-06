@@ -31,6 +31,7 @@
     showRestrictions: true,  // restriction layer — subject/face/text keep-outs from overlay analysis
     showDensity: false,      // density heatmap — visualize the densityGrid the silhouette-aware legality uses
     phoneFrame: false,       // mock-phone frame around the stage — useful for visualizing ad in-context
+    actualSize: false,       // render at native canvas pixel size (no transform: scale) — for diagnosing browser rendering bugs the scaled-down view masks
     conservation: 0.5        // placement strictness; overlay-mode only (backend ignores on canonical)
   };
 
@@ -57,6 +58,7 @@
     const restr = document.getElementById('tpDebugRestrictionsChip');
     const dens  = document.getElementById('tpDebugDensityChip');
     const phone = document.getElementById('tpDebugPhoneChip');
+    const actual = document.getElementById('tpDebugActualSizeChip');
     const syncBoxes = () => {
       if (!boxes) return;
       boxes.classList.toggle('active', TP_STATE.showDebugBoxes);
@@ -78,7 +80,13 @@
       phone.textContent = TP_STATE.phoneFrame ? 'Hide phone frame' : 'Show phone frame';
       applyPhoneFrame();
     };
-    syncBoxes(); syncRestr(); syncDens(); syncPhone();
+    const syncActual = () => {
+      if (!actual) return;
+      actual.classList.toggle('active', TP_STATE.actualSize);
+      actual.textContent = TP_STATE.actualSize ? 'Show fitted preview' : 'Show actual size';
+      applyActualSize();
+    };
+    syncBoxes(); syncRestr(); syncDens(); syncPhone(); syncActual();
     boxes?.addEventListener('click', () => {
       TP_STATE.showDebugBoxes = !TP_STATE.showDebugBoxes;
       syncBoxes(); redrawTpStage();
@@ -94,6 +102,10 @@
     phone?.addEventListener('click', () => {
       TP_STATE.phoneFrame = !TP_STATE.phoneFrame;
       syncPhone();
+    });
+    actual?.addEventListener('click', () => {
+      TP_STATE.actualSize = !TP_STATE.actualSize;
+      syncActual();
     });
   })();
 
@@ -153,15 +165,32 @@
     // Em multipliers on every overlay element now produce real ad-sized
     // text instead of preview-cramped sub-pixel approximations.
     stage.style.fontSize = `${Math.max(12, canvasW / 22)}px`;
-    requestAnimationFrame(applyStageScale);
+    // Two paths: actual-size pins the frame to the new pixel size,
+    // fitted-mode lets the frame's CSS aspect-ratio stretch to the
+    // available container width and applies a transform: scale(N).
+    if (TP_STATE.actualSize) {
+      requestAnimationFrame(applyActualSize);
+    } else {
+      requestAnimationFrame(applyStageScale);
+    }
   }
 
   // Compute the scale factor so the stage fits the frame and apply it.
   // Called after layout is committed (RAF) so frame.clientWidth is real.
+  // Honors TP_STATE.actualSize — when on, skips the scale entirely so the
+  // canvas renders at native pixel dimensions (browser rendering quirks
+  // like sub-pixel font hinting and image smoothing differ between
+  // scaled and un-scaled rendering; the actual-size mode is the
+  // diagnostic surface).
   function applyStageScale() {
     const frame = document.getElementById('tpStageFrame');
     const stage = document.getElementById('tpStage');
     if (!frame || !stage) return;
+    if (TP_STATE.actualSize) {
+      stage.style.transform = 'none';
+      stage.style.transformOrigin = 'top left';
+      return;
+    }
     const stageW = parseFloat(stage.style.width) || 0;
     const stageH = parseFloat(stage.style.height) || 0;
     if (!stageW || !stageH) return;
@@ -169,6 +198,47 @@
     if (!fW || !fH) return;
     const scale = Math.min(fW / stageW, fH / stageH);
     stage.style.transform = `scale(${scale.toFixed(4)})`;
+    stage.style.transformOrigin = '';
+  }
+
+  // Toggle the frame between aspect-ratio-fit (default) and native canvas
+  // pixel size. In actual-size mode the frame grows to the stage's pixel
+  // dimensions and the surrounding tp-stage-wrap gets overflow:auto so
+  // the user can scroll a 1000×1778 9:16 canvas at 1:1.
+  function applyActualSize() {
+    const frame = document.getElementById('tpStageFrame');
+    const stage = document.getElementById('tpStage');
+    const wrap  = frame?.closest('.tp-stage-wrap');
+    if (!frame || !stage) return;
+    const stageW = parseFloat(stage.style.width)  || 0;
+    const stageH = parseFloat(stage.style.height) || 0;
+    if (TP_STATE.actualSize) {
+      // Pin frame to stage's native pixel dimensions, drop the
+      // aspect-ratio constraint, allow the wrap to scroll.
+      frame.style.aspectRatio = '';
+      frame.style.width  = stageW ? `${stageW}px` : '';
+      frame.style.height = stageH ? `${stageH}px` : '';
+      frame.style.maxWidth  = 'none';
+      frame.style.maxHeight = 'none';
+      frame.style.flex      = 'none';
+      if (wrap) {
+        wrap.style.overflow      = 'auto';
+        wrap.style.alignItems    = 'flex-start';
+        wrap.style.justifyContent = 'flex-start';
+      }
+    } else {
+      // Restore responsive aspect-ratio fit.
+      if (stageW && stageH) frame.style.aspectRatio = `${stageW} / ${stageH}`;
+      frame.style.width = '';  frame.style.height = '';
+      frame.style.maxWidth = ''; frame.style.maxHeight = '';
+      frame.style.flex = '';
+      if (wrap) {
+        wrap.style.overflow = '';
+        wrap.style.alignItems = '';
+        wrap.style.justifyContent = '';
+      }
+    }
+    requestAnimationFrame(applyStageScale);
   }
 
   // Conservation slider — lives next to the debug chips. Drags coalesce via

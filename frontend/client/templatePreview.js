@@ -1747,9 +1747,22 @@
         // Display-script headline: split into a lead phrase + main
         // phrase rendered at half / full size respectively per the
         // reference layout ("SOMETHING NEW IS" small, "COMING IN HOT"
-        // big). Splitter degrades gracefully — if no natural break
-        // exists, lead is empty and only main renders.
+        // big). Prefer the slot-aware split fields the derivation LLM
+        // wrote against per-slot char budgets — those are designed to
+        // fit lead/main exactly. Fall through to the heuristic splitter
+        // for legacy single-string headlines.
         if (zone.kind === 'text' && zone.style_variant === 'display_script') {
+          const lead = tpGet(input, 'copy.headline_lead');
+          const main = tpGet(input, 'copy.headline_main');
+          if (typeof lead === 'string' && lead.trim() && typeof main === 'string' && main.trim()) {
+            return (
+              `<span class="tp-headline-lead">${escapeHtml(lead.trim())}</span>` +
+              `<span class="tp-headline-main">${escapeHtml(main.trim())}</span>`
+            );
+          }
+          if (typeof main === 'string' && main.trim()) {
+            return `<span class="tp-headline-main">${escapeHtml(main.trim())}</span>`;
+          }
           const split = splitHeadlineForDisplayScript(txt);
           if (split.lead) {
             return (

@@ -1713,6 +1713,8 @@
       })
       .sort((a, b) => a.zone.rect.y - b.zone.rect.y);
 
+    if (!dependents.length) return;
+
     // Snapshot deps with both their design (pre-scale) and current
     // (post-scale) heights. designH drives the proportional slack
     // distribution; scaledH is the floor a dep can never go below
@@ -1721,12 +1723,16 @@
       handle:  d,
       designH: d.zone._design_h ?? d.zone.rect.h,
       scaledH: d.zone.rect.h,
-      origY:   d.zone.rect.y
+      origY:   d.zone.rect.y,
+      column:  d.zone.column || null   // null = full-width band zone
     }));
 
     // depDelta = total vertical the column GREW from the zone_scalers
     // pass. The headline must shrink by at least depDelta to keep the
     // column packing the canvas — that's the column-overflow case.
+    // For multi-column layouts, the worst-case column drives required
+    // headline shrinkage (the LEFT column may have 4 scaled zones
+    // while RIGHT only has 1; LEFT is the binding constraint).
     const depDelta = deps.reduce((s, d) => s + (d.scaledH - d.designH), 0);
 
     // Measure headline natural content at design font.
@@ -1735,50 +1741,46 @@
     const naturalPx = hEl.getBoundingClientRect().height;
     hEl.style.height = savedH;
 
-    // Floor at 50% of the design slot — protects against pathological
-    // 1-word headlines collapsing to a sliver. orig.h is always the
-    // upper bound; we never expand the headline past its design.
-    const minH = orig.h * 0.5;
-
-    // requiredH = the largest the headline can be while still letting
-    // the scaled deps fit inside the original column budget. If
-    // depDelta is 0 (no scalers), requiredH == orig.h and this term
-    // disappears.
-    const requiredH = Math.max(minH, orig.h - depDelta);
-
-    // naturalFit = headline content's preferred height, clamped to the
-    // [floor, design] band.
+    const minH       = orig.h * 0.5;
+    const requiredH  = Math.max(minH, orig.h - depDelta);
     const naturalFit = Math.max(minH, Math.min(orig.h, naturalPx));
+    const finalH     = Math.min(requiredH, naturalFit);
 
-    // Final headline = whichever is smaller. If natural fits inside
-    // requiredH there's slack to redistribute; otherwise headline
-    // shrinks just enough to make room for the scaled deps.
-    const finalH = Math.min(requiredH, naturalFit);
+    const totalShrink  = orig.h - finalH;
+    const slackForDeps = totalShrink - depDelta;
 
-    const totalShrink  = orig.h - finalH;          // total headline gave up
-    const slackForDeps = totalShrink - depDelta;   // savings beyond what scaling demanded
-
-    // Bail out only when neither pressure is in play.
     if (Math.abs(totalShrink) < 2 && depDelta < 2) return;
 
     // Apply new headline rect.
     hZone.rect.h = finalH;
     applyZoneRect(hEl, hZone.rect, canvasW, canvasH);
 
-    if (!deps.length) return;
+    // Split deps: full-width band (no column) cascades from headline
+    // bottom; column-tagged zones cascade INDEPENDENTLY from the
+    // band's bottom (one cursor per column). This prevents a
+    // two-column layout's parallel tracks (left col proof_bar at the
+    // same y as right col badge_row) from being mis-cascaded as if
+    // they were sequential.
+    const bandDeps = deps.filter(d => !d.column);
+    const colDepsByName = {};
+    for (const d of deps) {
+      if (d.column) (colDepsByName[d.column] ||= []).push(d);
+    }
 
-    // Distribute slack proportionally to design heights so a tall
-    // quote_card grabs more breathing room than a thin proof_bar.
-    // When slackForDeps ≤ 0 (column packed exactly, or overflowing
-    // because scaling outran the headline's floor), deps stay at
-    // their scaled height — overflow is left to fitAndClampZone.
+    // Total design heights — used to distribute slack proportionally.
+    // When multiple columns exist, slack split across band + each
+    // column's deps weighted by their own design totals.
     const totalDesignH = deps.reduce((s, d) => s + d.designH, 0);
+    const slackShare   = (designH) => (slackForDeps > 0 && totalDesignH > 0)
+      ? slackForDeps * (designH / totalDesignH)
+      : 0;
 
+    // Cascade the full-width band first.
     let prevBottomNew  = orig.y + finalH;
     let prevBottomOrig = oldBottom;
-    for (const d of deps) {
+    for (const d of bandDeps) {
       const gap  = d.origY - prevBottomOrig;
-      const grow = (slackForDeps > 0 ? slackForDeps * (d.designH / totalDesignH) : 0);
+      const grow = slackShare(d.designH);
       const newH = d.scaledH + grow;
       const newY = prevBottomNew + gap;
 
@@ -1787,9 +1789,29 @@
       applyZoneRect(d.handle.el, d.handle.zone.rect, canvasW, canvasH);
 
       prevBottomNew  = newY + newH;
-      // Track design bottom (not scaled) so original inter-zone gaps
-      // are preserved by their spec values.
       prevBottomOrig = d.origY + d.designH;
+    }
+
+    // Both columns start at the band's bottom (preserved gaps measured
+    // off each column's first dep). Cascade each column independently.
+    const colTopNew  = prevBottomNew;
+    const colTopOrig = prevBottomOrig;
+    for (const colName of Object.keys(colDepsByName)) {
+      let prevNew  = colTopNew;
+      let prevOrig = colTopOrig;
+      for (const d of colDepsByName[colName]) {
+        const gap  = d.origY - prevOrig;
+        const grow = slackShare(d.designH);
+        const newH = d.scaledH + grow;
+        const newY = prevNew + gap;
+
+        d.handle.zone.rect.y = newY;
+        d.handle.zone.rect.h = newH;
+        applyZoneRect(d.handle.el, d.handle.zone.rect, canvasW, canvasH);
+
+        prevNew  = newY + newH;
+        prevOrig = d.origY + d.designH;
+      }
     }
   }
 

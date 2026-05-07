@@ -408,6 +408,17 @@
         })
       });
       const data = await res.json();
+      // Diagnostic — picked up by the render service's page-signal
+      // listener so a 0-size stage can be traced back to the actual
+      // API response shape without redeploying.
+      console.log('[templatePreview] /api/layout-input response: status=' + res.status +
+        ' ok=' + res.ok +
+        ' hasInput=' + !!data.input +
+        ' hasCanvas=' + !!data.canvas +
+        ' canvasInner=' + JSON.stringify(data.canvas?.canvas || null) +
+        ' inputPlacement=' + !!data.input?.placement +
+        ' template=' + TP_STATE.template +
+        ' ratio=' + TP_STATE.aspectRatio);
       if (!res.ok && !data.input) {
         stage.innerHTML = '';
         status.innerHTML = `<p class="tp-bad">Request failed:</p><p>${escapeHtml(data.error || 'unknown')}</p>`;

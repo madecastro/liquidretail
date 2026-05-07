@@ -9,11 +9,21 @@
 import { useState } from 'react';
 import { Box, VStack, HStack, Text, Button, Divider, Badge, useToast } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
+import { apiJson } from '../../auth/apiFetch';
 import type { WizardSelections } from './index';
 import { StepShell } from './index';
 
 type Props = {
   value: WizardSelections;
+};
+
+type GenerateResponse = {
+  campaignRunId: string;
+  total: number;
+  succeeded: number;
+  skipped: number;
+  failed: number;
+  results: unknown[];
 };
 
 export function Step4Generate({ value }: Props) {
@@ -27,18 +37,29 @@ export function Step4Generate({ value }: Props) {
   const generate = async () => {
     setBusy(true);
     try {
-      // TODO(render service): POST /api/ads/generate { campaignId, productIds,
-      // templateIds, cta: { text, url }, urlParams }. Until Phase 1 lands the
-      // wizard intentionally toasts and bounces to /ads where the empty state
-      // explains where the artifacts will appear.
-      await new Promise(r => setTimeout(r, 600));
-      toast({
-        title: 'Render service not yet wired',
-        description: `Would generate ${totalCreatives} creative${totalCreatives === 1 ? '' : 's'} once Phase 1 ships.`,
-        status: 'info',
-        duration: 5000
+      const res = await apiJson<GenerateResponse>('/api/ads/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          campaignId:  value.campaignId,
+          productIds:  value.productIds,
+          mediaIds:    [],          // wizard doesn't surface a media picker yet — library deep-link will populate this
+          templateIds: value.templateIds,
+          cta:         { text: value.ctaText, url: value.ctaUrl },
+          urlParams:   value.urlParams
+        })
       });
-      navigate('/ads');
+      const detail = `${res.succeeded} succeeded · ${res.skipped} skipped · ${res.failed} failed`;
+      toast({
+        title:       res.succeeded ? 'Ads generated' : 'No ads generated',
+        description: `${res.total} creatives total — ${detail}`,
+        status:      res.failed > 0 && res.succeeded === 0 ? 'error' : (res.succeeded ? 'success' : 'warning'),
+        duration:    6000
+      });
+      navigate(`/ads?campaignRunId=${encodeURIComponent(res.campaignRunId)}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'unknown error';
+      toast({ title: 'Generate failed', description: msg, status: 'error', duration: 8000 });
     } finally {
       setBusy(false);
     }

@@ -47,7 +47,13 @@ export function Step4Generate({ value }: Props) {
           mediaIds:    value.mediaIds,
           templateIds: value.templateIds,
           cta:         { text: value.ctaText, url: value.ctaUrl },
-          urlParams:   value.urlParams
+          urlParams:   value.urlParams,
+          // Smoke-test default — bypasses the (campaignId, derivationDigest)
+          // de-dupe so a re-fire produces fresh renders instead of returning
+          // any blank Ads cached during earlier broken deploys. Once the
+          // pipeline stabilizes this drops to a wizard checkbox so dedupe
+          // is the default again (saves Cloudinary bytes on identical inputs).
+          refresh:     true
         })
       });
       toast({

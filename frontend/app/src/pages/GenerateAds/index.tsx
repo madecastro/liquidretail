@@ -27,6 +27,12 @@ export type WizardStepKey = 'campaign' | 'products' | 'settings' | 'generate';
 export type WizardSelections = {
   campaignId:  string | null;
   productIds:  string[];
+  // Pre-populated when the wizard is deep-linked from the media
+  // library's "Generate Ads" button. Each id rides through to the
+  // POST /api/ads/generate payload as mediaIds[]; the campaign service
+  // dispatches by ProductMatchArtifact.outcome to determine product
+  // featuring.
+  mediaIds:    string[];
   templateIds: string[];
   ctaText:     string;
   ctaUrl:      string;
@@ -47,25 +53,36 @@ function stepIndex(k: WizardStepKey): number {
 export function GenerateAdsWizard() {
   const [params, setParams] = useSearchParams();
   const initialCampaignId = params.get('campaignId');
+  // ?mediaIds=X,Y,Z — comma-separated list deep-linked from the media
+  // library's "Generate Ads" button. ?productIds=A,B can also pre-pop
+  // from a future product-catalog deep-link.
+  const initialMediaIds = (params.get('mediaIds') || '')
+    .split(',').map(s => s.trim()).filter(Boolean);
+  const initialProductIds = (params.get('productIds') || '')
+    .split(',').map(s => s.trim()).filter(Boolean);
 
   const stepFromUrl = (params.get('step') as WizardStepKey) || 'campaign';
   const step: WizardStepKey = STEPS.some(s => s.key === stepFromUrl) ? stepFromUrl : 'campaign';
 
   const [selections, setSelections] = useState<WizardSelections>({
     campaignId:  initialCampaignId,
-    productIds:  [],
+    productIds:  initialProductIds,
+    mediaIds:    initialMediaIds,
     templateIds: [],
     ctaText:     '',
     ctaUrl:      '',
     urlParams:   ''
   });
 
-  // Keep ?campaignId=… clean once we've absorbed it into state — saves
-  // a stale param leaking into the next step's URL.
+  // Keep ?campaignId / ?mediaIds / ?productIds clean once we've
+  // absorbed them into state — saves stale params leaking into the
+  // next step's URL on back/forward.
   useEffect(() => {
-    if (initialCampaignId) {
+    if (initialCampaignId || initialMediaIds.length || initialProductIds.length) {
       const next = new URLSearchParams(params);
       next.delete('campaignId');
+      next.delete('mediaIds');
+      next.delete('productIds');
       next.set('step', step);
       setParams(next, { replace: true });
     }

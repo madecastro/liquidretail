@@ -43,7 +43,7 @@ export function Step4Generate({ value }: Props) {
         body: JSON.stringify({
           campaignId:  value.campaignId,
           productIds:  value.productIds,
-          mediaIds:    [],          // wizard doesn't surface a media picker yet — library deep-link will populate this
+          mediaIds:    value.mediaIds,
           templateIds: value.templateIds,
           cta:         { text: value.ctaText, url: value.ctaUrl },
           urlParams:   value.urlParams

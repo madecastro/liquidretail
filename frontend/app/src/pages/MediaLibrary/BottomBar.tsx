@@ -60,9 +60,9 @@ export function BottomBar({ selected, onDelete, collections, onCollectionsChange
       <Button
         variant="brand"
         size="sm"
-        onClick={() => navigate(`/ads?mediaId=${selected.mediaId}`)}
+        onClick={() => navigate(`/generate-ads?mediaIds=${encodeURIComponent(selected.mediaId)}`)}
       >
-        Continue to Ad Generation →
+        Generate Ads →
       </Button>
     </HStack>
   );

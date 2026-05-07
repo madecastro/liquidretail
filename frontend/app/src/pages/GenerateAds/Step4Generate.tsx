@@ -1,10 +1,11 @@
 // Step 4 — Review & Generate.
 //
 // Summarizes the selections from steps 1–3 so the operator can sanity-
-// check before kicking off the render. The Generate button is wired to
-// a stubbed POST /api/ads/generate today (no-ops with a friendly toast)
-// — once the Phase 1 render service ships, this fires N renders
-// (templates × products) and routes to /ads to watch them stream in.
+// check before kicking off the render. POST /api/ads/generate is
+// async — the server creates a CampaignRun, returns 202 immediately,
+// and renders in the background. We route to /ads?campaignRunId=X
+// where the page polls /api/ads/runs/:id to show progress as
+// creatives stream in.
 
 import { useState } from 'react';
 import { Box, VStack, HStack, Text, Button, Divider, Badge, useToast } from '@chakra-ui/react';
@@ -19,11 +20,11 @@ type Props = {
 
 type GenerateResponse = {
   campaignRunId: string;
-  total: number;
-  succeeded: number;
-  skipped: number;
-  failed: number;
-  results: unknown[];
+  campaignId:    string;
+  brandId:       string;
+  campaignKind:  string | null;
+  total:         number;
+  status:        'running' | 'done' | 'failed';
 };
 
 export function Step4Generate({ value }: Props) {
@@ -49,12 +50,11 @@ export function Step4Generate({ value }: Props) {
           urlParams:   value.urlParams
         })
       });
-      const detail = `${res.succeeded} succeeded · ${res.skipped} skipped · ${res.failed} failed`;
       toast({
-        title:       res.succeeded ? 'Ads generated' : 'No ads generated',
-        description: `${res.total} creatives total — ${detail}`,
-        status:      res.failed > 0 && res.succeeded === 0 ? 'error' : (res.succeeded ? 'success' : 'warning'),
-        duration:    6000
+        title:       'Generating ads',
+        description: `${res.total} creative${res.total === 1 ? '' : 's'} queued — watching progress on the Ads page.`,
+        status:      'info',
+        duration:    4000
       });
       navigate(`/ads?campaignRunId=${encodeURIComponent(res.campaignRunId)}`);
     } catch (err) {

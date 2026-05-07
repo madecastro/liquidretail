@@ -9,12 +9,12 @@
 // scopes to a single Generate Ads click (one batch). Status filter
 // defaults to "draft" since freshly-rendered ads land in draft.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams, Link as RouterLink } from 'react-router-dom';
 import {
   Card, CardBody, VStack, HStack, Text, Heading, Button, SimpleGrid,
   Badge, Image, Box, Spinner, useDisclosure, Modal, ModalOverlay, ModalContent,
-  ModalHeader, ModalBody, ModalCloseButton, Select
+  ModalHeader, ModalBody, ModalCloseButton, Select, Progress
 } from '@chakra-ui/react';
 import { PageHeader } from '../../shell/PageHeader';
 import { apiJson } from '../../auth/apiFetch';
@@ -52,6 +52,23 @@ type AdRow = {
 
 type AdsResponse = { ads: AdRow[]; total: number; limit: number; offset: number };
 
+type RunStatus = {
+  runId:       string;
+  brandId:     string;
+  campaignId:  string;
+  total:       number;
+  succeeded:   number;
+  skipped:     number;
+  failed:      number;
+  status:      'running' | 'done' | 'failed';
+  errors:      Array<{ index: number; stage: string; template: string; aspectRatio: string; message: string }>;
+  startedAt:   string;
+  completedAt: string | null;
+};
+
+const POLL_INTERVAL_MS = 2500;
+const POLL_TIMEOUT_MS  = 10 * 60 * 1000;   // 10 minutes — generous for full Puppeteer batch
+
 export function AdsPage() {
   const { activeBrand } = useBrand();
   const activeBrandId = activeBrand?.id || null;
@@ -65,34 +82,89 @@ export function AdsPage() {
   const [loading, setLoading] = useState(false);
   const [err, setErr]       = useState<string | null>(null);
   const [selected, setSelected] = useState<AdRow | null>(null);
+  const [run, setRun]       = useState<RunStatus | null>(null);
+  const [pollTimedOut, setPollTimedOut] = useState(false);
   const detailModal = useDisclosure();
 
+  // Reset run state when the campaignRunId param changes (e.g. user
+  // bookmarks a different run, or navigates back to /ads with no run).
   useEffect(() => {
-    if (!activeBrandId) return;
-    let cancelled = false;
-    (async () => {
-      setLoading(true); setErr(null);
+    setRun(null);
+    setPollTimedOut(false);
+  }, [campaignRunId]);
+
+  // Ad list fetcher. Memoized into a stable callback via ref so the
+  // poller can re-trigger it without re-running this effect.
+  const fetchRef = useRef<() => Promise<void>>();
+  useEffect(() => {
+    fetchRef.current = async () => {
+      if (!activeBrandId) return;
+      const qp = new URLSearchParams({ brandId: activeBrandId, limit: '120' });
+      if (status)          qp.set('status', status);
+      if (campaignId)      qp.set('campaignId', campaignId);
       try {
-        const qp = new URLSearchParams({ brandId: activeBrandId, limit: '120' });
-        if (status)          qp.set('status', status);
-        if (campaignId)      qp.set('campaignId', campaignId);
         const res = await apiJson<AdsResponse>(`/api/ads?${qp.toString()}`);
-        if (cancelled) return;
-        // Client-side narrow to a specific batch when the wizard
-        // forwarded a campaignRunId.
         const filtered = campaignRunId
           ? res.ads.filter(a => a.campaignRunId === campaignRunId)
           : res.ads;
         setRows(filtered);
         setTotal(filtered.length);
       } catch (e) {
-        if (!cancelled) setErr(e instanceof Error ? e.message : String(e));
-      } finally {
-        if (!cancelled) setLoading(false);
+        setErr(e instanceof Error ? e.message : String(e));
       }
+    };
+  }, [activeBrandId, status, campaignId, campaignRunId]);
+
+  // Initial / param-change ad list load.
+  useEffect(() => {
+    if (!activeBrandId) return;
+    let cancelled = false;
+    (async () => {
+      setLoading(true); setErr(null);
+      await fetchRef.current?.();
+      if (!cancelled) setLoading(false);
     })();
     return () => { cancelled = true; };
   }, [activeBrandId, status, campaignId, campaignRunId]);
+
+  // Run-status poller — fires only when the URL has a campaignRunId.
+  // Polls /api/ads/runs/:id, refetches the ad list each tick, and
+  // stops when status flips to done|failed (or the timeout trips).
+  useEffect(() => {
+    if (!activeBrandId || !campaignRunId) return;
+    let cancelled = false;
+    const startedAt = Date.now();
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const tick = async () => {
+      if (cancelled) return;
+      try {
+        const next = await apiJson<RunStatus>(
+          `/api/ads/runs/${encodeURIComponent(campaignRunId)}?brandId=${encodeURIComponent(activeBrandId)}`
+        );
+        if (cancelled) return;
+        setRun(next);
+        await fetchRef.current?.();
+        if (next.status === 'running') {
+          if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
+            setPollTimedOut(true);
+            return;
+          }
+          timer = setTimeout(tick, POLL_INTERVAL_MS);
+        }
+      } catch (e) {
+        // Run lookup failed — surface the error but keep any ads we've
+        // already loaded. Stop polling.
+        if (!cancelled) setErr(e instanceof Error ? e.message : String(e));
+      }
+    };
+
+    tick();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [activeBrandId, campaignRunId]);
 
   const headline = useMemo(() => {
     if (campaignRunId) return `Latest batch — ${total} creative${total === 1 ? '' : 's'}`;
@@ -129,6 +201,8 @@ export function AdsPage() {
           </Button>
         </HStack>
       </HStack>
+
+      {run && <RunProgress run={run} timedOut={pollTimedOut} />}
 
       {loading && (
         <Box textAlign="center" py={6}>
@@ -273,5 +347,93 @@ function DetailRow({ label, value }: { label: string; value: string }) {
         {value || '—'}
       </Text>
     </Box>
+  );
+}
+
+function RunProgress({ run, timedOut }: { run: RunStatus; timedOut: boolean }) {
+  const finished = run.succeeded + run.skipped + run.failed;
+  const pct = run.total > 0 ? Math.round((finished / run.total) * 100) : 0;
+
+  if (timedOut) {
+    return (
+      <Card variant="outline" borderColor="orange.300" bg="orange.50">
+        <CardBody>
+          <VStack align="stretch" spacing={2}>
+            <HStack justify="space-between">
+              <Text fontWeight="700" color="brand.ink">Render is taking longer than expected</Text>
+              <Badge colorScheme="orange">Timed out</Badge>
+            </HStack>
+            <Text fontSize="sm" color="brand.muted">
+              {finished} of {run.total} creatives completed. The renderer may still be working —
+              refresh in a moment to see the rest, or check the server logs.
+            </Text>
+          </VStack>
+        </CardBody>
+      </Card>
+    );
+  }
+
+  if (run.status === 'done') {
+    if (run.failed === 0) return null;   // Quiet on full success — the gallery itself is the signal.
+    return (
+      <Card variant="outline" borderColor="red.300" bg="red.50">
+        <CardBody>
+          <VStack align="stretch" spacing={2}>
+            <HStack justify="space-between">
+              <Text fontWeight="700" color="brand.ink">
+                {run.succeeded} succeeded · {run.skipped} skipped · {run.failed} failed
+              </Text>
+              <Badge colorScheme="red">{run.failed} error{run.failed === 1 ? '' : 's'}</Badge>
+            </HStack>
+            {run.errors.slice(0, 5).map((e, i) => (
+              <Text key={i} fontSize="11px" color="brand.muted" fontFamily="mono" noOfLines={1}>
+                #{e.index} {e.template}/{e.aspectRatio} ({e.stage}): {e.message}
+              </Text>
+            ))}
+            {run.errors.length > 5 && (
+              <Text fontSize="11px" color="brand.muted">
+                + {run.errors.length - 5} more — check server logs for the full list.
+              </Text>
+            )}
+          </VStack>
+        </CardBody>
+      </Card>
+    );
+  }
+
+  if (run.status === 'failed') {
+    return (
+      <Card variant="outline" borderColor="red.400" bg="red.50">
+        <CardBody>
+          <Text fontWeight="700" color="red.700">Run crashed before completing</Text>
+          <Text fontSize="sm" color="brand.muted">Check the server logs for the underlying error.</Text>
+        </CardBody>
+      </Card>
+    );
+  }
+
+  // Running — show live progress.
+  return (
+    <Card variant="outline" borderColor="purple.300" bg="purple.50">
+      <CardBody>
+        <VStack align="stretch" spacing={2}>
+          <HStack justify="space-between">
+            <HStack spacing={2}>
+              <Spinner size="sm" color="purple.500" />
+              <Text fontWeight="700" color="brand.ink">
+                Rendering — {finished} of {run.total} complete
+              </Text>
+            </HStack>
+            <Badge colorScheme="purple">{pct}%</Badge>
+          </HStack>
+          <Progress value={pct} size="sm" colorScheme="purple" borderRadius="md" />
+          {(run.skipped > 0 || run.failed > 0) && (
+            <Text fontSize="11px" color="brand.muted">
+              {run.succeeded} succeeded · {run.skipped} skipped · {run.failed} failed
+            </Text>
+          )}
+        </VStack>
+      </CardBody>
+    </Card>
   );
 }

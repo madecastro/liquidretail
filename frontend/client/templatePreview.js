@@ -1046,6 +1046,27 @@
     return url;
   }
 
+  // Format a product price into a display string, accepting:
+  //   number              → "$N.NN"
+  //   string              → as-is
+  //   { display }         → display
+  //   { value, currency } → currency + value
+  // Returns '' for null / undefined / unparseable.
+  function formatProductPrice(price) {
+    if (price == null) return '';
+    if (typeof price === 'string') return price.trim();
+    if (typeof price === 'number') {
+      if (!Number.isFinite(price)) return '';
+      return '$' + price.toFixed(2);
+    }
+    if (typeof price === 'object') {
+      if (typeof price.display === 'string' && price.display.trim()) return price.display.trim();
+      const cur = typeof price.currency === 'string' ? price.currency : '$';
+      if (price.value != null) return cur + String(price.value);
+    }
+    return '';
+  }
+
   function isHex(s) { return typeof s === 'string' && /^#[0-9a-f]{6}$/i.test(s); }
 
   // Darken a hex color by `amount` (0..1). Returns the original if malformed.
@@ -1786,14 +1807,13 @@
   }
 
   // product_meta reflow — same pattern as quote_card. Used by
-  // ugc_split_screen where product_meta occupies the slot that
-  // testimonial_spotlight gives to quote_card. Anchor predicate
-  // matches the body_description style_variant so we don't pick
-  // up product_meta zones in templates that use it differently.
+  // ugc_split_screen where product_meta (a product_card with image
+  // + name + price) occupies the slot that testimonial_spotlight
+  // gives to quote_card. Anchor predicate matches by id so it
+  // catches whatever style_variant is in play.
   function reflowColumnUnderProductMeta(zoneEls, canvasW, canvasH) {
     return reflowColumnUnderAnchor(zoneEls, canvasW, canvasH,
-      ({ zone }) =>
-        zone.id === 'product_meta' && zone.style_variant === 'body_description',
+      ({ zone }) => zone.id === 'product_meta',
       { shiftOnly: true, growToCollision: true });
   }
 
@@ -2169,6 +2189,31 @@
         const txt = paths.map(p => tpGet(input, p)).find(v => typeof v === 'string' && v.trim());
         if (!txt) return `<div class="tp-placeholder">${escapeHtml(paths.join(' / ') || zone.kind)}</div>`;
         return `<span class="tp-rule-line"></span><span class="tp-eyebrow-text">${escapeHtml(txt)}</span><span class="tp-rule-line"></span>`;
+      }
+      case 'product_card': {
+        // Catalog product card — image (left) + name + price (stacked
+        // right). Slot is a 3-tuple: [imagePath, namePath, pricePath].
+        // Used by ugc_split_screen in the slot that mirrors
+        // testimonial_spotlight's quote_card position.
+        if (zone.style_variant === 'with_thumbnail') {
+          const paths    = Array.isArray(zone.slot) ? zone.slot : [];
+          const imageUrl = tpGet(input, paths[0]);
+          const name     = tpGet(input, paths[1]);
+          const priceRaw = tpGet(input, paths[2]);
+          const priceStr = formatProductPrice(priceRaw);
+          const maxLines = zone.max_lines || 2;
+          const imgHtml = imageUrl
+            ? `<img class="tp-product-card-thumb" src="${escapeHtml(imageUrl)}" alt="${escapeHtml(name || '')}" />`
+            : `<div class="tp-product-card-thumb tp-product-card-thumb-placeholder">${escapeHtml((name || '?').slice(0, 1).toUpperCase())}</div>`;
+          const nameHtml = `<div class="tp-product-card-name" style="display:-webkit-box;-webkit-line-clamp:${maxLines};-webkit-box-orient:vertical;overflow:hidden;">${escapeHtml(name || '')}</div>`;
+          const priceHtml = priceStr
+            ? `<div class="tp-product-card-price">${escapeHtml(priceStr)}</div>`
+            : '';
+          return imgHtml +
+            `<div class="tp-product-card-meta">${nameHtml}${priceHtml}</div>`;
+        }
+        // Fallback for unknown variants — render placeholder.
+        return `<div class="tp-placeholder">product_card (no variant)</div>`;
       }
       case 'media': {
         const media = tpGet(input, zone.slot);

@@ -539,11 +539,10 @@
       text-shadow: 0 1px 3px rgba(0,0,0,0.55);
       display: flex; align-items: center;
     }
-    /* Body description variant — used by ugc_split_screen for the
-       product/brand description text in the slot that mirrors
-       testimonial_spotlight's quote_card. Base 0.35em matches
-       quote_card so the same zone_scalers.product_meta = { font:
-       1.6 } resolves to the same rendered px on each ratio. */
+    /* Body description variant — kept for compatibility with any
+       remaining body_description text zones. Base 0.35em matches
+       quote_card so a { font: 1.6 } zone scaler resolves to the
+       same rendered px. */
     .tp-zone.kind-text.style-body_description {
       font-weight: 500;
       font-size: calc(0.35em * var(--tp-zone-scale, 1));
@@ -551,6 +550,55 @@
       letter-spacing: 0;
       padding: 0;
       text-shadow: none;
+    }
+
+    /* Product card variant — image (left, square) + name + price
+       (stacked right). Used by ugc_split_screen in the slot that
+       mirrors testimonial_spotlight's quote_card position. Base
+       0.35em matches quote_card / body_description so the same
+       zone_scaler { font: 1.6 } produces 0.56em rendered. */
+    .tp-zone.kind-product_card.style-with_thumbnail {
+      background: var(--tp-style-card-bg, #1A1A1A);
+      color: var(--brand-text-on-primary, #ffffff);
+      font-family: var(--tp-style-font-family-body, Inter, system-ui, sans-serif);
+      border-left: 3px solid var(--tp-style-accent-border-color, var(--brand-accent, #FF6B35));
+      border-radius: 6px;
+      padding: max(0.9em, 10px) max(1em, 12px);
+      display: grid;
+      grid-template-columns: auto 1fr;
+      align-items: center;
+      column-gap: 0.8em;
+      font-size: calc(0.35em * var(--tp-zone-scale, 1));
+      line-height: 1.25;
+    }
+    .tp-zone.kind-product_card.style-with_thumbnail .tp-product-card-thumb {
+      width: 4em; height: 4em;
+      object-fit: cover;
+      border-radius: 4px;
+      align-self: center;
+      background: rgba(255,255,255,0.06);
+    }
+    .tp-zone.kind-product_card.style-with_thumbnail .tp-product-card-thumb-placeholder {
+      display: inline-flex; align-items: center; justify-content: center;
+      color: var(--brand-text-on-primary, #ffffff);
+      font-weight: 700; font-size: 1.4em;
+    }
+    .tp-zone.kind-product_card.style-with_thumbnail .tp-product-card-meta {
+      display: flex; flex-direction: column;
+      gap: 0.2em;
+      min-width: 0; /* allow line-clamp on .tp-product-card-name to work in grid */
+    }
+    .tp-zone.kind-product_card.style-with_thumbnail .tp-product-card-name {
+      font-size: 1em;
+      font-weight: 700;
+      color: #FFFFFF;
+      letter-spacing: 0.01em;
+    }
+    .tp-zone.kind-product_card.style-with_thumbnail .tp-product-card-price {
+      font-size: 0.95em;
+      font-weight: 700;
+      color: var(--tp-style-accent-border-color, var(--brand-accent, #FF6B35));
+      letter-spacing: 0.02em;
     }
 
     /* Quote cards bind to brand.secondary_color (per

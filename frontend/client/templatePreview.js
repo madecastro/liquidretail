@@ -1843,7 +1843,7 @@
       const shrink = orig.h - finalH;
       if (shrink < 1) return;
       for (const d of deps) {
-        d.handle.zone.rect.y -= shrink;
+        d.handle.zone.rect.y = capCtaY(d, d.handle.zone.rect.y - shrink);
         applyZoneRect(d.handle.el, d.handle.zone.rect, canvasW, canvasH);
       }
       return;
@@ -1879,7 +1879,7 @@
       const gap  = d.origY - prevBottomOrig;
       const grow = slackShare(d.designH);
       const newH = d.scaledH + grow;
-      const newY = prevBottomNew + gap;
+      const newY = capCtaY(d, prevBottomNew + gap);
 
       d.handle.zone.rect.y = newY;
       d.handle.zone.rect.h = newH;
@@ -1900,7 +1900,7 @@
         const gap  = d.origY - prevOrig;
         const grow = slackShare(d.designH);
         const newH = d.scaledH + grow;
-        const newY = prevNew + gap;
+        const newY = capCtaY(d, prevNew + gap);
 
         d.handle.zone.rect.y = newY;
         d.handle.zone.rect.h = newH;
@@ -1910,6 +1910,22 @@
         prevOrig = d.origY + d.designH;
       }
     }
+  }
+
+  // CTA y-cap. cta is a bottom-anchored design element — when the
+  // cascade would push it PAST its design y (column-overflow case,
+  // e.g. 4:5 with a 2x headline scaler that depDelta can't fully
+  // absorb), pin it to design y so it stays visible above the
+  // canvas bottom. When the cascade puts it ABOVE design (under-fill
+  // case, e.g. 1:1 with a short headline), the cascade wins so the
+  // column compacts upward instead of leaving a dead band above the
+  // pinned cta. dep argument is the snapshot {handle, ...} from the
+  // reflow's deps list.
+  function capCtaY(dep, computedY) {
+    if (dep.handle.zone.kind !== 'cta') return computedY;
+    const designY = dep.handle.zone._design_y;
+    if (typeof designY !== 'number') return computedY;
+    return Math.min(computedY, designY);
   }
 
   // Re-apply a zone rect to its DOM element using the same percent-of-

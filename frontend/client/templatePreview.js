@@ -1882,7 +1882,7 @@
     const effMinHFraction = (typeof aZone.min_h_fraction === 'number')
       ? aZone.min_h_fraction
       : minHFraction;
-    const minH = orig.h * effMinHFraction;
+    let minH = orig.h * effMinHFraction;
 
     // Upper bound for the final slot height. Default cap is the
     // anchor's current rect.h (so the slot never grows past the
@@ -1896,6 +1896,14 @@
     const upperH = growToCollision
       ? computeCollisionBound(aZone, zoneEls, canvasH)
       : orig.h;
+
+    // Clamp the floor at the ceiling. When growToCollision yields a
+    // tight upperH (e.g. 4:5 quote_card pushed down by headline
+    // reflow leaves only ~190px above canvas-bottom-margin), a
+    // higher min_h_fraction would otherwise force the slot past
+    // the collision boundary and overflow canvas. The floor never
+    // exceeds the ceiling — preserves the collision guarantee.
+    if (minH > upperH) minH = upperH;
 
     const requiredH  = Math.max(minH, upperH - depDelta);
     const naturalFit = Math.max(minH, Math.min(upperH, naturalPx));

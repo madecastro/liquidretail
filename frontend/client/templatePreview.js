@@ -1758,17 +1758,48 @@
       zone.id === 'headline' && zone.style_variant === 'display_script');
   }
 
-  // Shrink the quote_card to its natural rendered height (after the
-  // font scaler has been applied) and shift slots beneath it up by
-  // the freed vertical. shiftOnly mode means: NO slack redistribution,
-  // NO size growth — just translate. The headline reflow already
-  // distributed slack proportionally across deps; running another
-  // slack-distribute pass on top would double-count, inflating
-  // badge_row and cta. Plain shift gives a clean compaction.
+  // Quote_card reflow strategy:
+  //   - growToCollision: instead of capping the slot at its design
+  //     rect.h, allow the slot to grow DOWNWARD up to the next zone
+  //     in the same column (with a small gap), or up to the canvas
+  //     bottom (with a margin) if no zone is below. Long quotes get
+  //     more vertical room before fitAndClampZone has to shrink the
+  //     font; short quotes still snap to natural.
+  //   - shiftOnly: when the anchor shrinks, translate deps below it
+  //     up by the shrink amount — no slack redistribution. Headline
+  //     reflow already distributed slack across deps; doing it again
+  //     here would double-count and inflate badge_row + cta sizes.
   function reflowColumnUnderQuoteCard(zoneEls, canvasW, canvasH) {
     return reflowColumnUnderAnchor(zoneEls, canvasW, canvasH,
       ({ zone }) => zone.kind === 'quote_card',
-      { shiftOnly: true });
+      { shiftOnly: true, growToCollision: true });
+  }
+
+  // Compute the maximum height an anchor can grow to before colliding
+  // with the next zone below it in the same column. Falls back to
+  // canvas-bottom-minus-margin when no zone is below in the column.
+  // Used by growToCollision mode so quote_card can use available
+  // space for long text instead of being capped at design rect.h.
+  function computeCollisionBound(aZone, zoneEls, canvasH) {
+    const GAP = 16;
+    const BOTTOM_MARGIN = 40;
+    const aColumn = aZone.column || null;
+    const aTop    = aZone.rect.y;
+    let nearestBelowTop = Infinity;
+    for (const { zone } of zoneEls) {
+      if (zone === aZone) continue;
+      // Only zones in the same column constrain the anchor. For
+      // single-column variants (column=null), all other column-null
+      // zones count.
+      if ((zone.column || null) !== aColumn) continue;
+      const zY = zone.rect.y;
+      if (zY <= aTop) continue;        // skip zones above/at anchor
+      if (zY < nearestBelowTop) nearestBelowTop = zY;
+    }
+    if (nearestBelowTop === Infinity) {
+      return Math.max(0, canvasH - aTop - BOTTOM_MARGIN);
+    }
+    return Math.max(0, nearestBelowTop - aTop - GAP);
   }
 
   // Generic column-reflow under an anchor zone. The anchor's natural
@@ -1779,7 +1810,7 @@
   // of the redistribution. options.minHFraction is the floor as a
   // fraction of design height (default 0.5).
   function reflowColumnUnderAnchor(zoneEls, canvasW, canvasH, anchorPredicate, options = {}) {
-    const { excludeKinds = [], minHFraction = 0.5, shiftOnly = false } = options;
+    const { excludeKinds = [], minHFraction = 0.5, shiftOnly = false, growToCollision = false } = options;
 
     const anchor = zoneEls.find(anchorPredicate);
     if (!anchor) return;
@@ -1844,10 +1875,26 @@
     const naturalPx = aEl.getBoundingClientRect().height;
     aEl.style.height = savedH;
 
-    const minH       = orig.h * minHFraction;
-    const requiredH  = Math.max(minH, orig.h - depDelta);
-    const naturalFit = Math.max(minH, Math.min(orig.h, naturalPx));
-    const finalH     = Math.min(requiredH, naturalFit);
+    const minH = orig.h * minHFraction;
+
+    // Upper bound for the final slot height. Default cap is the
+    // anchor's current rect.h (so the slot never grows past the
+    // canvas spec). growToCollision REPLACES that cap with "the
+    // next zone in this column" (or canvas bottom when nothing's
+    // below) — the collision boundary is a hard upper, regardless
+    // of design rect.h. This means a slot that was pushed down
+    // by an earlier reflow may end up smaller than its design
+    // size to avoid overflowing canvas, AND a slot with long
+    // content can grow past its design size when there's room.
+    const upperH = growToCollision
+      ? computeCollisionBound(aZone, zoneEls, canvasH)
+      : orig.h;
+
+    const requiredH  = Math.max(minH, upperH - depDelta);
+    const naturalFit = Math.max(minH, Math.min(upperH, naturalPx));
+    const finalH     = growToCollision
+      ? naturalFit
+      : Math.min(requiredH, naturalFit);
 
     const totalShrink  = orig.h - finalH;
     const slackForDeps = totalShrink - depDelta;

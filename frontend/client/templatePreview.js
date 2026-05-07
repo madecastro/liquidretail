@@ -1809,12 +1809,16 @@
       })
       .sort((a, b) => (a.zone._design_y ?? a.zone.rect.y) - (b.zone._design_y ?? b.zone.rect.y));
 
-    if (!dependents.length) return;
-
     // Snapshot deps with both their design (pre-scale) and current
     // (post-scale) heights. designH drives the proportional slack
     // distribution; scaledH is the floor a dep can never go below
     // (the canvas spec said "this slot is 2× the design").
+    // Even if the dep list is empty, we still measure the anchor's
+    // natural and shrink the slot to match — slot-fit-to-content is
+    // the primary purpose of the reflow; subordinate cascading is
+    // secondary. This matters for two-column layouts (4:5 / 9:16
+    // testimonial_spotlight) where deps below the quote_card sit in
+    // the OTHER column and get filtered out by x-overlap.
     const deps = dependents.map(d => ({
       handle:  d,
       designH: d.zone._design_h ?? d.zone.rect.h,

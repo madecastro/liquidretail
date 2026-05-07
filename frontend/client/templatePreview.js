@@ -943,6 +943,18 @@
       reflowColumnUnderHeadline(zoneEls, w, h);
       reflowColumnUnderQuoteCard(zoneEls, w, h);
 
+      // Adaptive badge_row pass — let badges flow at their natural
+      // single-line widths via flex-wrap, then hide any badge that
+      // would land in row 3+. Each visible badge always shows its
+      // FULL label (no per-badge truncation). Runs before
+      // fitAndClampZone so the badge_row's own auto-fit (if any)
+      // measures against the post-fit row count.
+      for (const { zone, el } of zoneEls) {
+        if (zone.kind === 'badge_row' && zone.style_variant === 'callouts') {
+          fitBadgeRow(el, 2);
+        }
+      }
+
       for (const { zone, el } of zoneEls) {
         if (zone.kind === 'text' || zone.kind === 'quote_card') {
           // Display-script headlines need a lower minScale floor so a
@@ -2021,6 +2033,43 @@
     el.style.top    = `${(rect.y / canvasH * 100).toFixed(2)}%`;
     el.style.width  = `${(rect.w / canvasW * 100).toFixed(2)}%`;
     el.style.height = `${(rect.h / canvasH * 100).toFixed(2)}%`;
+  }
+
+  // Adaptive badge_row layout — with flex-wrap: wrap on the parent and
+  // white-space: nowrap on each .tp-callout, badges flow at their
+  // natural width and wrap onto multiple rows automatically. This
+  // function reads each badge's offsetTop, groups by row, and hides
+  // any badge that would land in row (maxRows + 1) or beyond. End
+  // result: every visible badge shows its FULL label, count adapts to
+  // the slot's available width.
+  //
+  // ROW_TOLERANCE absorbs sub-pixel offsetTop differences from gap +
+  // border-box rounding — without it a 0.5px diff registers as a
+  // separate row and the cutoff math breaks.
+  function fitBadgeRow(zoneEl, maxRows = 2) {
+    if (!zoneEl) return;
+    const badges = Array.from(zoneEl.querySelectorAll('.tp-callout'));
+    if (!badges.length) return;
+    // Reset visibility so re-renders measure against a clean state.
+    badges.forEach(b => { b.style.display = ''; });
+    // Force layout to settle before reading offsetTop.
+    void zoneEl.offsetHeight;
+    const ROW_TOLERANCE = 2;
+    const rowTops = [];
+    for (const b of badges) {
+      const t = b.offsetTop;
+      if (!rowTops.some(rt => Math.abs(rt - t) <= ROW_TOLERANCE)) {
+        rowTops.push(t);
+      }
+    }
+    rowTops.sort((a, b) => a - b);
+    const cutoff = rowTops[maxRows];
+    if (cutoff == null) return; // fewer than maxRows + 1 rows — nothing to hide
+    for (const b of badges) {
+      if (b.offsetTop >= cutoff - ROW_TOLERANCE) {
+        b.style.display = 'none';
+      }
+    }
   }
 
   // Split a display_script headline into a smaller "lead" phrase + a

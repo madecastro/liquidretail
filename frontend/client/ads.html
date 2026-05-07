@@ -861,13 +861,21 @@
       font-family: var(--tp-style-font-family-body, Inter, system-ui, sans-serif);
       border-left: 3px solid var(--tp-style-accent-border-color, var(--brand-accent, #FF6B35));
       border-radius: 6px;
-      padding: 0.6em 0.8em 0.6em calc(0.8em + 3px);
+      /* Padding floored at absolute pixels so when fitAndClampZone
+         shrinks the zone font-size, padding doesn't collapse with
+         it — keeps the quote-text and author-row off the slot's
+         border-left accent strip + outer edges. */
+      padding: max(0.9em, 10px) max(1em, 12px);
       box-shadow: none;
       display: grid;
       grid-template-columns: auto 1fr;
       grid-template-rows: 1fr auto;
-      column-gap: 0.5em;
-      row-gap: 0.4em;
+      column-gap: 0.6em;
+      /* row-gap is the small margin between the quote-text and the
+         author-row. Bigger than the previous 0.4em so the two
+         elements stay visually distinct even when the auto-fit pass
+         scales the parent font-size down. */
+      row-gap: 0.7em;
       position: relative;
       /* font-size multiplied by --tp-zone-scale (canvas zone_scalers
          font factor). The 3.3em glyph / 0.78em author-name / 0.7em
@@ -889,6 +897,10 @@
       font-style: italic;
       font-weight: 500;
       color: #FFFFFF;
+      /* center vertically in row 1. The reflowColumnUnderQuoteCard
+         pass shrinks the slot to natural content height when the
+         quote is short, so centering doesn't usually leave visible
+         slack — when it does, it's symmetric. */
       align-self: center;
     }
     .tp-zone.kind-quote_card.style-with_author_photo .tp-quote-author-row {

@@ -1489,6 +1489,7 @@
 
   function renderOverlayHeadline(wrap, el, input) {
     const brand = input.brand || {};
+    const bindings = TP_STATE.lastStyleBindings || {};
 
     // Ad-grade hero-copy sizing. horizontal 1-line = biggest impact;
     // stacked variants shrink modestly since they already use more height.
@@ -1501,15 +1502,32 @@
     // Tone + variant → weight, transform, letter-spacing.
     const style = toneToHeadlineStyle(brand.tone, el.variant);
 
-    // Brand-color text when luminance allows; otherwise adaptive white/
-    // black and a small scrim-opacity boost to recover contrast.
-    const { color, scrimBoost } = pickHeadlineColor(brand, el.scrim);
-    if (scrimBoost > 0 && el.scrim && el.scrim.type !== 'none') {
-      const boosted = Object.assign({}, el.scrim, {
-        opacity: Math.min(0.95, (el.scrim.opacity || 0) + scrimBoost)
-      });
-      wrap.style.background = scrimToCss(boosted);
+    // headline_chip_bg style_binding (testimonial_overlay /
+    // product_overlay): apply a solid dark-gray chip backing behind
+    // the headline, override the brand-derived color with white (or
+    // the bound color), and use the brand font family. Replaces the
+    // scrim + brand-color path entirely for these templates.
+    if (bindings.headline_chip_bg) {
+      wrap.style.background = bindings.headline_chip_bg;
       wrap.style.borderRadius = '6px';
+      wrap.style.color = bindings.headline_text_color && bindings.headline_text_color !== 'auto-from-brightness'
+        ? bindings.headline_text_color
+        : '#FFFFFF';
+      if (bindings.font_family_headline) {
+        wrap.style.fontFamily = bindings.font_family_headline;
+      }
+    } else {
+      // Brand-color text when luminance allows; otherwise adaptive
+      // white/black with a scrim-opacity boost to recover contrast.
+      const { color, scrimBoost } = pickHeadlineColor(brand, el.scrim);
+      if (scrimBoost > 0 && el.scrim && el.scrim.type !== 'none') {
+        const boosted = Object.assign({}, el.scrim, {
+          opacity: Math.min(0.95, (el.scrim.opacity || 0) + scrimBoost)
+        });
+        wrap.style.background = scrimToCss(boosted);
+        wrap.style.borderRadius = '6px';
+      }
+      wrap.style.color = color;
     }
 
     wrap.style.padding = '0.25em 0.5em';
@@ -1519,7 +1537,6 @@
     wrap.style.lineHeight = '1.02';
     wrap.style.letterSpacing = style.letterSpacing;
     wrap.style.textTransform = style.transform;
-    wrap.style.color = color;
     // Bigger headlines deserve a heavier drop shadow for edge-legibility
     // when the text sits on a complex area despite the scrim.
     wrap.style.textShadow = '0 2px 6px rgba(0,0,0,0.45), 0 1px 2px rgba(0,0,0,0.35)';
@@ -1532,64 +1549,41 @@
   }
 
   function renderOverlayProductMeta(wrap, el, input) {
-    wrap.style.padding = '0.4em 0.6em';
-    wrap.style.display = 'flex'; wrap.style.flexDirection = 'column';
-    // Top-align so when fitTextToBox shrinks the font (content < container)
-    // we don't get equal empty space top + bottom from centering.
-    wrap.style.justifyContent = 'flex-start';
-    // Stacked column variant gets a smaller base — it has more lines to fill.
-    const baseEm = el.variant === 'stacked' ? 0.82 : 0.95;
-    wrap.style.fontSize = `${(baseEm * (el.fontScale || 1)).toFixed(3)}em`;
-    wrap.style.textShadow = '0 1px 3px rgba(0,0,0,0.4)';
+    // product_overlay's product_meta = compact product card: thumbnail
+    // (left, square) + name + price (stacked right). Reuses the
+    // visual language of ugc_split_screen's product_card variant
+    // but rendered in absolute-positioned overlay context with a
+    // dark chip backing for legibility against any background image.
+    const bindings = TP_STATE.lastStyleBindings || {};
+    wrap.style.background = bindings.headline_chip_bg || 'rgba(20,20,20,0.85)';
+    wrap.style.borderRadius = '8px';
+    wrap.style.padding = '0.5em 0.75em';
+    wrap.style.boxShadow = '0 2px 10px rgba(0,0,0,0.35)';
+    wrap.style.display = 'grid';
+    wrap.style.gridTemplateColumns = 'auto 1fr';
+    wrap.style.alignItems = 'center';
+    wrap.style.columnGap = '0.7em';
+    wrap.style.color = '#FFFFFF';
+    if (bindings.font_family_body) wrap.style.fontFamily = bindings.font_family_body;
+    wrap.style.fontSize = `${(0.95 * (el.fontScale || 1)).toFixed(3)}em`;
 
-    const name        = input.product?.name || '';
-    const price       = input.product?.price;
-    const rating      = input.social_proof?.rating_value;
-    const reviewCount = input.social_proof?.review_count;
+    const product = input.product || {};
+    const imageUrl = product.image
+                  || product.hero_media?.image
+                  || null;
+    const name  = product.name || '';
+    const price = formatProductPrice(product.price);
 
-    const parts = [];
-    const isStacked = el.layout === 'stack';
+    const imgHtml = imageUrl
+      ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(name)}" style="width:3.2em;height:3.2em;object-fit:cover;border-radius:4px;display:block;" loading="lazy" />`
+      : `<div style="width:3.2em;height:3.2em;border-radius:4px;background:rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center;font-weight:700;">${escapeHtml((name || '?').slice(0, 1).toUpperCase())}</div>`;
 
-    if (isStacked) {
-      // Stacked column: name (clamped to 2 lines max so price + stars
-      // always have room), price, then stars + rating + review-count
-      // CONDENSED to one line. Without the line-clamp, a long name
-      // wraps to 4-5 lines and pushes everything below out of the
-      // container with no signal to fitTextToBox to shrink.
-      if (name) parts.push(
-        `<div style="font-weight:800;line-height:1.15;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${escapeHtml(name)}</div>`
-      );
-      if (price != null) parts.push(
-        `<div style="opacity:0.88;font-weight:600;margin-top:0.15em;">${escapeHtml(String(price))}</div>`
-      );
-      if (typeof rating === 'number') {
-        parts.push(
-          `<div style="margin-top:0.3em;display:flex;align-items:center;gap:0.4em;flex-wrap:wrap;line-height:1;font-size:0.92em;">` +
-            renderYellowStars(rating) +
-            `<span style="font-weight:700;">${rating.toFixed(1)}</span>` +
-            (typeof reviewCount === 'number' ? `<span style="opacity:0.78;font-weight:400;">(${reviewCount.toLocaleString()})</span>` : '') +
-          `</div>`
-        );
-      }
-    } else {
-      // Inline: name · price on one line, stars + count on next.
-      parts.push(
-        `<div style="font-weight:800;line-height:1.15;margin-bottom:0.2em;">` +
-          escapeHtml(name) +
-          (price != null ? ` <span style="opacity:0.85;font-weight:600;">· ${escapeHtml(String(price))}</span>` : '') +
-        `</div>`
-      );
-      if (typeof rating === 'number') {
-        parts.push(
-          `<div style="font-size:0.88em;display:flex;align-items:center;gap:0.4em;flex-wrap:wrap;">` +
-            renderYellowStars(rating) +
-            `<span style="font-weight:700;">${rating.toFixed(1)}</span>` +
-            (typeof reviewCount === 'number' ? `<span style="opacity:0.78;font-weight:400;">(${reviewCount.toLocaleString()} reviews)</span>` : '') +
-          `</div>`
-        );
-      }
-    }
-    wrap.innerHTML = `<div class="tp-overlay-content" style="width:100%;">${parts.join('')}</div>`;
+    const nameHtml = `<div style="font-weight:700;line-height:1.2;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${escapeHtml(name)}</div>`;
+    const priceHtml = price
+      ? `<div style="font-size:0.92em;font-weight:700;margin-top:0.2em;color:${escapeHtml(bindings.accent_border_color || 'var(--brand-accent, #FF6B35)')};">${escapeHtml(price)}</div>`
+      : '';
+
+    wrap.innerHTML = imgHtml + `<div style="min-width:0;">${nameHtml}${priceHtml}</div>`;
   }
 
   function renderYellowStars(rating) {
@@ -1627,42 +1621,53 @@
   }
 
   function renderOverlayQuote(wrap, el, input) {
-    // Italic editorial testimonial block. The base renderPlacedElement
-    // already set el.scrim as the background if opacity > 0 — we keep it
-    // and boost modestly if the scrim was weak, so the quote always has
-    // a gradient substrate behind it rather than the old opaque white card.
-    if (el.scrim && el.scrim.type !== 'none') {
-      const op = Math.max(0.55, (el.scrim.opacity || 0) + 0.10);
-      const boosted = Object.assign({}, el.scrim, { opacity: Math.min(0.90, op) });
-      wrap.style.background = scrimToCss(boosted);
+    const bindings = TP_STATE.lastStyleBindings || {};
+
+    // quote_chip_bg style_binding (testimonial_overlay): apply a
+    // solid dark-gray chip backing behind the quote text, force
+    // white (or bound) text color. Replaces the scrim + brand-accent
+    // border path for the new overlay templates.
+    if (bindings.quote_chip_bg) {
+      wrap.style.background = bindings.quote_chip_bg;
+      wrap.style.color = bindings.quote_text_color || '#FFFFFF';
+      wrap.style.borderRadius = '8px';
+      wrap.style.padding = '0.6em 0.85em 0.55em';
+      wrap.style.boxShadow = '0 2px 10px rgba(0,0,0,0.35)';
     } else {
-      // No scrim from the backend (flat image). Apply a modest tint so
-      // italic body copy still reads.
-      wrap.style.background =
-        'radial-gradient(ellipse at center, rgba(0,0,0,0.55) 70%, rgba(0,0,0,0) 100%)';
+      // Italic editorial testimonial block. The base
+      // renderPlacedElement already set el.scrim as the background
+      // if opacity > 0 — we keep it and boost modestly if the scrim
+      // was weak, so the quote always has a gradient substrate.
+      if (el.scrim && el.scrim.type !== 'none') {
+        const op = Math.max(0.55, (el.scrim.opacity || 0) + 0.10);
+        const boosted = Object.assign({}, el.scrim, { opacity: Math.min(0.90, op) });
+        wrap.style.background = scrimToCss(boosted);
+      } else {
+        wrap.style.background =
+          'radial-gradient(ellipse at center, rgba(0,0,0,0.55) 70%, rgba(0,0,0,0) 100%)';
+      }
+      wrap.style.borderRadius = '8px';
+      wrap.style.padding = '0.6em 0.85em 0.55em calc(0.85em + 4px)';
+      wrap.style.borderLeft = '4px solid var(--brand-accent, #ef4444)';
+      wrap.style.boxShadow = '0 2px 10px rgba(0,0,0,0.35)';
+      const scrimDark = !el.scrim || el.scrim.type === 'gradient-dark' || el.scrim.type === 'none';
+      wrap.style.color = scrimDark ? '#ffffff' : '#0a0a0a';
     }
-    wrap.style.borderRadius = '8px';
-    wrap.style.padding = '0.6em 0.85em 0.55em calc(0.85em + 4px)';
-    wrap.style.borderLeft = '4px solid var(--brand-accent, #ef4444)';
-    wrap.style.boxShadow = '0 2px 10px rgba(0,0,0,0.35)';
+
     wrap.style.display = 'flex';
     wrap.style.flexDirection = 'column';
     // Top-align so when fitTextToBox shrinks the font (content < container)
     // we don't end up with equal empty space top + bottom from
-    // justify-content:center. Padding still controls the visual breathing
-    // room around the text block.
+    // justify-content:center.
     wrap.style.justifyContent = 'flex-start';
-    // Scrim is dark → white italic text; scrim light → dark text. (The
-    // base wrap.color was already set from el.textColor in renderPlacedElement;
-    // we re-read here so we cover the no-scrim branch above too.)
-    const scrimDark = !el.scrim || el.scrim.type === 'gradient-dark' || el.scrim.type === 'none';
-    wrap.style.color = scrimDark ? '#ffffff' : '#0a0a0a';
     wrap.style.fontStyle = 'italic';
     wrap.style.fontSize = '0.95em';
     wrap.style.lineHeight = '1.28';
-    wrap.style.textShadow = scrimDark
-      ? '0 1px 3px rgba(0,0,0,0.55)'
-      : '0 1px 2px rgba(255,255,255,0.45)';
+    // Drop shadow assumes a dark backdrop (chip or dark scrim). When
+    // the older path resolved to a light scrim, wrap.style.color was
+    // already set to #0a0a0a above — but the shadow stays dark since
+    // it's just edge-legibility insurance.
+    wrap.style.textShadow = '0 1px 3px rgba(0,0,0,0.55)';
 
     const quote = input.social_proof?.primary_quote;
     const text = quote?.text || '';

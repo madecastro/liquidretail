@@ -2,34 +2,65 @@
 //
 // Three sub-fields the renderer needs:
 //   1. Templates (multi-select) — which creative templates to fan out
-//      across. The backend Phase 1 render service is still on the
-//      backlog; for now this is a stub list with a few labeled tiles.
+//      across. List mirrors campaignAdsGenerationService.SUPPORTED_TEMPLATES
+//      (the 4 V1 renderer-ready templates). Each tile shows a schematic
+//      preview of the layout's zone arrangement so the operator can pick
+//      by visual character without needing a full render.
 //   2. CTA — text + landing URL the rendered creative will link to.
 //   3. URL params — querystring fragment appended to the CTA URL for
 //      tracking (utm_source, utm_medium, …). Pre-filled from the
 //      selected campaign's tracking config when available.
-//
-// Backend wiring (TODO): GET /api/templates and GET /api/campaigns/:id
-// (for tracking-param defaults). Today this step's templates list is
-// stubbed.
 
-import { Box, VStack, HStack, Text, Input, Textarea, FormControl, FormLabel, Wrap, WrapItem, Card, CardBody, Tag, TagLabel, TagLeftIcon, Icon } from '@chakra-ui/react';
+import { Box, VStack, HStack, Text, Input, Textarea, FormControl, FormLabel, SimpleGrid, Card, CardBody, Tag, TagLabel, TagLeftIcon, Icon } from '@chakra-ui/react';
 import type { WizardSelections } from './index';
 import { StepShell } from './index';
 
 type TemplateOption = {
   id:           string;
   label:        string;
-  aspectRatio:  string;       // '1:1' | '9:16' | '4:5' | '1.91:1'
+  emphasis:     string;
   description:  string;
+  ratios:       string[];
+  schematic:    'spotlight' | 'split' | 'testimonial-overlay' | 'product-overlay';
 };
 
-// Hardcoded stub list — will become a /api/templates fetch.
-const TEMPLATE_STUBS: TemplateOption[] = [
-  { id: 'square-product',   label: 'Square Product',     aspectRatio: '1:1',    description: 'Centered SKU on brand-color background' },
-  { id: 'story-vertical',   label: 'Story Vertical',     aspectRatio: '9:16',   description: 'Full-bleed product with overlay headline' },
-  { id: 'feed-portrait',    label: 'Feed Portrait',      aspectRatio: '4:5',    description: 'Portrait crop with CTA strip' },
-  { id: 'wide-banner',      label: 'Wide Banner',        aspectRatio: '1.91:1', description: 'Landscape banner with side-text layout' }
+// Mirrors server/services/campaignAdsGenerationService.js SUPPORTED_TEMPLATES.
+// Aspect ratios reflect rsSocialProof.templates.normalized.json — all four
+// templates currently support the same 5 ratios; per-template variation
+// will land here once that diverges.
+const TEMPLATES: TemplateOption[] = [
+  {
+    id: 'testimonial_spotlight',
+    label: 'Testimonial Spotlight',
+    emphasis: 'Quote-first',
+    description: 'Editorial layout — a single hero testimonial, paired with product + rating support.',
+    ratios: ['1:1', '4:5', '9:16', '16:9', '1.91:1'],
+    schematic: 'spotlight'
+  },
+  {
+    id: 'ugc_split_screen',
+    label: 'UGC Split-Screen',
+    emphasis: 'UGC-first',
+    description: 'Creator media on one side, copy + product card on the other — feels native to social.',
+    ratios: ['1:1', '4:5', '9:16', '16:9', '1.91:1'],
+    schematic: 'split'
+  },
+  {
+    id: 'testimonial_overlay',
+    label: 'Testimonial Overlay',
+    emphasis: 'Image-first',
+    description: 'Full-bleed photo with floating headline, quote, and CTA placed in subject-safe regions.',
+    ratios: ['1:1', '4:5', '9:16', '16:9', '1.91:1'],
+    schematic: 'testimonial-overlay'
+  },
+  {
+    id: 'product_overlay',
+    label: 'Product Overlay',
+    emphasis: 'Image-first',
+    description: 'Full-bleed photo with a floating product card (image + name + price) and CTA.',
+    ratios: ['1:1', '4:5', '9:16', '16:9', '1.91:1'],
+    schematic: 'product-overlay'
+  }
 ];
 
 type Props = {
@@ -52,39 +83,41 @@ export function Step3Settings({ value, onChange }: Props) {
           <Text fontSize="xs" fontWeight="700" color="brand.muted" textTransform="uppercase" letterSpacing="0.04em" mb={2}>
             Templates ({value.templateIds.length} selected)
           </Text>
-          <Wrap spacing={3}>
-            {TEMPLATE_STUBS.map(t => {
+          <SimpleGrid columns={{ base: 1, sm: 2, lg: 4 }} spacing={3}>
+            {TEMPLATES.map(t => {
               const selected = value.templateIds.includes(t.id);
               return (
-                <WrapItem key={t.id}>
-                  <Card
-                    variant="outline"
-                    onClick={() => toggleTemplate(t.id)}
-                    cursor="pointer"
-                    borderColor={selected ? 'rsViolet.400' : 'brand.border'}
-                    bg={selected ? 'rsViolet.50' : 'brand.surface'}
-                    transition="all 120ms"
-                    _hover={{ borderColor: 'rsViolet.300' }}
-                    w="220px"
-                  >
-                    <CardBody>
-                      <HStack justify="space-between">
-                        <Text fontSize="sm" fontWeight="700" color="brand.ink">{t.label}</Text>
-                        <Tag size="sm" colorScheme="purple" variant="subtle">{t.aspectRatio}</Tag>
-                      </HStack>
-                      <Text fontSize="11px" color="brand.muted" mt={1}>{t.description}</Text>
-                      {selected && (
-                        <Tag mt={2} size="sm" colorScheme="green" variant="subtle">
-                          <TagLeftIcon as={CheckIcon} />
-                          <TagLabel>Selected</TagLabel>
-                        </Tag>
-                      )}
-                    </CardBody>
-                  </Card>
-                </WrapItem>
+                <Card
+                  key={t.id}
+                  variant="outline"
+                  onClick={() => toggleTemplate(t.id)}
+                  cursor="pointer"
+                  borderColor={selected ? 'rsViolet.400' : 'brand.border'}
+                  bg={selected ? 'rsViolet.50' : 'brand.surface'}
+                  transition="all 120ms"
+                  _hover={{ borderColor: 'rsViolet.300' }}
+                >
+                  <CardBody p={3}>
+                    <Schematic kind={t.schematic} />
+                    <HStack justify="space-between" mt={3} spacing={2}>
+                      <Text fontSize="sm" fontWeight="700" color="brand.ink" noOfLines={1}>{t.label}</Text>
+                      <Tag size="sm" colorScheme="purple" variant="subtle" flexShrink={0}>{t.emphasis}</Tag>
+                    </HStack>
+                    <Text fontSize="11px" color="brand.muted" mt={1} noOfLines={3}>{t.description}</Text>
+                    <Text fontSize="10px" color="brand.muted" mt={2} fontFamily="mono">
+                      {t.ratios.join(' · ')}
+                    </Text>
+                    {selected && (
+                      <Tag mt={2} size="sm" colorScheme="green" variant="subtle">
+                        <TagLeftIcon as={CheckIcon} />
+                        <TagLabel>Selected</TagLabel>
+                      </Tag>
+                    )}
+                  </CardBody>
+                </Card>
               );
             })}
-          </Wrap>
+          </SimpleGrid>
         </Box>
 
         {/* CTA */}
@@ -131,6 +164,147 @@ export function Step3Settings({ value, onChange }: Props) {
         </FormControl>
       </VStack>
     </StepShell>
+  );
+}
+
+// Schematic mini-preview — a 1:1 SVG illustration of each template's
+// zone layout. Not a real render; conveys layout character (where the
+// media sits, where copy sits, full-bleed vs split) so the operator
+// can pick visually. Real reference images can swap in later.
+function Schematic({ kind }: { kind: TemplateOption['schematic'] }) {
+  const PALETTE = {
+    bg:        '#F7F5FB',     // canvas
+    media:     '#1F1F2E',     // photo region
+    panel:     '#FFFFFF',     // copy panel
+    panelEdge: '#D9D5E6',
+    text:      '#9A93B5',     // copy bars
+    cta:       '#7C3AED',     // CTA pill (rsViolet)
+    overlay:   'rgba(255,255,255,0.92)',
+    overlayEdge: 'rgba(255,255,255,0.6)'
+  };
+
+  return (
+    <Box
+      role="img"
+      aria-label="Layout schematic"
+      borderWidth="1px"
+      borderColor="brand.border"
+      borderRadius="md"
+      overflow="hidden"
+      bg={PALETTE.bg}
+    >
+      <svg viewBox="0 0 100 100" width="100%" height="auto" style={{ display: 'block' }}>
+        {kind === 'spotlight' && <SpotlightSchematic p={PALETTE} />}
+        {kind === 'split' && <SplitSchematic p={PALETTE} />}
+        {kind === 'testimonial-overlay' && <TestimonialOverlaySchematic p={PALETTE} />}
+        {kind === 'product-overlay' && <ProductOverlaySchematic p={PALETTE} />}
+      </svg>
+    </Box>
+  );
+}
+
+type Pal = {
+  bg: string; media: string; panel: string; panelEdge: string;
+  text: string; cta: string; overlay: string; overlayEdge: string;
+};
+
+// Quote-first editorial: support media on the left, panel with quote
+// card + CTA on the right.
+function SpotlightSchematic({ p }: { p: Pal }) {
+  return (
+    <g>
+      {/* support media (left third) */}
+      <rect x="4" y="10" width="32" height="80" rx="3" fill={p.media} />
+      {/* panel (right two-thirds) */}
+      <rect x="40" y="10" width="56" height="80" rx="3" fill={p.panel} stroke={p.panelEdge} strokeWidth="0.5" />
+      {/* eyebrow */}
+      <rect x="46" y="18" width="20" height="2" rx="1" fill={p.text} opacity="0.5" />
+      {/* headline */}
+      <rect x="46" y="24" width="44" height="3" rx="1" fill={p.text} />
+      <rect x="46" y="29" width="36" height="3" rx="1" fill={p.text} />
+      {/* quote card */}
+      <rect x="46" y="40" width="44" height="22" rx="2" fill={p.bg} stroke={p.panelEdge} strokeWidth="0.4" />
+      <rect x="49" y="44" width="38" height="2" rx="1" fill={p.text} opacity="0.7" />
+      <rect x="49" y="48" width="34" height="2" rx="1" fill={p.text} opacity="0.7" />
+      <rect x="49" y="52" width="26" height="2" rx="1" fill={p.text} opacity="0.7" />
+      {/* proof bar (stars) */}
+      <rect x="46" y="66" width="24" height="2" rx="1" fill={p.text} opacity="0.5" />
+      {/* cta pill */}
+      <rect x="46" y="76" width="22" height="7" rx="3.5" fill={p.cta} />
+    </g>
+  );
+}
+
+// UGC split: media left half, copy + product card + CTA right half.
+function SplitSchematic({ p }: { p: Pal }) {
+  return (
+    <g>
+      {/* media left half */}
+      <rect x="4" y="10" width="44" height="80" rx="3" fill={p.media} />
+      {/* panel right half */}
+      <rect x="52" y="10" width="44" height="80" rx="3" fill={p.panel} stroke={p.panelEdge} strokeWidth="0.5" />
+      {/* headline */}
+      <rect x="56" y="18" width="34" height="3" rx="1" fill={p.text} />
+      <rect x="56" y="23" width="28" height="3" rx="1" fill={p.text} />
+      {/* quote/caption */}
+      <rect x="56" y="32" width="34" height="2" rx="1" fill={p.text} opacity="0.6" />
+      <rect x="56" y="36" width="30" height="2" rx="1" fill={p.text} opacity="0.6" />
+      {/* product card */}
+      <rect x="56" y="46" width="34" height="20" rx="2" fill={p.bg} stroke={p.panelEdge} strokeWidth="0.4" />
+      <rect x="58" y="48" width="14" height="16" rx="1" fill={p.media} opacity="0.7" />
+      <rect x="74" y="50" width="14" height="2" rx="1" fill={p.text} />
+      <rect x="74" y="54" width="10" height="2" rx="1" fill={p.text} opacity="0.6" />
+      <rect x="74" y="58" width="8" height="3" rx="1" fill={p.cta} opacity="0.4" />
+      {/* cta */}
+      <rect x="56" y="76" width="22" height="7" rx="3.5" fill={p.cta} />
+    </g>
+  );
+}
+
+// Image-first testimonial overlay: full-bleed media with floating
+// logo (top), headline (mid), quote (mid-low), CTA (bottom).
+function TestimonialOverlaySchematic({ p }: { p: Pal }) {
+  return (
+    <g>
+      {/* full-bleed media */}
+      <rect x="4" y="10" width="92" height="80" rx="3" fill={p.media} />
+      {/* logo top-left */}
+      <rect x="9" y="15" width="14" height="5" rx="1" fill={p.overlay} />
+      {/* headline middle */}
+      <rect x="9" y="34" width="60" height="4" rx="1" fill={p.overlay} />
+      <rect x="9" y="40" width="48" height="4" rx="1" fill={p.overlay} />
+      {/* quote panel */}
+      <rect x="9" y="54" width="72" height="20" rx="2" fill={p.overlay} stroke={p.overlayEdge} strokeWidth="0.4" />
+      <rect x="12" y="58" width="64" height="2" rx="1" fill={p.text} opacity="0.7" />
+      <rect x="12" y="62" width="60" height="2" rx="1" fill={p.text} opacity="0.7" />
+      <rect x="12" y="66" width="40" height="2" rx="1" fill={p.text} opacity="0.7" />
+      {/* cta bottom */}
+      <rect x="9" y="80" width="22" height="6" rx="3" fill={p.cta} />
+    </g>
+  );
+}
+
+// Image-first product overlay: full-bleed media + floating product
+// card (image + name + price) + CTA.
+function ProductOverlaySchematic({ p }: { p: Pal }) {
+  return (
+    <g>
+      {/* full-bleed media */}
+      <rect x="4" y="10" width="92" height="80" rx="3" fill={p.media} />
+      {/* logo top-left */}
+      <rect x="9" y="15" width="14" height="5" rx="1" fill={p.overlay} />
+      {/* headline middle */}
+      <rect x="9" y="34" width="56" height="4" rx="1" fill={p.overlay} />
+      <rect x="9" y="40" width="42" height="4" rx="1" fill={p.overlay} />
+      {/* product card bottom-left */}
+      <rect x="9" y="58" width="50" height="22" rx="2" fill={p.overlay} stroke={p.overlayEdge} strokeWidth="0.4" />
+      <rect x="11" y="60" width="16" height="18" rx="1" fill={p.media} opacity="0.6" />
+      <rect x="29" y="62" width="26" height="2" rx="1" fill={p.text} />
+      <rect x="29" y="66" width="22" height="2" rx="1" fill={p.text} opacity="0.7" />
+      <rect x="29" y="72" width="14" height="3" rx="1" fill={p.cta} opacity="0.5" />
+      {/* cta bottom-right */}
+      <rect x="69" y="80" width="22" height="6" rx="3" fill={p.cta} />
+    </g>
   );
 }
 

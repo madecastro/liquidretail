@@ -818,11 +818,15 @@
     const zoneScaleFor = (zone) =>
       resolveZoneScale(zoneScalers[zone.id] ?? zoneScalers[zone.kind]);
     for (const zone of (canvas.zones || [])) {
-      // Stash design (un-scaled) height so reflow can compute proportional
-      // slack distribution against pre-scaler weights — a tall quote_card
-      // should still get more slack than a thin proof_bar even when both
-      // are scaled equally.
+      // Stash design (un-scaled, un-reflowed) y + h so subsequent
+      // reflow passes can compute gaps against canvas-spec values
+      // even after an earlier pass mutated rect.y or rect.h.
+      // Without this, a second reflow (e.g. quote_card after
+      // headline) would use the post-headline-cascade rect.y as
+      // its origY, miscompute the gap to the next dep, and stack
+      // shifts incorrectly.
       zone._design_h = zone.rect.h;
+      zone._design_y = zone.rect.y;
       const { slot } = zoneScaleFor(zone);
       if (slot !== 1) zone.rect.h = zone.rect.h * slot;
     }
@@ -1736,14 +1740,16 @@
   }
 
   // Shrink the quote_card to its natural rendered height (after the
-  // font scaler has been applied) and redistribute the freed vertical
-  // to the slots beneath it in the same column. Excludes cta — cta
-  // is an anchor element that the design pins to the bottom; it
-  // shouldn't grow when an upstream zone has slack.
+  // font scaler has been applied) and shift slots beneath it up by
+  // the freed vertical. shiftOnly mode means: NO slack redistribution,
+  // NO size growth — just translate. The headline reflow already
+  // distributed slack proportionally across deps; running another
+  // slack-distribute pass on top would double-count, inflating
+  // badge_row and cta. Plain shift gives a clean compaction.
   function reflowColumnUnderQuoteCard(zoneEls, canvasW, canvasH) {
     return reflowColumnUnderAnchor(zoneEls, canvasW, canvasH,
       ({ zone }) => zone.kind === 'quote_card',
-      { excludeKinds: ['cta'] });
+      { shiftOnly: true });
   }
 
   // Generic column-reflow under an anchor zone. The anchor's natural
@@ -1754,7 +1760,7 @@
   // of the redistribution. options.minHFraction is the floor as a
   // fraction of design height (default 0.5).
   function reflowColumnUnderAnchor(zoneEls, canvasW, canvasH, anchorPredicate, options = {}) {
-    const { excludeKinds = [], minHFraction = 0.5 } = options;
+    const { excludeKinds = [], minHFraction = 0.5, shiftOnly = false } = options;
 
     const anchor = zoneEls.find(anchorPredicate);
     if (!anchor) return;
@@ -1763,27 +1769,26 @@
     const aEl   = anchor.el;
     const orig  = { x: aZone.rect.x, y: aZone.rect.y, w: aZone.rect.w, h: aZone.rect.h };
 
-    // Use the anchor's DESIGN bottom (pre-scale) for dep-finding and
-    // for measuring inter-zone gaps. The deps were laid out in the
-    // canvas spec relative to the anchor's design dimensions; if a
-    // slot scaler grew the anchor's rect.h (e.g. headline scaler 2),
-    // the SCALED bottom can shoot well past where the deps actually
-    // live. Without this fix, dep filter excludes everything below
-    // the scaled bottom, leaving zones unrepositioned and visually
-    // overlapped by the over-sized anchor element.
+    // Use the anchor's DESIGN bottom (pre-scale, pre-mutation) for
+    // dep-finding and for measuring inter-zone gaps. Both _design_y
+    // and _design_h come from the scaler-loop snapshot, so they
+    // reflect canvas-spec values regardless of how earlier reflow
+    // passes mutated rect.y / rect.h.
+    const designY      = aZone._design_y ?? orig.y;
     const designH      = aZone._design_h ?? orig.h;
     const oldRight     = orig.x + orig.w;
-    const designBottom = orig.y + designH;
+    const designBottom = designY + designH;
     const dependents = zoneEls
       .filter(z => z !== anchor)
       .filter(z => !excludeKinds.includes(z.zone.kind))
       .filter(z => {
         const r = z.zone.rect;
+        const dy = z.zone._design_y ?? r.y;
         const xOverlap = r.x < oldRight && (r.x + r.w) > orig.x;
-        const below    = r.y >= designBottom - 1;
+        const below    = dy >= designBottom - 1;
         return xOverlap && below;
       })
-      .sort((a, b) => a.zone.rect.y - b.zone.rect.y);
+      .sort((a, b) => (a.zone._design_y ?? a.zone.rect.y) - (b.zone._design_y ?? b.zone.rect.y));
 
     if (!dependents.length) return;
 
@@ -1795,8 +1800,11 @@
       handle:  d,
       designH: d.zone._design_h ?? d.zone.rect.h,
       scaledH: d.zone.rect.h,
-      origY:   d.zone.rect.y,
-      column:  d.zone.column || null   // null = full-width band zone
+      // origY uses the design y (pre-mutation) so cascade gap math
+      // computes against canvas-spec values, not post-cascade rect.y
+      // from an earlier reflow pass.
+      origY:   d.zone._design_y ?? d.zone.rect.y,
+      column:  d.zone.column || null
     }));
 
     // depDelta = total vertical the column GREW from the zone_scalers
@@ -1826,6 +1834,20 @@
     // Apply new anchor rect.
     aZone.rect.h = finalH;
     applyZoneRect(aEl, aZone.rect, canvasW, canvasH);
+
+    // shiftOnly: translate every dep up by the anchor's shrink
+    // amount, no size change, no slack redistribution. Used by
+    // the second-pass quote_card reflow so it doesn't compound on
+    // top of headline-reflow's slack distribution.
+    if (shiftOnly) {
+      const shrink = orig.h - finalH;
+      if (shrink < 1) return;
+      for (const d of deps) {
+        d.handle.zone.rect.y -= shrink;
+        applyZoneRect(d.handle.el, d.handle.zone.rect, canvasW, canvasH);
+      }
+      return;
+    }
 
     // Split deps: full-width band (no column) cascades from anchor
     // bottom; column-tagged zones cascade INDEPENDENTLY from the

@@ -48,6 +48,20 @@
     opts.headers = headers;
     return _fetch(url, opts).then(async function (res) {
       if (res.status === 401) {
+        // Fast-fail in render-mode (Puppeteer screenshot path):
+        // redirecting to /login.html leaves the bootstrap waiting
+        // 35s on __tpRenderReady before the renderService times
+        // out. Surface a clear error instead so the failure lands
+        // in 2s with "auth failed (401)" in CampaignRun.errors[].
+        var renderMode = false;
+        try {
+          renderMode = new URLSearchParams(window.location.search).get('renderMode') === '1';
+        } catch (_) { /* no-op */ }
+        if (renderMode) {
+          window.__tpRenderError = 'auth failed (401) — RENDER_AUTH_TOKEN may be expired or invalid';
+          window.__tpRenderReady = false;
+          return res;
+        }
         localStorage.removeItem('auth_token');
         localStorage.removeItem('auth_user');
         localStorage.removeItem('auth_email');

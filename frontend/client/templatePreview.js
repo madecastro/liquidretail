@@ -1875,7 +1875,14 @@
     const naturalPx = aEl.getBoundingClientRect().height;
     aEl.style.height = savedH;
 
-    const minH = orig.h * minHFraction;
+    // Per-zone min_h_fraction override (canvas spec) wins over the
+    // function default (0.5). Lets a tight-column variant (e.g. 1:1
+    // quote_card) hold a higher floor so short quotes don't shrink
+    // the slot below visual weight.
+    const effMinHFraction = (typeof aZone.min_h_fraction === 'number')
+      ? aZone.min_h_fraction
+      : minHFraction;
+    const minH = orig.h * effMinHFraction;
 
     // Upper bound for the final slot height. Default cap is the
     // anchor's current rect.h (so the slot never grows past the

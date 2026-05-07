@@ -944,14 +944,13 @@
       reflowColumnUnderQuoteCard(zoneEls, w, h);
 
       // Adaptive badge_row pass — let badges flow at their natural
-      // single-line widths via flex-wrap, then hide any badge that
-      // would land in row 3+. Each visible badge always shows its
-      // FULL label (no per-badge truncation). Runs before
-      // fitAndClampZone so the badge_row's own auto-fit (if any)
-      // measures against the post-fit row count.
+      // single-line widths via flex-wrap, hide any badge that would
+      // land in row 3+, then grow the slot to fit the visible rows
+      // (capped at the next zone in the same column). Each visible
+      // badge always shows its FULL label.
       for (const { zone, el } of zoneEls) {
         if (zone.kind === 'badge_row' && zone.style_variant === 'callouts') {
-          fitBadgeRow(el, 2);
+          fitBadgeRow(el, zone, zoneEls, w, h, 2);
         }
       }
 
@@ -2035,25 +2034,34 @@
     el.style.height = `${(rect.h / canvasH * 100).toFixed(2)}%`;
   }
 
-  // Adaptive badge_row layout — with flex-wrap: wrap on the parent and
-  // white-space: nowrap on each .tp-callout, badges flow at their
-  // natural width and wrap onto multiple rows automatically. This
-  // function reads each badge's offsetTop, groups by row, and hides
-  // any badge that would land in row (maxRows + 1) or beyond. End
-  // result: every visible badge shows its FULL label, count adapts to
-  // the slot's available width.
+  // Adaptive badge_row layout. Combines two passes into one:
+  //   1. Set the slot to auto-height and let badges flow with
+  //      flex-wrap: wrap. Read each .tp-callout's offsetTop to count
+  //      rows (with a 2px tolerance for sub-pixel slop).
+  //   2. If rows > maxRows, hide every badge in row (maxRows + 1) or
+  //      beyond via display: none. After hiding, re-measure the
+  //      slot's natural offsetHeight (now reflecting only visible
+  //      rows + padding + gap) and set rect.h to fit.
+  //   3. Collision-cap the final height at the next zone in the same
+  //      column (or canvas bottom minus margin) so the slot can't
+  //      grow past where it would collide with cta.
   //
-  // ROW_TOLERANCE absorbs sub-pixel offsetTop differences from gap +
-  // border-box rounding — without it a 0.5px diff registers as a
-  // separate row and the cutoff math breaks.
-  function fitBadgeRow(zoneEl, maxRows = 2) {
-    if (!zoneEl) return;
+  // End result: each visible badge shows its FULL label, the slot
+  // height adapts to actual rows used (1 or 2), and rows beyond
+  // maxRows are dropped cleanly.
+  function fitBadgeRow(zoneEl, zoneObj, zoneEls, canvasW, canvasH, maxRows = 2) {
+    if (!zoneEl || !zoneObj) return;
     const badges = Array.from(zoneEl.querySelectorAll('.tp-callout'));
     if (!badges.length) return;
     // Reset visibility so re-renders measure against a clean state.
     badges.forEach(b => { b.style.display = ''; });
-    // Force layout to settle before reading offsetTop.
+    // Auto-height for measurement — allows the slot to flex to whatever
+    // natural row count the badges produce. We restore an explicit px
+    // height at the end so subsequent layout reads are stable.
+    const savedH = zoneEl.style.height;
+    zoneEl.style.height = 'auto';
     void zoneEl.offsetHeight;
+
     const ROW_TOLERANCE = 2;
     const rowTops = [];
     for (const b of badges) {
@@ -2063,13 +2071,27 @@
       }
     }
     rowTops.sort((a, b) => a - b);
-    const cutoff = rowTops[maxRows];
-    if (cutoff == null) return; // fewer than maxRows + 1 rows — nothing to hide
-    for (const b of badges) {
-      if (b.offsetTop >= cutoff - ROW_TOLERANCE) {
-        b.style.display = 'none';
+
+    if (rowTops.length > maxRows) {
+      const cutoff = rowTops[maxRows];
+      for (const b of badges) {
+        if (b.offsetTop >= cutoff - ROW_TOLERANCE) {
+          b.style.display = 'none';
+        }
       }
+      void zoneEl.offsetHeight;
     }
+
+    // Now offsetHeight reflects only the rows we're keeping. Cap at
+    // collisionBound so the slot can't grow past the next zone (or
+    // canvas bottom). Then commit via applyZoneRect so the percent-
+    // height stays in sync with rect.h for any later passes.
+    const naturalH = zoneEl.offsetHeight;
+    const collision = computeCollisionBound(zoneObj, zoneEls, canvasH);
+    const finalH = Math.min(naturalH, collision);
+    zoneObj.rect.h = finalH;
+    zoneEl.style.height = savedH;  // restore inline style before applyZoneRect overwrites
+    applyZoneRect(zoneEl, zoneObj.rect, canvasW, canvasH);
   }
 
   // Split a display_script headline into a smaller "lead" phrase + a

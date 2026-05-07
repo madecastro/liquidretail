@@ -303,6 +303,7 @@
       renderTpPickers(templates);
       await loadAndDrawPreview();
     } catch (err) {
+      console.error('[templatePreview] renderTemplatePreview failed:', err);
       document.getElementById('tpStatus').innerHTML =
         `<p class="tp-bad">Failed to load templates: ${escapeHtml(err.message)}</p>`;
     }
@@ -452,6 +453,7 @@
       document.getElementById('templatePreviewMeta').textContent =
         `${TP_STATE.template} · ${TP_STATE.aspectRatio} · ${data.validation?.ok ? 'valid' : 'invalid'}`;
     } catch (err) {
+      console.error('[templatePreview] loadAndDrawPreview failed:', err);
       stage.innerHTML = '';
       status.innerHTML = `<p class="tp-bad">${escapeHtml(err.message)}</p>`;
     }

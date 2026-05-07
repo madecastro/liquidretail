@@ -1732,11 +1732,31 @@
         .then(() => {
           // Two RAFs to ensure post-fit + DOM commit.
           requestAnimationFrame(() => requestAnimationFrame(() => {
+            // Pre-flight: renderTemplatePreview / loadAndDrawPreview
+            // swallow API + draw errors into #tpStatus and resolve
+            // anyway, which would let the renderer think we're done
+            // and screenshot an empty 0×0 stage. Verify the stage
+            // actually drew before signaling ready; otherwise lift
+            // tpStatus into __tpRenderError so the render service
+            // sees the real reason.
+            const stage  = document.getElementById('tpStage');
+            const status = document.getElementById('tpStatus');
+            const rect   = stage?.getBoundingClientRect();
+            if (!rect || !rect.width || !rect.height) {
+              const statusText = (status?.textContent || '').trim();
+              const reason     = statusText || `stage zero-size with no tpStatus message (innerHTML.len=${stage?.innerHTML?.length || 0})`;
+              console.error('[render-mode] stage drew zero-size — ' + reason);
+              window.__tpRenderError = reason;
+              window.__tpRenderReady = false;
+              return;
+            }
             window.__tpRenderReady = true;
           }));
         })
         .catch(err => {
-          window.__tpRenderError = String(err && err.message || err);
+          const msg = String(err && err.message || err);
+          console.error('[render-mode] bootstrap chain rejected — ' + msg);
+          window.__tpRenderError = msg;
           window.__tpRenderReady = false;
         });
     })();

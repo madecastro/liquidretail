@@ -1706,6 +1706,20 @@
       // when Puppeteer screenshots. Padding zero so the stage
       // anchors at (0,0) for clean clipping.
       document.body.classList.add('render-mode');
+      // The body.render-mode > * { display:none } rule hides every
+      // direct child of body. #tpStage is several levels deep —
+      // its display:block !important loses to an ancestor's
+      // display:none (descendants of display:none don't render at
+      // all). Walk the ancestor chain and force each one visible
+      // so #tpStage actually lays out and Puppeteer can screenshot it.
+      (function unhideStageAncestors() {
+        let cur = document.getElementById('tpStage');
+        while (cur && cur !== document.body) {
+          cur.style.setProperty('display', 'block', 'important');
+          cur.style.setProperty('visibility', 'visible', 'important');
+          cur = cur.parentElement;
+        }
+      })();
       // Drive the preview state directly, then signal ready.
       state.mediaId = mediaParam;
       state.rights = { approved: true };  // render path trusts the source

@@ -949,8 +949,11 @@
        calloutGlyphForLabel — falls back to '•'. */
     .tp-zone.kind-badge_row.style-callouts {
       display: flex; flex-wrap: nowrap;
-      align-items: center; justify-content: space-between;
-      gap: 0.7em;
+      align-items: center; justify-content: center;
+      /* 0.3em gap between sibling badges (end of one to start of next).
+         em-relative so the spacing scales with the parent font-size /
+         zone scaler. */
+      gap: 0.3em;
       font-family: var(--tp-style-font-family-body, Inter, system-ui, sans-serif);
     }
     .tp-zone.kind-badge_row.style-callouts .tp-callout {
@@ -975,6 +978,14 @@
     }
     .tp-zone.kind-badge_row.style-callouts .tp-callout-label {
       flex: 1 1 auto;
+      /* Cap the label at 2 visible lines — long labels (e.g.
+         "PREMIUM INGREDIENTS", "UPF 50+ SUN PROTECTION") wrap
+         within the 24% column width and ellipsis after the
+         second line. */
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
     }
 
     /* Restriction/keep-out overlay (from OverlayZoneArtifact analysis).

@@ -568,7 +568,12 @@
 
     .tp-zone.kind-cta {
       background: var(--tp-style-cta-button-bg, var(--brand-accent));
-      color: var(--brand-text-on);
+      /* Prefer the auto-derived readable text on the actual button bg
+         (set by applyStyleBindingsToStage when cta_button_text falls
+         through to the auto-from-brightness sentinel). Falls back to
+         --brand-text-on (computed against brand.primary) only when
+         the bg-pair derivation didn't run. */
+      color: var(--tp-style-cta-button-text, var(--brand-text-on));
       font-family: var(--tp-style-font-family-body, Inter, system-ui, sans-serif);
       display: flex; align-items: center; justify-content: center;
       font-weight: 800; font-size: 0.45em; letter-spacing: 0.06em;

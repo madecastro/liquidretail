@@ -999,6 +999,25 @@
       const cssName = '--tp-style-' + name.replace(/_/g, '-');
       stage.style.setProperty(cssName, String(value));
     }
+    // Auto-derive readable text foregrounds for surface/text binding
+    // pairs whose text resolved to the auto-from-brightness sentinel
+    // (or wasn't set at all). Without this the CSS falls back to
+    // var(--brand-text-on) which is computed against brand.primary —
+    // unrelated to the actual button bg. Result: white CTA text
+    // sitting on a near-white palette pick = washed out.
+    const autoPairs = [
+      ['cta_button_bg', 'cta_button_text'],
+      ['proof_bar_bg',  'proof_bar_text']
+    ];
+    for (const [bgKey, textKey] of autoPairs) {
+      const bg = bindings[bgKey];
+      const text = bindings[textKey];
+      const wantsAuto = !text || text === 'auto-from-brightness';
+      if (!wantsAuto) continue;
+      if (typeof bg !== 'string' || !isHex(bg)) continue;
+      const cssName = '--tp-style-' + textKey.replace(/_/g, '-');
+      stage.style.setProperty(cssName, tpReadableOn(bg));
+    }
   }
 
   // Append a slot-aware Cloudinary transform to chain after any

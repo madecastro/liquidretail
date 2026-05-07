@@ -950,7 +950,11 @@
     .tp-zone.kind-badge_row.style-callouts {
       display: flex; flex-wrap: wrap;
       align-items: center; align-content: flex-start;
-      justify-content: center;
+      /* Left-aligned: every row starts at the slot's left edge so
+         a partial last row doesn't appear indented relative to
+         the rows above it (justify-content: center centered each
+         row independently — visually wrong for multi-row layouts). */
+      justify-content: flex-start;
       /* 0.3em gap between sibling badges (end of one to start of next),
          applied as both row-gap + column-gap via the shorthand.
          em-relative so spacing scales with parent font-size / zone scaler. */

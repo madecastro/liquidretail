@@ -1733,8 +1733,31 @@
       // doesn't pick a default for us.
       window.__tpRenderForce = { template: templateParam, ratio: ratioParam };
       document.getElementById('templatePreviewPanel').classList.remove('hidden');
+      // Wait for every <img> inside #tpStage to finish loading (or
+      // error) so the screenshot doesn't capture half-decoded media.
+      // Also waits on document.fonts.ready so headline/quote text
+      // doesn't FOUC mid-screenshot. Resolves on a 6s safety timeout
+      // — slow CDN or 404 image shouldn't block the entire render.
+      function waitForStageAssets() {
+        const stage = document.getElementById('tpStage');
+        if (!stage) return Promise.resolve();
+        const imgs = Array.from(stage.querySelectorAll('img'));
+        const imgPromises = imgs.map(img => {
+          if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+          return new Promise(resolve => {
+            const done = () => { img.removeEventListener('load', done); img.removeEventListener('error', done); resolve(); };
+            img.addEventListener('load',  done);
+            img.addEventListener('error', done);
+          });
+        });
+        const fonts = (document.fonts && document.fonts.ready) || Promise.resolve();
+        const safety = new Promise(r => setTimeout(r, 6000));
+        return Promise.race([Promise.all([...imgPromises, fonts]), safety]);
+      }
+
       Promise.resolve()
         .then(() => window.renderTemplatePreview && window.renderTemplatePreview())
+        .then(() => waitForStageAssets())
         .then(() => {
           // Two RAFs to ensure post-fit + DOM commit.
           requestAnimationFrame(() => requestAnimationFrame(() => {

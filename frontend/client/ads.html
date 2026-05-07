@@ -516,6 +516,23 @@
       border-radius: 12px; overflow: hidden;
       font-size: 12px;
     }
+
+    /* Render mode (Puppeteer screenshot path). The bootstrap script
+       in this file applies .render-mode to <body> when ?renderMode=1
+       is set. Hide every other UI element so the screenshot of
+       #tpStage clips cleanly with no chrome bleeding in. The frame
+       also needs to be at canvas size, no scale transform — Puppeteer
+       sets the viewport to the canvas dims and screenshots directly. */
+    body.render-mode > * { display: none !important; }
+    body.render-mode #tpStage,
+    body.render-mode #tpStageFrame {
+      display: block !important;
+      position: absolute; top: 0; left: 0;
+      margin: 0; padding: 0; border: 0;
+      box-shadow: none;
+    }
+    body.render-mode #tpStage { transform: none !important; border-radius: 0 !important; }
+    body.render-mode { margin: 0; padding: 0; }
     .tp-zone {
       position: absolute; box-sizing: border-box; overflow: hidden;
       font-family: inherit;
@@ -1662,7 +1679,53 @@
       loadMediaList();
     });
 
-    loadMediaList();
+    // ── Render mode (Puppeteer-driven screenshot path) ──────────────
+    // When the page is loaded with ?renderMode=1&media=X&template=Y&
+    // ratio=Z, skip the media picker UI entirely, drive the preview
+    // directly from URL params, hide all chrome, and set
+    // window.__tpRenderReady once the post-RAF reflow + auto-fit
+    // settle. The render service waits on that flag, then screenshots
+    // #tpStage. Outside render mode, the existing operator-driven
+    // bootstrap (loadMediaList) runs as before.
+    (function bootstrap() {
+      const params = new URLSearchParams(window.location.search);
+      const renderMode = params.get('renderMode') === '1';
+      if (!renderMode) {
+        loadMediaList();
+        return;
+      }
+      const mediaParam   = params.get('media');
+      const templateParam = params.get('template');
+      const ratioParam    = params.get('ratio');
+      if (!mediaParam || !templateParam || !ratioParam) {
+        document.body.innerHTML =
+          '<div style="padding:20px;font-family:system-ui;color:#900;">renderMode: missing required params media/template/ratio</div>';
+        return;
+      }
+      // Hide page chrome — only the canvas stage should be visible
+      // when Puppeteer screenshots. Padding zero so the stage
+      // anchors at (0,0) for clean clipping.
+      document.body.classList.add('render-mode');
+      // Drive the preview state directly, then signal ready.
+      state.mediaId = mediaParam;
+      state.rights = { approved: true };  // render path trusts the source
+      // Force the requested template + ratio so renderTemplatePreview
+      // doesn't pick a default for us.
+      window.__tpRenderForce = { template: templateParam, ratio: ratioParam };
+      document.getElementById('templatePreviewPanel').classList.remove('hidden');
+      Promise.resolve()
+        .then(() => window.renderTemplatePreview && window.renderTemplatePreview())
+        .then(() => {
+          // Two RAFs to ensure post-fit + DOM commit.
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            window.__tpRenderReady = true;
+          }));
+        })
+        .catch(err => {
+          window.__tpRenderError = String(err && err.message || err);
+          window.__tpRenderReady = false;
+        });
+    })();
   </script>
 
   <script src="templatePreview.js"></script>

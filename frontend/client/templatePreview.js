@@ -283,6 +283,17 @@
       TP_STATE.supportedRatios = {};
       for (const t of templates) TP_STATE.supportedRatios[t.id] = t.supported_aspect_ratios || [];
 
+      // Render-mode override — when ads.html bootstrap put a forced
+      // template + ratio in window.__tpRenderForce, honor it before
+      // any default-picking logic. Lets Puppeteer screenshot the
+      // exact (template, ratio) pair the render service requested
+      // regardless of what the candidate list says is "best."
+      const force = (typeof window !== 'undefined' && window.__tpRenderForce) || null;
+      if (force) {
+        TP_STATE.template    = force.template;
+        TP_STATE.aspectRatio = force.ratio;
+      }
+
       // Pick a sensible default template — first passing one, else first listed.
       if (!TP_STATE.template) {
         const firstOk = TP_STATE.candidates.find(c => c.ok);

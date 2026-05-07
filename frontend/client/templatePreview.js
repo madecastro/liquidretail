@@ -942,6 +942,7 @@
       //    scaled font.
       reflowColumnUnderHeadline(zoneEls, w, h);
       reflowColumnUnderQuoteCard(zoneEls, w, h);
+      reflowColumnUnderProductMeta(zoneEls, w, h);
 
       // Adaptive badge_row pass — let badges flow with text wrapping
       // (each label up to 2 lines via CSS clamp), hide any badge in
@@ -1782,6 +1783,18 @@
   function reflowColumnUnderQuoteCard(zoneEls, canvasW, canvasH) {
     return reflowColumnUnderAnchor(zoneEls, canvasW, canvasH,
       ({ zone }) => zone.kind === 'quote_card',
+      { shiftOnly: true, growToCollision: true });
+  }
+
+  // product_meta reflow — same pattern as quote_card. Used by
+  // ugc_split_screen where product_meta occupies the slot that
+  // testimonial_spotlight gives to quote_card. Anchor predicate
+  // matches the body_description style_variant so we don't pick
+  // up product_meta zones in templates that use it differently.
+  function reflowColumnUnderProductMeta(zoneEls, canvasW, canvasH) {
+    return reflowColumnUnderAnchor(zoneEls, canvasW, canvasH,
+      ({ zone }) =>
+        zone.id === 'product_meta' && zone.style_variant === 'body_description',
       { shiftOnly: true, growToCollision: true });
   }
 

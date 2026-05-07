@@ -7,11 +7,13 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import {
-  Card, CardBody, VStack, HStack, Text, Heading, Button, Badge, Box, Spinner, useToast
+  Card, CardBody, VStack, HStack, Text, Heading, Button, Badge, Box, Spinner,
+  useToast, useDisclosure
 } from '@chakra-ui/react';
 import { Link as RouterLink } from 'react-router-dom';
 import { PageHeader } from '../../shell/PageHeader';
 import { apiJson } from '../../auth/apiFetch';
+import { NewCampaignModal } from './NewCampaignModal';
 
 export type CampaignInsights = {
   impressions:           number | null;
@@ -49,6 +51,7 @@ type Campaign = {
 
 export function CampaignsPage() {
   const toast = useToast();
+  const newCampaignModal = useDisclosure();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading]     = useState(true);
   const [syncing, setSyncing]     = useState(false);
@@ -113,11 +116,16 @@ export function CampaignsPage() {
           >
             Sync now
           </Button>
+          <Button size="sm" variant="outline" onClick={newCampaignModal.onOpen}>
+            New campaign
+          </Button>
           <Button as={RouterLink} to="/generate-ads" variant="brand" size="sm">
             Generate Ads
           </Button>
         </HStack>
       </HStack>
+
+      <NewCampaignModal isOpen={newCampaignModal.isOpen} onClose={newCampaignModal.onClose} />
 
       {loading ? (
         <Card variant="outline">
@@ -149,8 +157,8 @@ export function CampaignsPage() {
                 <Button as={RouterLink} to="/brand" variant="outline" size="sm">
                   Connect integrations
                 </Button>
-                <Button as={RouterLink} to="/generate-ads" variant="brand" size="sm">
-                  Start without a campaign
+                <Button onClick={newCampaignModal.onOpen} variant="brand" size="sm">
+                  New campaign
                 </Button>
               </HStack>
             </VStack>

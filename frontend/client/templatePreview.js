@@ -1763,16 +1763,24 @@
     const aEl   = anchor.el;
     const orig  = { x: aZone.rect.x, y: aZone.rect.y, w: aZone.rect.w, h: aZone.rect.h };
 
-    // Find dependent zones — same column, entirely below anchor.
-    const oldRight  = orig.x + orig.w;
-    const oldBottom = orig.y + orig.h;
+    // Use the anchor's DESIGN bottom (pre-scale) for dep-finding and
+    // for measuring inter-zone gaps. The deps were laid out in the
+    // canvas spec relative to the anchor's design dimensions; if a
+    // slot scaler grew the anchor's rect.h (e.g. headline scaler 2),
+    // the SCALED bottom can shoot well past where the deps actually
+    // live. Without this fix, dep filter excludes everything below
+    // the scaled bottom, leaving zones unrepositioned and visually
+    // overlapped by the over-sized anchor element.
+    const designH      = aZone._design_h ?? orig.h;
+    const oldRight     = orig.x + orig.w;
+    const designBottom = orig.y + designH;
     const dependents = zoneEls
       .filter(z => z !== anchor)
       .filter(z => !excludeKinds.includes(z.zone.kind))
       .filter(z => {
         const r = z.zone.rect;
         const xOverlap = r.x < oldRight && (r.x + r.w) > orig.x;
-        const below    = r.y >= oldBottom - 1;
+        const below    = r.y >= designBottom - 1;
         return xOverlap && below;
       })
       .sort((a, b) => a.zone.rect.y - b.zone.rect.y);
@@ -1839,9 +1847,12 @@
       ? slackForDeps * (designH / totalDesignH)
       : 0;
 
-    // Cascade the full-width band first.
+    // Cascade the full-width band first. prevBottomOrig tracks the
+    // DESIGN bottom (un-scaled) so each dep's preserved gap measures
+    // correctly against canvas-spec values regardless of how much
+    // the anchor's rect.h was scaled by zone_scalers.
     let prevBottomNew  = orig.y + finalH;
-    let prevBottomOrig = oldBottom;
+    let prevBottomOrig = designBottom;
     for (const d of bandDeps) {
       const gap  = d.origY - prevBottomOrig;
       const grow = slackShare(d.designH);

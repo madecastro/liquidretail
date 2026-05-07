@@ -961,20 +961,22 @@
     .tp-zone.kind-badge_row.style-callouts .tp-callout {
       display: inline-flex; align-items: center; gap: 0.4em;
       flex: 0 0 auto;
-      /* font-size multiplied by --tp-zone-scale. The 2.95em glyph and
-         the 1em label are em-relative so the icon and text both scale
-         together when the canvas zone_scaler bumps badge_row. */
-      font-size: calc(0.21em * var(--tp-zone-scale, 1));
+      /* Base 0.28em matches the eyebrow_rules base — both scale via
+         --tp-zone-scale (default 2 on these templates) so the
+         effective font is 0.56em on both, keeping the badge label
+         readable at the same weight as the eyebrow. The 2.95em
+         glyph and 1em label are em-relative so they scale with
+         this base. */
+      font-size: calc(0.28em * var(--tp-zone-scale, 1));
       font-weight: 700;
       color: #FFFFFF;
       text-transform: uppercase;
       letter-spacing: 0.05em;
       line-height: 1.1;
-      /* Each badge stays a single line — adaptive count comes from
-         the JS post-pass (fitBadgeRow) which hides badges in row 3+
-         after measuring offsetTop. No max-width cap so each badge
-         sizes to its own content. */
-      white-space: nowrap;
+      /* Allow label text to wrap. Line-clamp on .tp-callout-label
+         caps each badge at 2 visible lines. The JS pass
+         (fitBadgeRow) caps the row count at maxRows. */
+      white-space: normal;
     }
     .tp-zone.kind-badge_row.style-callouts .tp-callout-glyph {
       color: var(--tp-style-accent-border-color, var(--brand-accent, #FF6B35));
@@ -983,9 +985,14 @@
     }
     .tp-zone.kind-badge_row.style-callouts .tp-callout-label {
       flex: 1 1 auto;
-      /* No line-clamp — each badge is single-line via white-space:
-         nowrap on the parent .tp-callout. The JS fitBadgeRow pass
-         drops whole badges that don't fit within maxRows. */
+      /* Cap each label at 2 visible lines — long labels wrap inside
+         the badge instead of forcing a single-line ellipsis. Pairs
+         with white-space: normal on the parent .tp-callout. The JS
+         pass (fitBadgeRow) then caps the OUTER row count at maxRows. */
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
     }
 
     /* Restriction/keep-out overlay (from OverlayZoneArtifact analysis).

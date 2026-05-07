@@ -943,14 +943,13 @@
       reflowColumnUnderHeadline(zoneEls, w, h);
       reflowColumnUnderQuoteCard(zoneEls, w, h);
 
-      // Adaptive badge_row pass — let badges flow at their natural
-      // single-line widths via flex-wrap, hide any badge that would
-      // land in row 3+, then grow the slot to fit the visible rows
-      // (capped at the next zone in the same column). Each visible
-      // badge always shows its FULL label.
+      // Adaptive badge_row pass — let badges flow with text wrapping
+      // (each label up to 2 lines via CSS clamp), hide any badge in
+      // row 5+, then grow the slot to fit the visible rows (capped
+      // at the next zone in the same column).
       for (const { zone, el } of zoneEls) {
         if (zone.kind === 'badge_row' && zone.style_variant === 'callouts') {
-          fitBadgeRow(el, zone, zoneEls, w, h, 2);
+          fitBadgeRow(el, zone, zoneEls, w, h, 4);
         }
       }
 

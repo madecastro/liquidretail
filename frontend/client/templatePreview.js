@@ -19,6 +19,16 @@
   //    metrics_row, etc).
   //  NOT a production renderer — just a "is the shape right" preview.
   // ══════════════════════════════════════════════════════════════
+  // Render-mode (?renderMode=1) is the headless screenshot path used by
+  // the render service. We don't want debug overlays / restriction layers
+  // / phone frame in production renders — those are operator-UI affordances.
+  // Default every diagnostic toggle to false when render-mode is detected
+  // at module load so drawTpCanvas's optional layers no-op cleanly.
+  const TP_RENDER_MODE = (() => {
+    try { return new URLSearchParams(window.location.search).get('renderMode') === '1'; }
+    catch (_) { return false; }
+  })();
+
   const TP_STATE = {
     template: null,
     aspectRatio: '1:1',
@@ -27,12 +37,12 @@
     lastMediaId: null,
     lastInput: null,
     lastCanvas: null,
-    showDebugBoxes: true,    // container boxes — placed elements (overlay) or canvas zones (canonical)
-    showRestrictions: true,  // restriction layer — subject/face/text keep-outs from overlay analysis
-    showDensity: false,      // density heatmap — visualize the densityGrid the silhouette-aware legality uses
-    phoneFrame: false,       // mock-phone frame around the stage — useful for visualizing ad in-context
-    actualSize: false,       // render at native canvas pixel size (no transform: scale) — for diagnosing browser rendering bugs the scaled-down view masks
-    conservation: 0.5        // placement strictness; overlay-mode only (backend ignores on canonical)
+    showDebugBoxes:   !TP_RENDER_MODE,  // container boxes — placed elements (overlay) or canvas zones (canonical)
+    showRestrictions: !TP_RENDER_MODE,  // restriction layer — subject/face/text keep-outs from overlay analysis
+    showDensity:      false,            // density heatmap — visualize the densityGrid the silhouette-aware legality uses
+    phoneFrame:       false,            // mock-phone frame around the stage — useful for visualizing ad in-context
+    actualSize:       false,            // render at native canvas pixel size (no transform: scale) — for diagnosing browser rendering bugs the scaled-down view masks
+    conservation:     0.5               // placement strictness; overlay-mode only (backend ignores on canonical)
   };
 
   // Debounce timer for conservation slider — we refetch layout-input on
@@ -1011,7 +1021,18 @@
           `width:${(zone.rect.w / w * 100).toFixed(2)}%;height:${(zone.rect.h / h * 100).toFixed(2)}%;`;
         const lbl = document.createElement('span');
         lbl.className = 'tp-debug-label';
-        const slotBit = zone.slot ? ` · ${zone.slot.split('.').slice(-1)[0]}` : '';
+        // zone.slot is string | string[] | null per the canvas spec
+        // (composite zones like eyebrow_rules carry an array of fallback
+        // slot paths). Tail the last segment of whichever path we land
+        // on; never crash on an unexpected shape since this label is
+        // diagnostic-only and should not break the render path.
+        let slotBit = '';
+        try {
+          const raw = Array.isArray(zone.slot) ? zone.slot[0] : zone.slot;
+          if (typeof raw === 'string' && raw.length) {
+            slotBit = ` · ${raw.split('.').slice(-1)[0]}`;
+          }
+        } catch (_) { /* keep slotBit '' */ }
         lbl.textContent = `${zone.id || zone.kind}${slotBit}`;
         box.appendChild(lbl);
         layer.appendChild(box);

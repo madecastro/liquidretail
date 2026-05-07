@@ -1031,20 +1031,19 @@
     }
   }
 
-  // Append a slot-aware Cloudinary transform to chain after any
-  // existing transforms (e.g. the upstream c_crop,w_X,h_Y from
-  // layoutInputService.buildCloudinaryCropUrl). c_fill,g_auto crops
-  // the delivered image to the slot's exact dimensions using
-  // subject-aware gravity. No-op for non-Cloudinary URLs (the browser
-  // falls back to object-fit:cover via the .tp-zone img CSS rule).
-  function slotFitCloudinaryUrl(url, slotW, slotH) {
-    if (!url || typeof url !== 'string') return url;
-    if (!url.includes('/upload/')) return url;
-    if (!Number.isFinite(slotW) || !Number.isFinite(slotH)) return url;
-    if (slotW <= 0 || slotH <= 0) return url;
-    const t = `c_fill,g_auto,w_${slotW},h_${slotH}`;
-    if (/\/v\d+\//.test(url)) return url.replace(/\/(v\d+\/)/, `/${t}/$1`);
-    return url.replace('/upload/', `/upload/${t}/`);
+  // Pass-through. Earlier versions chained c_fill,g_auto,w_<slot>,h_<slot>
+  // here so Cloudinary would crop the delivered image to the slot's
+  // exact dimensions using subject-aware gravity — but that meant a
+  // SECOND crop on top of the detect-pipeline judge winner already
+  // baked into the source URL. Cloudinary's g_auto would re-pick a
+  // subject on the already-cropped frame and shift the framing,
+  // overriding the judge's choice. Returning the URL unchanged
+  // preserves the detect winner verbatim; the .tp-zone img / video
+  // CSS rule (object-fit: cover) center-crops in the browser to fit
+  // the slot — dumber than g_auto but faithful to the source.
+  // Signature kept so callers don't change.
+  function slotFitCloudinaryUrl(url, _slotW, _slotH) {
+    return url;
   }
 
   function isHex(s) { return typeof s === 'string' && /^#[0-9a-f]{6}$/i.test(s); }

@@ -3,6 +3,7 @@ import { Box, Card, CardBody, VStack, Heading, Text, Button } from '@chakra-ui/r
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { BrandProvider } from './brand/BrandContext';
 import { PipelineShell } from './shell/PipelineShell';
+import { LandingPage } from './pages/Landing';
 import { BrandPage } from './pages/Brand';
 import { UploadPage } from './pages/Upload';
 import { DetectPage } from './pages/Detect';
@@ -35,13 +36,26 @@ export function App() {
               <Route path="/catalog"        element={<RequireAuth><CatalogBrowserPage /></RequireAuth>} />
               <Route path="/settings"       element={<RequireAuth><SettingsPage /></RequireAuth>} />
             </Route>
-            <Route path="/"  element={<Navigate to="/brand" replace />} />
-            <Route path="*"  element={<Navigate to="/brand" replace />} />
+            {/* Public marketing landing — no app shell, no auth gate. */}
+            <Route path="/landing" element={<LandingPage />} />
+            {/* Root redirects: unauthed → /landing, authed → /brand. */}
+            <Route path="/"  element={<RootRedirect />} />
+            <Route path="*"  element={<RootRedirect />} />
           </Routes>
         </BrowserRouter>
       </BrandProvider>
     </AuthProvider>
   );
+}
+
+// Root entry — sends prospects to the marketing page and authed users
+// to their brand workspace. Loading state renders nothing rather than
+// flashing a redirect target while AuthProvider resolves the session.
+function RootRedirect() {
+  const auth = useAuth();
+  if (auth.status === 'loading') return null;
+  if (auth.status === 'unauthenticated') return <Navigate to="/landing" replace />;
+  return <Navigate to="/brand" replace />;
 }
 
 function RequireAuth({ children }: { children: React.ReactNode }) {

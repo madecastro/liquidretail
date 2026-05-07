@@ -1973,22 +1973,14 @@
     return { lead: '', main: t };
   }
 
-  // Map a callout label to a glyph icon. Pattern-matched against
-  // common product-feature vocabulary. Used by badge_row's
-  // 'callouts' style_variant when the badge data is a plain string
-  // (no structured icon_id) — the LLM's defaultBadgesFromSignal
-  // outputs 'Top rated' / '1k+ reviews' / etc. which map cleanly.
-  // Falls back to '•' for unmatched labels.
-  function calloutGlyphForLabel(label) {
-    const s = String(label || '').toLowerCase();
-    if (/heat|hot|fire|spic/.test(s))                     return '🔥';
-    if (/flavor|bold|taste/.test(s))                      return '🌶';
-    if (/ingredient|premium|natural|organ|fresh/.test(s)) return '🍃';
-    if (/limited|drop|exclusive|time|now/.test(s))        return '⏰';
-    if (/rated|top|best|award/.test(s))                   return '⭐';
-    if (/verified|trust|certif|approv/.test(s))           return '✓';
-    if (/review|customer|loved/.test(s))                  return '💬';
-    if (/ship|deliver|fast/.test(s))                      return '🚚';
+  // Callout glyph — uniform '•' bullet for all badge_row callout
+  // labels in the split-panel templates (testimonial_spotlight,
+  // ugc_split_screen). Earlier versions pattern-matched labels to
+  // emoji icons (🔥/⭐/✓ etc.); per design feedback those read as
+  // novelty against the editorial reference. Keeping the helper
+  // signature so future templates can plug in alternative glyphs
+  // without touching the rendering call site.
+  function calloutGlyphForLabel(_label) {
     return '•';
   }
 

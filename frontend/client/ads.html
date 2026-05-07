@@ -1687,7 +1687,13 @@
     // settle. The render service waits on that flag, then screenshots
     // #tpStage. Outside render mode, the existing operator-driven
     // bootstrap (loadMediaList) runs as before.
-    (function bootstrap() {
+    //
+    // Wrapped in DOMContentLoaded because templatePreview.js loads
+    // AFTER this inline script — without the wait, the bootstrap's
+    // `window.renderTemplatePreview && ...` short-circuits to undefined
+    // and the chain resolves without ever calling the renderer,
+    // leaving the stage 0×0 and tpStatus empty.
+    document.addEventListener('DOMContentLoaded', function bootstrap() {
       const params = new URLSearchParams(window.location.search);
       const renderMode = params.get('renderMode') === '1';
       if (!renderMode) {
@@ -1759,7 +1765,7 @@
           window.__tpRenderError = msg;
           window.__tpRenderReady = false;
         });
-    })();
+    });
   </script>
 
   <script src="templatePreview.js"></script>

@@ -107,10 +107,10 @@ export function BrandPage() {
         status:      'success',
         duration:    3500
       });
-      // Phase 3 will replace this with /onboarding/connect. For now
-      // we hand off to the existing /brand page where the user can
-      // watch enrichment land + manually start integrations.
-      navigate('/brand', { replace: true });
+      // Hand off to the connect-flow stepper. Brand enrichment
+      // continues in the background; the user can plug in
+      // integrations while it lands.
+      navigate('/onboarding/connect', { replace: true });
     } catch (e) {
       toast({
         title:       'Could not create brand',

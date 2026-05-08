@@ -7,6 +7,7 @@ import { LandingPage } from './pages/Landing';
 import { OnboardingPage } from './pages/Onboarding';
 import { WorkspacePage } from './pages/Onboarding/WorkspacePage';
 import { BrandPage as OnboardingBrandPage } from './pages/Onboarding/BrandPage';
+import { ConnectPage } from './pages/Onboarding/ConnectPage';
 import { BrandPage } from './pages/Brand';
 import { UploadPage } from './pages/Upload';
 import { DetectPage } from './pages/Detect';
@@ -51,6 +52,7 @@ export function App() {
             <Route path="/onboarding"           element={<OnboardingPage />} />
             <Route path="/onboarding/workspace" element={<WorkspacePage />} />
             <Route path="/onboarding/brand"     element={<RequireAuth><OnboardingBrandPage /></RequireAuth>} />
+            <Route path="/onboarding/connect"   element={<RequireAuth><ConnectPage /></RequireAuth>} />
             {/* Root redirects: unauthed → /landing, authed → /brand. */}
             <Route path="/"  element={<RootRedirect />} />
             <Route path="*"  element={<RootRedirect />} />

@@ -35,6 +35,24 @@ export function BrandPage() {
   const edit = useBrandEdit(brand, refresh);
   const toast = useToast();
 
+  // Onboarding OAuth bounce — when /onboarding/connect kicked off
+  // an integration OAuth, the provider's callback always lands on
+  // /brand (per integrations.js's buildIntegrationBounceUrl). The
+  // connect page stamped localStorage.onboarding_resume_to before
+  // navigating, so we redirect back, preserving the callback's
+  // status query params (?ig_status=… etc) so the connect page can
+  // toast the result.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const resumeTo = localStorage.getItem('onboarding_resume_to');
+    if (!resumeTo) return;
+    const search = window.location.search || '';
+    const hasOAuthParams = /\b(ig_status|ig_setup|ads_status|google_status)=/.test(search);
+    if (!hasOAuthParams) return;
+    localStorage.removeItem('onboarding_resume_to');
+    window.location.replace(`${resumeTo}${search}`);
+  }, []);
+
   // Imperative handle into IntegrationsCard so the post-OAuth bounce
   // params (ig_setup / ads_setup) can pop the appropriate picker open
   // immediately on landing, without the user having to click "Finish

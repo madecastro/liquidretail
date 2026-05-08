@@ -32,20 +32,29 @@ import type {
   OverlayZoneAnalysis
 } from './types';
 import type { AspectVariant } from './AspectRatioStrip';
-import { densityCellColor, projectBboxToCrop } from './format';
+import { densityCellColor, projectBboxToCrop, cloudinaryVideoPoster } from './format';
 
 type Props = {
   fileUrl:      string;
+  fileType:     'image' | 'video';
   detect:       DetectResult | null;
   loading:      boolean;
   activeLayers: Set<LayerKey>;
   variant:      AspectVariant;       // current selection from the strip
 };
 
-export function Canvas({ fileUrl, detect, loading, activeLayers, variant }: Props) {
+export function Canvas({ fileUrl, fileType, detect, loading, activeLayers, variant }: Props) {
   const w = detect?.width  || 0;
   const h = detect?.height || 0;
   const renderUrl = (variant.kind === 'original' ? fileUrl : variant.imageUrl) || fileUrl;
+  // Videos: render <video> only on the original variant. For
+  // smart-crop and extended-crop variants the renderUrl is a JPEG
+  // (we never crop video frames in the pipeline), so an <img> is
+  // correct there. The `original` variant's renderUrl points at the
+  // .mp4 — needs a <video> tag with a poster so the user sees a
+  // thumbnail before clicking play.
+  const isVideoOriginal = fileType === 'video' && variant.kind === 'original';
+  const posterUrl = isVideoOriginal ? cloudinaryVideoPoster(renderUrl) : null;
   const isOriginal     = variant.kind === 'original';
   const isSmartCrop    = variant.kind === 'smart-crop';
   const isExtendedCrop = variant.kind === 'extended-crop';
@@ -96,11 +105,22 @@ export function Canvas({ fileUrl, detect, loading, activeLayers, variant }: Prop
         }}
       >
         {renderUrl && (
-          <img
-            src={renderUrl}
-            alt="media"
-            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-          />
+          isVideoOriginal ? (
+            <video
+              src={renderUrl}
+              poster={posterUrl || undefined}
+              controls
+              playsInline
+              preload="metadata"
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', background: '#000' }}
+            />
+          ) : (
+            <img
+              src={renderUrl}
+              alt="media"
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+            />
+          )
         )}
 
         {detect && (

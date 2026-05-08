@@ -159,6 +159,7 @@ export function MediaLibraryPage() {
               <FilterChips active={activeLayers} onToggle={toggleLayer} />
               <Canvas
                 fileUrl={selectedRow.fileUrl}
+                fileType={selectedRow.fileType}
                 detect={detail.data?.result || null}
                 loading={detail.loading}
                 activeLayers={activeLayers}

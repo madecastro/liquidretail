@@ -4,7 +4,7 @@
 
 import { Box, Flex, Text, Image, VStack, HStack, Badge, Button, Spinner, Icon } from '@chakra-ui/react';
 import type { MediaListRow } from './types';
-import { timeAgo, deriveTitle, matchLevelTone } from './format';
+import { timeAgo, deriveTitle, matchLevelTone, cloudinaryVideoPoster } from './format';
 
 type Props = {
   rows:        MediaListRow[];
@@ -76,6 +76,9 @@ function SidebarRow({ row, isActive, onClick }: { row: MediaListRow; isActive: b
   const title = deriveTitle(row);
   const matchTone = matchLevelTone(row.matchLevel);
   const isVideo = row.fileType === 'video';
+  // For video rows, fileUrl points at the .mp4 — <img> can't render
+  // that, so swap to a Cloudinary poster (so_0 → first-frame JPEG).
+  const thumbSrc = isVideo ? (cloudinaryVideoPoster(row.fileUrl) || '') : row.fileUrl;
 
   return (
     <Box
@@ -98,9 +101,9 @@ function SidebarRow({ row, isActive, onClick }: { row: MediaListRow; isActive: b
           bg="gray.100"
           position="relative"
         >
-          {row.fileUrl && (
+          {thumbSrc && (
             <Image
-              src={row.fileUrl}
+              src={thumbSrc}
               alt={title}
               w="100%" h="100%"
               objectFit="cover"

@@ -3,6 +3,20 @@
 
 import type { MatchLevel, DetectOutcome } from './types';
 
+// Derive a Cloudinary poster (JPEG of the first frame) from a video URL.
+// Cloudinary URLs follow .../video/upload/[transforms/]vXXX/path.mp4 —
+// we inject `so_0` (start offset 0s) and rewrite the extension to .jpg.
+// For non-Cloudinary URLs (rare — every IG video is mirrored on ingest)
+// we just return the original URL; the consumer can fall back to a
+// generic video icon.
+export function cloudinaryVideoPoster(videoUrl: string | null | undefined): string | null {
+  if (!videoUrl) return null;
+  if (!videoUrl.includes('/video/upload/')) return null;
+  return videoUrl
+    .replace('/video/upload/', '/video/upload/so_0/')
+    .replace(/\.(mp4|mov|webm|m4v)(\?.*)?$/i, '.jpg$2');
+}
+
 export function timeAgo(iso: string | null | undefined): string {
   if (!iso) return '';
   const t = new Date(iso).getTime();

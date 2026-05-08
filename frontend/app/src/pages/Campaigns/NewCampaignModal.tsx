@@ -94,7 +94,8 @@ export function NewCampaignModal({ isOpen, onClose }: { isOpen: boolean; onClose
         body: JSON.stringify({
           name:       trimmed,
           kind,
-          productIds: kind === 'product' ? selectedProductIds : []
+          productIds: kind === 'product' ? selectedProductIds : [],
+          mediaIds:   kind === 'product' ? selectedMediaIds   : []
         })
       });
       toast({

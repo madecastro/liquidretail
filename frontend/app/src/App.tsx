@@ -9,6 +9,7 @@ import { BrandPage } from './pages/Brand';
 import { UploadPage } from './pages/Upload';
 import { DetectPage } from './pages/Detect';
 import { CampaignsPage } from './pages/Campaigns';
+import { CampaignDetailPage } from './pages/CampaignDetail';
 import { AdsPage } from './pages/Ads';
 import { GenerateAdsWizard } from './pages/GenerateAds';
 import { MediaLibraryPage } from './pages/MediaLibrary';
@@ -28,6 +29,7 @@ export function App() {
             <Route element={<PipelineShell />}>
               <Route path="/brand"          element={<RequireAuth><BrandPage /></RequireAuth>} />
               <Route path="/campaigns"      element={<RequireAuth><CampaignsPage /></RequireAuth>} />
+              <Route path="/campaigns/:id"  element={<RequireAuth><CampaignDetailPage /></RequireAuth>} />
               <Route path="/ads"            element={<RequireAuth><AdsPage /></RequireAuth>} />
               <Route path="/generate-ads"   element={<RequireAuth><GenerateAdsWizard /></RequireAuth>} />
               {/* Deep-link / wizard-internal routes — not in primary nav */}

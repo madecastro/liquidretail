@@ -43,8 +43,10 @@ type Campaign = {
   schedule:      { start: string | null; end: string | null } | null;
   productSetIds: string[];
   matchedProductCount: number;
+  mediaCount:        number;
   adSetCount:    number;
-  adCount:       number;
+  adCount:       number;          // platform-side ad-set ad count (synced campaigns)
+  renderedAdCount:   number;      // in-app rendered creatives for this campaign
   insights:      CampaignInsights | null;
   lastSyncedAt:  string | null;
 };
@@ -189,7 +191,13 @@ function CampaignRow({ campaign: c }: { campaign: Campaign }) {
   const lifetimeBudget = formatBudget(c.budget?.lifetimeMicros, c.budget?.currency);
 
   return (
-    <Card variant="outline">
+    <Card
+      as={RouterLink}
+      to={`/campaigns/${c.id}`}
+      variant="outline"
+      _hover={{ borderColor: 'rsViolet.300', transform: 'translateY(-1px)', boxShadow: 'sm' }}
+      transition="all 120ms"
+    >
       <CardBody>
         <HStack justify="space-between" align="flex-start">
           <Box flex={1} minW={0}>
@@ -204,19 +212,23 @@ function CampaignRow({ campaign: c }: { campaign: Campaign }) {
               )}
             </HStack>
             <HStack spacing={3} mt={1.5} fontSize="11px" color="brand.muted" wrap="wrap">
-              <Text>{c.adSetCount} ad set{c.adSetCount === 1 ? '' : 's'}</Text>
+              <Text>{c.matchedProductCount} product{c.matchedProductCount === 1 ? '' : 's'}</Text>
               <Text>·</Text>
-              <Text>{c.adCount} ad{c.adCount === 1 ? '' : 's'}</Text>
+              <Text>{c.mediaCount || 0} media</Text>
+              <Text>·</Text>
+              <Text fontWeight={c.renderedAdCount > 0 ? '700' : '400'} color={c.renderedAdCount > 0 ? 'rsViolet.600' : 'brand.muted'}>
+                {c.renderedAdCount} rendered ad{c.renderedAdCount === 1 ? '' : 's'}
+              </Text>
+              {c.adSetCount > 0 && (
+                <>
+                  <Text>·</Text>
+                  <Text>{c.adSetCount} platform ad set{c.adSetCount === 1 ? '' : 's'}</Text>
+                </>
+              )}
               {productSetCount > 0 && (
                 <>
                   <Text>·</Text>
                   <Text>{productSetCount} product set{productSetCount === 1 ? '' : 's'}</Text>
-                </>
-              )}
-              {c.matchedProductCount > 0 && (
-                <>
-                  <Text>·</Text>
-                  <Text>{c.matchedProductCount} matched product{c.matchedProductCount === 1 ? '' : 's'}</Text>
                 </>
               )}
               {dailyBudget && (

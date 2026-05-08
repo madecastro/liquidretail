@@ -7,7 +7,7 @@
 // follow-up.
 
 import { HStack, VStack, Box, Text, Badge, Image } from '@chakra-ui/react';
-import { qualityBucket, buildCloudinaryCropUrl, buildCloudinaryVideoCropUrl } from './format';
+import { qualityBucket, buildCloudinaryCropUrl, buildCloudinaryVideoCropUrl, cloudinaryVideoPoster } from './format';
 import type { DetectResult } from './types';
 
 export type AspectVariantKind = 'original' | 'smart-crop' | 'extended-crop';
@@ -115,10 +115,14 @@ function VariantThumb({ v, selected, onClick }: { v: AspectVariant; selected: bo
 function buildVariantList(fileUrl: string, detect: DetectResult | null): AspectVariant[] {
   const out: AspectVariant[] = [];
   const isVideoSource = fileUrl.includes('/video/upload/');
+  // Thumb image: video sources need a Cloudinary first-frame JPEG
+  // (so_0). Using fileUrl directly hands an .mp4 to <img>, which
+  // browsers refuse to render — leaving the Original chip blank.
+  const originalThumb = isVideoSource ? (cloudinaryVideoPoster(fileUrl) || fileUrl) : fileUrl;
   out.push({
     ratio: 'original',
     label: 'Original',
-    imageUrl: fileUrl,
+    imageUrl: originalThumb,
     videoUrl: isVideoSource ? fileUrl : null,
     score: null,
     kind: 'original',

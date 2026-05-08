@@ -524,10 +524,15 @@
        also needs to be at canvas size, no scale transform — Puppeteer
        sets the viewport to the canvas dims and screenshots directly. */
     body.render-mode > * { display: none !important; }
+    /* position: fixed pins the stage to the viewport (0,0) regardless
+       of ancestor positioning — `absolute` was anchoring to whichever
+       wrapper had position: relative, leaving the stage offset by
+       page padding so Puppeteer's screenshot clip got clamped at the
+       viewport edge and dropped the right + bottom of the canvas. */
     body.render-mode #tpStage,
     body.render-mode #tpStageFrame {
       display: block !important;
-      position: absolute; top: 0; left: 0;
+      position: fixed !important; top: 0 !important; left: 0 !important;
       margin: 0; padding: 0; border: 0;
       box-shadow: none;
     }

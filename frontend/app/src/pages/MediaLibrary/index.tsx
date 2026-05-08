@@ -103,12 +103,12 @@ export function MediaLibraryPage() {
   // cropped frame; selecting an extended-crop hides source-frame
   // overlays since the image is Gemini-generated, not a crop.
   const [activeVariant, setActiveVariant] = useState<AspectVariant>(
-    { ratio: 'original', label: 'Original', imageUrl: null, score: null, kind: 'original', cropBbox: null }
+    { ratio: 'original', label: 'Original', imageUrl: null, videoUrl: null, score: null, kind: 'original', cropBbox: null }
   );
   // Reset to Original whenever the selected media changes — otherwise
   // a 1:1 crop selection from the previous media bleeds over.
   useEffect(() => {
-    setActiveVariant({ ratio: 'original', label: 'Original', imageUrl: null, score: null, kind: 'original', cropBbox: null });
+    setActiveVariant({ ratio: 'original', label: 'Original', imageUrl: null, videoUrl: null, score: null, kind: 'original', cropBbox: null });
   }, [selectedId]);
 
   const handleSelect = (mediaId: string) => setSelected(mediaId);

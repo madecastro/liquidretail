@@ -14,7 +14,7 @@ import { useSearchParams, Link as RouterLink } from 'react-router-dom';
 import {
   Card, CardBody, VStack, HStack, Text, Heading, Button, SimpleGrid,
   Badge, Image, Box, Spinner, useDisclosure, Modal, ModalOverlay, ModalContent,
-  ModalHeader, ModalBody, ModalCloseButton, Select, Progress
+  ModalHeader, ModalBody, ModalCloseButton, Select, Progress, useToast
 } from '@chakra-ui/react';
 import { PageHeader } from '../../shell/PageHeader';
 import { apiJson } from '../../auth/apiFetch';
@@ -72,6 +72,7 @@ const POLL_TIMEOUT_MS  = 10 * 60 * 1000;   // 10 minutes — generous for full P
 export function AdsPage() {
   const { activeBrand } = useBrand();
   const activeBrandId = activeBrand?.id || null;
+  const toast = useToast();
   const [params] = useSearchParams();
   const campaignRunId = params.get('campaignRunId');
   const campaignId    = params.get('campaignId');
@@ -126,6 +127,73 @@ export function AdsPage() {
     })();
     return () => { cancelled = true; };
   }, [activeBrandId, status, campaignId, campaignRunId]);
+
+  // ── Status actions (Approve / Archive / Restore / Delete) ──
+  // Optimistically updates local state, fires PATCH/DELETE, rolls
+  // back on failure with a toast. Avoids a full gallery refetch
+  // because the gallery is already showing the row we mutated.
+
+  const [actioning, setActioning] = useState(false);
+
+  const setAdStatus = async (ad: AdRow, nextStatus: AdRow['status']) => {
+    if (!activeBrandId) return;
+    setActioning(true);
+    const prevRows = rows;
+    const prevSelected = selected;
+    setRows(prevRows.map(r => r.id === ad.id ? { ...r, status: nextStatus } : r));
+    if (prevSelected?.id === ad.id) setSelected({ ...prevSelected, status: nextStatus });
+    try {
+      await apiJson<{ ad: AdRow }>(`/api/ads/${ad.id}?brandId=${encodeURIComponent(activeBrandId)}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ status: nextStatus })
+      });
+      toast({
+        title:    nextStatus === 'live'     ? 'Ad approved'
+                : nextStatus === 'archived' ? 'Ad archived'
+                : 'Ad restored to draft',
+        status:   'success',
+        duration: 2500
+      });
+    } catch (e) {
+      // rollback
+      setRows(prevRows);
+      if (prevSelected) setSelected(prevSelected);
+      toast({
+        title:       'Status change failed',
+        description: e instanceof Error ? e.message : String(e),
+        status:      'error',
+        duration:    5000
+      });
+    } finally {
+      setActioning(false);
+    }
+  };
+
+  const deleteAd = async (ad: AdRow) => {
+    if (!activeBrandId) return;
+    const confirmed = window.confirm('Delete this ad? Removes the doc + the Cloudinary asset. Cannot be undone.');
+    if (!confirmed) return;
+    setActioning(true);
+    const prevRows = rows;
+    setRows(prevRows.filter(r => r.id !== ad.id));
+    setSelected(null);
+    detailModal.onClose();
+    try {
+      await apiJson(`/api/ads/${ad.id}?brandId=${encodeURIComponent(activeBrandId)}`, { method: 'DELETE' });
+      toast({ title: 'Ad deleted', status: 'success', duration: 2500 });
+    } catch (e) {
+      setRows(prevRows);
+      toast({
+        title:       'Delete failed',
+        description: e instanceof Error ? e.message : String(e),
+        status:      'error',
+        duration:    5000
+      });
+    } finally {
+      setActioning(false);
+    }
+  };
 
   // Run-status poller — fires only when the URL has a campaignRunId.
   // Polls /api/ads/runs/:id, refetches the ad list each tick, and
@@ -327,10 +395,61 @@ export function AdsPage() {
                 {selected.copy.quote && (
                   <DetailRow label="Quote" value={selected.copy.quote} />
                 )}
-                <HStack justify="flex-end" spacing={2}>
-                  <Button as="a" href={selected.renderUrl} target="_blank" variant="outline" size="sm">
-                    Open in Cloudinary
+                <HStack justify="space-between" spacing={2}>
+                  <Button
+                    onClick={() => deleteAd(selected)}
+                    variant="outline"
+                    colorScheme="red"
+                    size="sm"
+                    isDisabled={actioning}
+                  >
+                    Delete
                   </Button>
+                  <HStack spacing={2}>
+                    <Button as="a" href={selected.renderUrl} target="_blank" variant="outline" size="sm">
+                      Open in Cloudinary
+                    </Button>
+                    {selected.status === 'draft' && (
+                      <>
+                        <Button
+                          onClick={() => setAdStatus(selected, 'archived')}
+                          variant="outline"
+                          size="sm"
+                          isDisabled={actioning}
+                        >
+                          Archive
+                        </Button>
+                        <Button
+                          onClick={() => setAdStatus(selected, 'live')}
+                          variant="brand"
+                          size="sm"
+                          isDisabled={actioning}
+                        >
+                          Approve
+                        </Button>
+                      </>
+                    )}
+                    {selected.status === 'live' && (
+                      <Button
+                        onClick={() => setAdStatus(selected, 'archived')}
+                        variant="outline"
+                        size="sm"
+                        isDisabled={actioning}
+                      >
+                        Archive
+                      </Button>
+                    )}
+                    {selected.status === 'archived' && (
+                      <Button
+                        onClick={() => setAdStatus(selected, 'draft')}
+                        variant="brand"
+                        size="sm"
+                        isDisabled={actioning}
+                      >
+                        Restore to draft
+                      </Button>
+                    )}
+                  </HStack>
                 </HStack>
               </VStack>
             )}

@@ -16,6 +16,7 @@
 import { Box, VStack, HStack, SimpleGrid, Text, Spinner, Card, CardBody, Button, useToast } from '@chakra-ui/react';
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams, Link as RouterLink } from 'react-router-dom';
+import { apiJson } from '../../auth/apiFetch';
 import { useBrandDetail } from './useBrandDetail';
 import { useBrandEdit } from './useBrandEdit';
 import { BrandHeader } from './Header';
@@ -53,6 +54,32 @@ export function BrandPage() {
     localStorage.removeItem('onboarding_resume_to');
     setOnboardingResumeTo(null);
   };
+
+  // Auto-dismiss the onboarding banner once the user has finalized
+  // an ads-account picker (Meta or Google credential transitions
+  // pending → active). That's the last meaningful onboarding step;
+  // beyond it, leaving the banner up just gets in the way. Polls
+  // every 5s while the banner is visible, stops once it's gone.
+  useEffect(() => {
+    if (!onboardingResumeTo) return;
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const [meta, google] = await Promise.all([
+          apiJson<{ credentials: Array<{ status: string }> }>('/api/integrations/meta-ads/status').catch(() => ({ credentials: [] })),
+          apiJson<{ credentials: Array<{ status: string }> }>('/api/integrations/google-ads/status').catch(() => ({ credentials: [] }))
+        ]);
+        if (cancelled) return;
+        const adsActive =
+          meta.credentials.some(c => c.status === 'active') ||
+          google.credentials.some(c => c.status === 'active');
+        if (adsActive) dismissOnboardingBanner();
+      } catch { /* soft-fail */ }
+    };
+    void check();
+    const id = setInterval(check, 5000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [onboardingResumeTo]);
 
   // Imperative handle into IntegrationsCard so the post-OAuth bounce
   // params (ig_setup / ads_setup) can pop the appropriate picker open

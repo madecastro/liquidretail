@@ -150,6 +150,16 @@ export function buildCloudinaryCropUrl(
   const h = Math.max(1, Math.round(bbox.y2 - bbox.y1));
   const x = Math.max(0, Math.round(bbox.x1));
   const y = Math.max(0, Math.round(bbox.y1));
+  // Video sources: Cloudinary will extract a frame and crop it if we
+  // (1) inject so_0 (start offset = first frame), (2) rewrite the
+  // extension to .jpg so the response is an image (not a clipped
+  // video). Without this, the <img> tag in VariantThumb sees an .mp4
+  // and renders nothing.
+  if (sourceUrl.includes('/video/upload/')) {
+    return sourceUrl
+      .replace('/video/upload/', `/video/upload/c_crop,w_${w},h_${h},x_${x},y_${y}/so_0/`)
+      .replace(/\.(mp4|mov|webm|m4v)(\?.*)?$/i, '.jpg$2');
+  }
   return sourceUrl.replace('/upload/', `/upload/c_crop,w_${w},h_${h},x_${x},y_${y}/`);
 }
 

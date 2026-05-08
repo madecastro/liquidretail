@@ -19,6 +19,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useBrandDetail } from './useBrandDetail';
 import { useBrandEdit } from './useBrandEdit';
 import { BrandHeader } from './Header';
+import { OnboardingStatusPanel } from './OnboardingStatusPanel';
 import { BrandVoiceCard } from './BrandVoiceCard';
 import { VisualIdentityCard } from './VisualIdentityCard';
 import { AudiencePersonasCard } from './AudiencePersonasCard';
@@ -124,6 +125,8 @@ export function BrandPage() {
 
       <VStack align="stretch" spacing={5} mt={3} pb={20}>
         <BrandHeader brand={brand} edit={edit} onChanged={refresh} />
+
+        {brand?._id && <OnboardingStatusPanel brandId={brand._id} />}
 
         <IntegrationsCard ref={integrationsRef} brand={brand} />
 

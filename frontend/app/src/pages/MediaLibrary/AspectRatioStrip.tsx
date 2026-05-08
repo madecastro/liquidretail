@@ -7,7 +7,7 @@
 // follow-up.
 
 import { HStack, VStack, Box, Text, Badge, Image } from '@chakra-ui/react';
-import { qualityBucket, buildCloudinaryCropUrl } from './format';
+import { qualityBucket, buildCloudinaryCropUrl, buildCloudinaryVideoCropUrl } from './format';
 import type { DetectResult } from './types';
 
 export type AspectVariantKind = 'original' | 'smart-crop' | 'extended-crop';
@@ -16,6 +16,10 @@ export type AspectVariant = {
   ratio:    string;
   label:    string;
   imageUrl: string | null;
+  // For video sources only: cropped MP4 URL (Cloudinary c_crop on the
+  // video upload). Canvas renders <video src=videoUrl poster=imageUrl>
+  // when present so smart-crops play the cropped clip, not a still.
+  videoUrl: string | null;
   score:    number | null;
   kind:     AspectVariantKind;
   // Source-pixel bbox for smart-crop variants. Lets the canvas project
@@ -110,7 +114,16 @@ function VariantThumb({ v, selected, onClick }: { v: AspectVariant; selected: bo
 
 function buildVariantList(fileUrl: string, detect: DetectResult | null): AspectVariant[] {
   const out: AspectVariant[] = [];
-  out.push({ ratio: 'original', label: 'Original', imageUrl: fileUrl, score: null, kind: 'original', cropBbox: null });
+  const isVideoSource = fileUrl.includes('/video/upload/');
+  out.push({
+    ratio: 'original',
+    label: 'Original',
+    imageUrl: fileUrl,
+    videoUrl: isVideoSource ? fileUrl : null,
+    score: null,
+    kind: 'original',
+    cropBbox: null
+  });
 
   // Smart-crop ratios live on detect.crops[ratio][] with judge winners
   // surfaced via detect.judge[`crop_<ratio>`]. The flat shape varies a
@@ -144,10 +157,14 @@ function buildVariantList(fileUrl: string, detect: DetectResult | null): AspectV
     if (!imageUrl && cropBbox) {
       imageUrl = buildCloudinaryCropUrl(fileUrl, cropBbox);
     }
+    const videoUrl = (isVideoSource && cropBbox)
+      ? buildCloudinaryVideoCropUrl(fileUrl, cropBbox)
+      : null;
     out.push({
       ratio: b.ratio,
       label: b.label,
       imageUrl,
+      videoUrl,
       score: typeof winnerScore === 'number' ? winnerScore : null,
       kind:  'smart-crop',
       cropBbox
@@ -164,6 +181,7 @@ function buildVariantList(fileUrl: string, detect: DetectResult | null): AspectV
       ratio,
       label: ratio === '9:16' ? '9:16 Story' : '1.91:1 Landscape',
       imageUrl: typeof winner?.['imageUrl'] === 'string' ? winner['imageUrl'] as string : null,
+      videoUrl: null,        // extended crops are Gemini-generated stills, never video
       score:    null,
       kind:     'extended-crop',
       cropBbox: null

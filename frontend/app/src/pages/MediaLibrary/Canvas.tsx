@@ -47,14 +47,19 @@ export function Canvas({ fileUrl, fileType, detect, loading, activeLayers, varia
   const w = detect?.width  || 0;
   const h = detect?.height || 0;
   const renderUrl = (variant.kind === 'original' ? fileUrl : variant.imageUrl) || fileUrl;
-  // Videos: render <video> only on the original variant. For
-  // smart-crop and extended-crop variants the renderUrl is a JPEG
-  // (we never crop video frames in the pipeline), so an <img> is
-  // correct there. The `original` variant's renderUrl points at the
-  // .mp4 — needs a <video> tag with a poster so the user sees a
-  // thumbnail before clicking play.
-  const isVideoOriginal = fileType === 'video' && variant.kind === 'original';
-  const posterUrl = isVideoOriginal ? cloudinaryVideoPoster(renderUrl) : null;
+  // Video sources: render <video> on original AND smart-crop variants.
+  // Smart-crop carries a Cloudinary c_crop video URL on variant.videoUrl
+  // (the extension is .mp4 — Cloudinary serves the cropped clip).
+  // Extended-crop variants are Gemini-generated stills, so they stay
+  // as <img>. Poster comes from the matching cropped JPEG.
+  const isVideoSource = fileType === 'video';
+  const variantVideoUrl = variant.kind === 'original'
+    ? (isVideoSource ? fileUrl : null)
+    : (variant.videoUrl || null);
+  const showVideo = isVideoSource && !!variantVideoUrl;
+  const posterUrl = showVideo
+    ? (variant.kind === 'original' ? cloudinaryVideoPoster(fileUrl) : variant.imageUrl)
+    : null;
   const isOriginal     = variant.kind === 'original';
   const isSmartCrop    = variant.kind === 'smart-crop';
   const isExtendedCrop = variant.kind === 'extended-crop';
@@ -104,17 +109,18 @@ export function Canvas({ fileUrl, fileType, detect, loading, activeLayers, varia
           maxHeight: '100%'
         }}
       >
-        {renderUrl && (
-          isVideoOriginal ? (
-            <video
-              src={renderUrl}
-              poster={posterUrl || undefined}
-              controls
-              playsInline
-              preload="metadata"
-              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', background: '#000' }}
-            />
-          ) : (
+        {showVideo && variantVideoUrl ? (
+          <video
+            key={variantVideoUrl}
+            src={variantVideoUrl}
+            poster={posterUrl || undefined}
+            controls
+            playsInline
+            preload="metadata"
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', background: '#000' }}
+          />
+        ) : (
+          renderUrl && (
             <img
               src={renderUrl}
               alt="media"

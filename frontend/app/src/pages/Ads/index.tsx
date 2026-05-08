@@ -252,12 +252,16 @@ export function AdsPage() {
               transition="all 120ms"
               onClick={() => { setSelected(ad); detailModal.onOpen(); }}
             >
+              {/* Uniform 1:1 tile — non-square ads letterbox inside
+                  the shared frame so every card in the grid matches
+                  height. Detail modal below still shows the ad at
+                  its native aspect ratio. */}
               <Box
                 position="relative"
                 bg="gray.900"
                 borderTopRadius="md"
                 overflow="hidden"
-                style={{ aspectRatio: `${ad.width} / ${ad.height}` }}
+                style={{ aspectRatio: '1 / 1' }}
               >
                 <Image
                   src={ad.renderUrl}

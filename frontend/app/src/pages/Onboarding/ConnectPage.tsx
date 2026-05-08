@@ -143,20 +143,18 @@ export function ConnectPage() {
   const finish = async () => {
     setSubmitting(true);
     try {
-      // Trigger the syncs for whatever connected. Fire-and-forget;
-      // we don't wait. Each sync runs server-side over the next few
-      // minutes; the /brand page surfaces progress.
-      const triggers: Promise<unknown>[] = [];
-      if (ig?.connected || ig?.pending) {
-        triggers.push(apiJson('/api/integrations/instagram/sync-catalog', { method: 'POST' }).catch(() => null));
-        triggers.push(apiJson('/api/integrations/instagram/sync-posts',   { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) }).catch(() => null));
-      }
-      if (meta?.connected || google?.connected || meta?.pending || google?.pending) {
-        triggers.push(apiJson('/api/integrations/meta-ads/sync-campaigns',   { method: 'POST' }).catch(() => null));
-        triggers.push(apiJson('/api/integrations/google-ads/sync-campaigns', { method: 'POST' }).catch(() => null));
-      }
-      // Don't await — let them run in the background while we redirect.
-      void Promise.allSettled(triggers);
+      // Server-side dispatch — fans out the catalog / posts / campaigns
+      // syncs in the background and returns 202 in ms. We can't fire
+      // the per-platform sync routes from the browser anymore: they
+      // run synchronously server-side (catalog ~8s, posts ~52s), and
+      // the browser aborts in-flight fetches as soon as we navigate
+      // away. The dispatch endpoint owns the fan-out so navigation
+      // can't cancel it.
+      await apiJson<{ dispatched: string[] }>('/api/onboarding/dispatch-syncs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
       toast({ title: 'Onboarding done — kicking off background syncs', status: 'success', duration: 3000 });
       navigate('/brand', { replace: true });
     } catch (e) {

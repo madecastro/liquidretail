@@ -9,6 +9,7 @@ import { CropsTab } from './tabs/CropsTab';
 import { TextTab } from './tabs/TextTab';
 import { LayoutTab } from './tabs/LayoutTab';
 import { PaletteTab } from './tabs/PaletteTab';
+import { InsightsTab } from './tabs/InsightsTab';
 
 type Props = {
   row:    MediaListRow | null;
@@ -30,6 +31,7 @@ export function RightSidebar({ row, detect }: Props) {
       <Tabs variant="line" size="sm" colorScheme="purple">
         <TabList px={3} pt={2} position="sticky" top={0} bg="brand.surface" zIndex={1}>
           <Tab fontSize="xs">Summary</Tab>
+          <Tab fontSize="xs">Insights</Tab>
           <Tab fontSize="xs">Objects</Tab>
           <Tab fontSize="xs">Crops</Tab>
           <Tab fontSize="xs">Text</Tab>
@@ -38,6 +40,7 @@ export function RightSidebar({ row, detect }: Props) {
         </TabList>
         <TabPanels>
           <TabPanel px={4} py={4}><SummaryTab row={row} detect={detect} /></TabPanel>
+          <TabPanel px={4} py={4}><InsightsTab row={row} /></TabPanel>
           <TabPanel px={4} py={4}><ObjectsTab detect={detect} /></TabPanel>
           <TabPanel px={4} py={4}><CropsTab detect={detect} /></TabPanel>
           <TabPanel px={4} py={4}><TextTab detect={detect} /></TabPanel>

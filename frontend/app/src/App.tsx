@@ -5,6 +5,7 @@ import { BrandProvider } from './brand/BrandContext';
 import { PipelineShell } from './shell/PipelineShell';
 import { LandingPage } from './pages/Landing';
 import { OnboardingPage } from './pages/Onboarding';
+import { WorkspacePage } from './pages/Onboarding/WorkspacePage';
 import { BrandPage } from './pages/Brand';
 import { UploadPage } from './pages/Upload';
 import { DetectPage } from './pages/Detect';
@@ -46,7 +47,8 @@ export function App() {
                 redirect; rendered without RequireAuth so the
                 logged-in-but-no-workspace state doesn't bounce back
                 through the auth gate. */}
-            <Route path="/onboarding" element={<OnboardingPage />} />
+            <Route path="/onboarding"           element={<OnboardingPage />} />
+            <Route path="/onboarding/workspace" element={<WorkspacePage />} />
             {/* Root redirects: unauthed → /landing, authed → /brand. */}
             <Route path="/"  element={<RootRedirect />} />
             <Route path="*"  element={<RootRedirect />} />

@@ -16,7 +16,10 @@
 // Caller deals with non-2xx outcomes the same way the legacy code did.
 
 const LOGIN_URL = '/login.html';
-const ONBOARDING_URL = '/onboarding.html';
+// React-Router route inside the new app — Netlify's SPA fallback
+// serves the app shell for any unknown path, so a hard navigation
+// to /onboarding loads the React app and routes to OnboardingPage.
+const ONBOARDING_URL = '/onboarding';
 
 function authHeaders(): Record<string, string> {
   const headers: Record<string, string> = {};
@@ -58,7 +61,12 @@ async function maybeHandleAuthFailure(res: Response): Promise<void> {
     } catch { /* not JSON, ignore */ }
 
     if (code === 'NO_ADVERTISER') {
-      window.location.replace(ONBOARDING_URL);
+      // Loop guard — onboarding-page calls (e.g. /api/me from the
+      // page itself) would otherwise trigger another redirect to
+      // the same URL. Skip if we're already there.
+      if (!window.location.pathname.startsWith(ONBOARDING_URL)) {
+        window.location.replace(ONBOARDING_URL);
+      }
       return;
     }
     if (code === 'ADVERTISER_FORBIDDEN') {

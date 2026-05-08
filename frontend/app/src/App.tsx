@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './auth/AuthContext';
 import { BrandProvider } from './brand/BrandContext';
 import { PipelineShell } from './shell/PipelineShell';
 import { LandingPage } from './pages/Landing';
+import { OnboardingPage } from './pages/Onboarding';
 import { BrandPage } from './pages/Brand';
 import { UploadPage } from './pages/Upload';
 import { DetectPage } from './pages/Detect';
@@ -38,6 +39,12 @@ export function App() {
             </Route>
             {/* Public marketing landing — no app shell, no auth gate. */}
             <Route path="/landing" element={<LandingPage />} />
+            {/* Onboarding — authenticated users without an Advertiser
+                membership. Reached via apiFetch's 403 NO_ADVERTISER
+                redirect; rendered without RequireAuth so the
+                logged-in-but-no-workspace state doesn't bounce back
+                through the auth gate. */}
+            <Route path="/onboarding" element={<OnboardingPage />} />
             {/* Root redirects: unauthed → /landing, authed → /brand. */}
             <Route path="/"  element={<RootRedirect />} />
             <Route path="*"  element={<RootRedirect />} />

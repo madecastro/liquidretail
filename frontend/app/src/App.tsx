@@ -6,6 +6,7 @@ import { PipelineShell } from './shell/PipelineShell';
 import { LandingPage } from './pages/Landing';
 import { OnboardingPage } from './pages/Onboarding';
 import { WorkspacePage } from './pages/Onboarding/WorkspacePage';
+import { BrandPage as OnboardingBrandPage } from './pages/Onboarding/BrandPage';
 import { BrandPage } from './pages/Brand';
 import { UploadPage } from './pages/Upload';
 import { DetectPage } from './pages/Detect';
@@ -49,6 +50,7 @@ export function App() {
                 through the auth gate. */}
             <Route path="/onboarding"           element={<OnboardingPage />} />
             <Route path="/onboarding/workspace" element={<WorkspacePage />} />
+            <Route path="/onboarding/brand"     element={<RequireAuth><OnboardingBrandPage /></RequireAuth>} />
             {/* Root redirects: unauthed → /landing, authed → /brand. */}
             <Route path="/"  element={<RootRedirect />} />
             <Route path="*"  element={<RootRedirect />} />

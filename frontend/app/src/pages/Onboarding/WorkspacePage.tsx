@@ -78,10 +78,9 @@ export function WorkspacePage() {
         body: JSON.stringify({ name: trimmed })
       });
       toast({ title: 'Workspace created', status: 'success', duration: 2500 });
-      // Phase 2 will replace this with /onboarding/brand. For now we
-      // hand off to the existing /brand page where the user can
-      // create their first Brand manually.
-      navigate('/brand', { replace: true });
+      // Hand off to brand-create (Phase 2). Phase 3 will pick up
+      // from there with the connect-flow stepper.
+      navigate('/onboarding/brand', { replace: true });
     } catch (e) {
       toast({
         title:       'Could not create workspace',

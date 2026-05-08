@@ -13,9 +13,9 @@
 //   Danger Zone
 //   SaveBar (sticky, surfaces only when editing/dirty)
 
-import { Box, VStack, HStack, SimpleGrid, Text, Spinner, Card, CardBody, useToast } from '@chakra-ui/react';
+import { Box, VStack, HStack, SimpleGrid, Text, Spinner, Card, CardBody, Button, useToast } from '@chakra-ui/react';
 import { useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link as RouterLink } from 'react-router-dom';
 import { useBrandDetail } from './useBrandDetail';
 import { useBrandEdit } from './useBrandEdit';
 import { BrandHeader } from './Header';
@@ -36,23 +36,23 @@ export function BrandPage() {
   const edit = useBrandEdit(brand, refresh);
   const toast = useToast();
 
-  // Onboarding OAuth bounce — when /onboarding/connect kicked off
-  // an integration OAuth, the provider's callback always lands on
-  // /brand (per integrations.js's buildIntegrationBounceUrl). The
-  // connect page stamped localStorage.onboarding_resume_to before
-  // navigating, so we redirect back, preserving the callback's
-  // status query params (?ig_status=… etc) so the connect page can
-  // toast the result.
+  // Onboarding mode — when /onboarding/connect kicked off an
+  // integration OAuth, the provider's callback always lands on
+  // /brand (per integrations.js's buildIntegrationBounceUrl).
+  // We surface a "Resume onboarding" banner instead of an
+  // auto-redirect: the credential picker (IGPickerModal /
+  // AdsPickerModal / etc.) auto-opens on this page on landing, and
+  // an immediate redirect would steal it. Banner stays until the
+  // operator dismisses or navigates back.
+  const [onboardingResumeTo, setOnboardingResumeTo] = useState<string | null>(null);
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const resumeTo = localStorage.getItem('onboarding_resume_to');
-    if (!resumeTo) return;
-    const search = window.location.search || '';
-    const hasOAuthParams = /\b(ig_status|ig_setup|ads_status|google_status)=/.test(search);
-    if (!hasOAuthParams) return;
-    localStorage.removeItem('onboarding_resume_to');
-    window.location.replace(`${resumeTo}${search}`);
+    setOnboardingResumeTo(localStorage.getItem('onboarding_resume_to'));
   }, []);
+  const dismissOnboardingBanner = () => {
+    localStorage.removeItem('onboarding_resume_to');
+    setOnboardingResumeTo(null);
+  };
 
   // Imperative handle into IntegrationsCard so the post-OAuth bounce
   // params (ig_setup / ads_setup) can pop the appropriate picker open
@@ -124,6 +124,36 @@ export function BrandPage() {
       <Breadcrumb brandName={brand.name} />
 
       <VStack align="stretch" spacing={5} mt={3} pb={20}>
+        {onboardingResumeTo && (
+          <Card bg="rsViolet.50" borderColor="rsViolet.200">
+            <CardBody>
+              <HStack justify="space-between" align="center" wrap="wrap" spacing={3}>
+                <Box>
+                  <Text fontWeight="700" color="brand.ink">You're mid-onboarding</Text>
+                  <Text fontSize="sm" color="brand.muted">
+                    Finish any picker that's open above (Page / Catalog / Ad Account selection), then continue
+                    where you left off.
+                  </Text>
+                </Box>
+                <HStack spacing={2}>
+                  <Button size="sm" variant="ghost" onClick={dismissOnboardingBanner}>
+                    Dismiss
+                  </Button>
+                  <Button
+                    as={RouterLink}
+                    to={onboardingResumeTo}
+                    size="sm"
+                    variant="brand"
+                    onClick={dismissOnboardingBanner}
+                  >
+                    Resume onboarding →
+                  </Button>
+                </HStack>
+              </HStack>
+            </CardBody>
+          </Card>
+        )}
+
         <BrandHeader brand={brand} edit={edit} onChanged={refresh} />
 
         {brand?._id && <OnboardingStatusPanel brandId={brand._id} />}

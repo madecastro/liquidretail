@@ -22,19 +22,27 @@ type TemplateOption = {
   description:  string;
   ratios:       string[];
   schematic:    'spotlight' | 'split' | 'testimonial-overlay' | 'product-overlay';
+  disabled?:    boolean;
 };
 
+// V1 ships 1:1, 9:16, 16:9 — other ratios are filtered server-side.
+const SHIPPING_RATIOS = ['1:1', '9:16', '16:9'];
+
+// Max templates the operator can pick per generation. Keeps the
+// cartesian (templates × ratios = up to MAX_TEMPLATES × 3 ratios)
+// inside the MAX_CREATIVES_PER_RUN cap on the backend (10).
+const MAX_TEMPLATES_PER_RUN = 2;
+
 // Mirrors server/services/campaignAdsGenerationService.js SUPPORTED_TEMPLATES.
-// Aspect ratios reflect rsSocialProof.templates.normalized.json — all four
-// templates currently support the same 5 ratios; per-template variation
-// will land here once that diverges.
+// Overlay templates are temporarily disabled in the UI until layout
+// polish lands; the backend still accepts them via direct API.
 const TEMPLATES: TemplateOption[] = [
   {
     id: 'testimonial_spotlight',
     label: 'Testimonial Spotlight',
     emphasis: 'Quote-first',
     description: 'Editorial layout — a single hero testimonial, paired with product + rating support.',
-    ratios: ['1:1', '4:5', '9:16', '16:9', '1.91:1'],
+    ratios: SHIPPING_RATIOS,
     schematic: 'spotlight'
   },
   {
@@ -42,7 +50,7 @@ const TEMPLATES: TemplateOption[] = [
     label: 'UGC Split-Screen',
     emphasis: 'UGC-first',
     description: 'Creator media on one side, copy + product card on the other — feels native to social.',
-    ratios: ['1:1', '4:5', '9:16', '16:9', '1.91:1'],
+    ratios: SHIPPING_RATIOS,
     schematic: 'split'
   },
   {
@@ -50,16 +58,18 @@ const TEMPLATES: TemplateOption[] = [
     label: 'Testimonial Overlay',
     emphasis: 'Image-first',
     description: 'Full-bleed photo with floating headline, quote, and CTA placed in subject-safe regions.',
-    ratios: ['1:1', '4:5', '9:16', '16:9', '1.91:1'],
-    schematic: 'testimonial-overlay'
+    ratios: SHIPPING_RATIOS,
+    schematic: 'testimonial-overlay',
+    disabled: true
   },
   {
     id: 'product_overlay',
     label: 'Product Overlay',
     emphasis: 'Image-first',
     description: 'Full-bleed photo with a floating product card (image + name + price) and CTA.',
-    ratios: ['1:1', '4:5', '9:16', '16:9', '1.91:1'],
-    schematic: 'product-overlay'
+    ratios: SHIPPING_RATIOS,
+    schematic: 'product-overlay',
+    disabled: true
   }
 ];
 
@@ -70,10 +80,19 @@ type Props = {
 
 export function Step3Settings({ value, onChange }: Props) {
   const toggleTemplate = (id: string) => {
+    const tpl = TEMPLATES.find(t => t.id === id);
+    if (tpl?.disabled) return;
     const set = new Set(value.templateIds);
-    if (set.has(id)) set.delete(id); else set.add(id);
+    if (set.has(id)) {
+      set.delete(id);
+    } else {
+      if (set.size >= MAX_TEMPLATES_PER_RUN) return;
+      set.add(id);
+    }
     onChange({ templateIds: Array.from(set) });
   };
+
+  const atCap = value.templateIds.length >= MAX_TEMPLATES_PER_RUN;
 
   return (
     <StepShell heading="Settings" helper="Templates fan out across selected products. CTA + tracking params apply to every rendered ad.">
@@ -81,21 +100,26 @@ export function Step3Settings({ value, onChange }: Props) {
         {/* Templates */}
         <Box>
           <Text fontSize="xs" fontWeight="700" color="brand.muted" textTransform="uppercase" letterSpacing="0.04em" mb={2}>
-            Templates ({value.templateIds.length} selected)
+            Templates ({value.templateIds.length} of {MAX_TEMPLATES_PER_RUN} selected)
           </Text>
           <SimpleGrid columns={{ base: 1, sm: 2, lg: 4 }} spacing={3}>
             {TEMPLATES.map(t => {
               const selected = value.templateIds.includes(t.id);
+              const disabled = !!t.disabled;
+              const capLocked = !selected && !disabled && atCap;
+              const inactive = disabled || capLocked;
               return (
                 <Card
                   key={t.id}
                   variant="outline"
-                  onClick={() => toggleTemplate(t.id)}
-                  cursor="pointer"
+                  onClick={inactive ? undefined : () => toggleTemplate(t.id)}
+                  cursor={inactive ? 'not-allowed' : 'pointer'}
                   borderColor={selected ? 'rsViolet.400' : 'brand.border'}
                   bg={selected ? 'rsViolet.50' : 'brand.surface'}
+                  opacity={disabled ? 0.45 : (capLocked ? 0.7 : 1)}
                   transition="all 120ms"
-                  _hover={{ borderColor: 'rsViolet.300' }}
+                  _hover={inactive ? undefined : { borderColor: 'rsViolet.300' }}
+                  aria-disabled={inactive}
                 >
                   <CardBody p={3}>
                     <Schematic kind={t.schematic} />
@@ -111,6 +135,11 @@ export function Step3Settings({ value, onChange }: Props) {
                       <Tag mt={2} size="sm" colorScheme="green" variant="subtle">
                         <TagLeftIcon as={CheckIcon} />
                         <TagLabel>Selected</TagLabel>
+                      </Tag>
+                    )}
+                    {disabled && (
+                      <Tag mt={2} size="sm" colorScheme="gray" variant="subtle">
+                        <TagLabel>Coming soon</TagLabel>
                       </Tag>
                     )}
                   </CardBody>

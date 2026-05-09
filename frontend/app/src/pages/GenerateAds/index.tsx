@@ -111,11 +111,18 @@ export function GenerateAdsWizard() {
 
   const update = (patch: Partial<WizardSelections>) =>
     setSelections(prev => {
-      // Changing the campaign invalidates downstream selections —
-      // products are scoped to the previous campaign, so clear them
-      // so Step 2's auto-select can re-fire against the new match set.
-      if (patch.campaignId !== undefined && patch.campaignId !== prev.campaignId) {
-        return { ...prev, ...patch, productIds: [] };
+      // Changing the campaign invalidates downstream selections — but
+      // ONLY when the operator is switching between two real campaigns
+      // mid-wizard. The first-time selection (prev.campaignId is null →
+      // first pick) must preserve any deep-linked productIds / mediaIds
+      // the wizard arrived with from the Media Library or Catalog
+      // Browser, otherwise they're silently dropped on Step 1.
+      const switchingExistingCampaign =
+        patch.campaignId !== undefined
+        && patch.campaignId !== prev.campaignId
+        && !!prev.campaignId;
+      if (switchingExistingCampaign) {
+        return { ...prev, ...patch, productIds: [], mediaIds: [] };
       }
       return { ...prev, ...patch };
     });

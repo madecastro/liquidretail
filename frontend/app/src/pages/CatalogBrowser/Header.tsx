@@ -64,7 +64,7 @@ export function CatalogHeader({ product, totalMatches }: { product: CatalogDetai
       <Button
         variant="brand"
         size="sm"
-        onClick={() => navigate(`/generate-ads?productIds=${encodeURIComponent(product.id)}&step=products`)}
+        onClick={() => navigate(`/generate-ads?productIds=${encodeURIComponent(product.id)}`)}
       >
         Generate Ads →
       </Button>

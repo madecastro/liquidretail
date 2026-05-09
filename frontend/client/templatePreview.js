@@ -1079,7 +1079,11 @@
     // sitting on a near-white palette pick = washed out.
     const autoPairs = [
       ['cta_button_bg', 'cta_button_text'],
-      ['proof_bar_bg',  'proof_bar_text']
+      ['proof_bar_bg',  'proof_bar_text'],
+      // panel_text_color drives panel-attached secondary text (eyebrow,
+      // badges, anything sitting directly on the panel without its own
+      // bg). White on dark panels, dark on light panels.
+      ['panel_bg',      'panel_text_color']
     ];
     for (const [bgKey, textKey] of autoPairs) {
       const bg = bindings[bgKey];

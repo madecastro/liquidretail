@@ -653,7 +653,7 @@
     .tp-zone.kind-product_card.style-with_thumbnail .tp-product-card-name {
       font-size: 1em;
       font-weight: 700;
-      color: #FFFFFF;
+      color: var(--tp-style-panel-text-color, #FFFFFF);
       letter-spacing: 0.01em;
     }
     .tp-zone.kind-product_card.style-with_thumbnail .tp-product-card-price {
@@ -844,9 +844,10 @@
       background: var(--tp-style-accent-border-color, var(--brand-accent, #FF6B35));
       opacity: 0.85;
     }
-    /* White text inside eyebrow_rules — sits on the dark panel. Always
-       white regardless of brand-text-on inheritance. */
-    .tp-zone.kind-eyebrow_rules .tp-eyebrow-text { flex: 0 0 auto; color: #FFFFFF; }
+    /* Eyebrow text reads panel_text_color (auto-derived from panel_bg
+       luminance via the renderer's autoPairs) so it flips dark on light
+       panels. Falls back to white if the binding is missing. */
+    .tp-zone.kind-eyebrow_rules .tp-eyebrow-text { flex: 0 0 auto; color: var(--tp-style-panel-text-color, #FFFFFF); }
 
     /* Display script headline — palette-gradient text used for the
        "SOMETHING NEW IS COMING IN HOT" headline in landscape
@@ -951,18 +952,17 @@
       color: var(--tp-style-rating-star-color, #FFD400);
       letter-spacing: 0.04em; font-size: 1.05em;
     }
-    /* All proof_bar text reads white on the dark lifted panel — only
-       the stars stay yellow. Hardcoded to avoid brightness-derived
-       inheritance returning a non-white value when the resolved bg
-       happens to be light. */
-    .tp-zone.kind-proof_bar.style-with_verified_buyers .tp-proof-rating  { color: #FFFFFF; font-weight: 800; font-size: 1.1em; }
-    .tp-zone.kind-proof_bar.style-with_verified_buyers .tp-proof-reviews { color: #FFFFFF; opacity: 0.85; font-size: 0.85em; }
+    /* Proof_bar text reads proof_bar_text (auto-from-brightness against
+       proof_bar_bg) so it flips dark on light bars. Stars stay yellow.
+       Falls back to white if the binding is missing. */
+    .tp-zone.kind-proof_bar.style-with_verified_buyers .tp-proof-rating  { color: var(--tp-style-proof-bar-text, #FFFFFF); font-weight: 800; font-size: 1.1em; }
+    .tp-zone.kind-proof_bar.style-with_verified_buyers .tp-proof-reviews { color: var(--tp-style-proof-bar-text, #FFFFFF); opacity: 0.85; font-size: 0.85em; }
     .tp-zone.kind-proof_bar.style-with_verified_buyers .tp-proof-divider {
       flex: 0 0 auto; width: 1px; height: 1.4em; background: rgba(255,255,255,0.25); margin: 0 0.3em;
     }
     .tp-zone.kind-proof_bar.style-with_verified_buyers .tp-proof-verified {
       display: inline-flex; align-items: center; gap: 0.3em;
-      color: #FFFFFF;
+      color: var(--tp-style-proof-bar-text, #FFFFFF);
       letter-spacing: 0.06em; font-weight: 700; text-transform: uppercase;
     }
     .tp-zone.kind-proof_bar.style-with_verified_buyers .tp-proof-shield {
@@ -1086,7 +1086,7 @@
          this base. */
       font-size: calc(0.28em * var(--tp-zone-scale, 1));
       font-weight: 700;
-      color: #FFFFFF;
+      color: var(--tp-style-panel-text-color, #FFFFFF);
       text-transform: uppercase;
       letter-spacing: 0.05em;
       line-height: 1.1;

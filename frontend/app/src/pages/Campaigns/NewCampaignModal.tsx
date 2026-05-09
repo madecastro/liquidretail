@@ -77,7 +77,7 @@ export function NewCampaignModal({ isOpen, onClose }: { isOpen: boolean; onClose
       // on Step 2 where the ribbon picker handles selection.
       const params = new URLSearchParams({
         campaignId: res.campaign.id,
-        step:       kind === 'brand' ? 'settings' : 'products'
+        step:       'products'
       });
       navigate(`/generate-ads?${params.toString()}`);
       onClose();

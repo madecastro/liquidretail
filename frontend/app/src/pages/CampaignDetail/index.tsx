@@ -159,9 +159,12 @@ export function CampaignDetailPage() {
   };
 
   const launchWizard = (opts?: { onlyPinned?: boolean }) => {
+    // Always land on Step 2 — even brand campaigns benefit from showing
+    // pinned items in the picker. The Step 2 gate accepts brand campaigns
+    // with no picks, so the operator can proceed straight through.
     const params = new URLSearchParams({
       campaignId: campaign.id,
-      step:       campaign.kind === 'brand' ? 'settings' : 'products'
+      step:       'products'
     });
     // The picker auto-loads pinned items via /api/campaigns/:id, but
     // when the operator clicks "Generate from pinned only" we ALSO

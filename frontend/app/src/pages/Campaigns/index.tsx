@@ -271,7 +271,7 @@ function CampaignRow({ campaign: c }: { campaign: Campaign }) {
           </Box>
           <Button
             as={RouterLink}
-            to={`/generate-ads?campaignId=${c.id}&step=${c.kind === 'brand' ? 'settings' : 'products'}`}
+            to={`/generate-ads?campaignId=${c.id}&step=products`}
             variant="brand"
             size="sm"
             flexShrink={0}

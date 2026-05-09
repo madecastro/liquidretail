@@ -25,7 +25,12 @@ import { Step4Generate } from './Step4Generate';
 export type WizardStepKey = 'campaign' | 'products' | 'settings' | 'generate';
 
 export type WizardSelections = {
-  campaignId:  string | null;
+  campaignId:   string | null;
+  // Hydrated by Step 2 from /api/campaigns/:id. Lets the wizard know
+  // when a brand-mode campaign is active so we can relax Step 2's
+  // "must pick something" gate (brand campaigns seed brand_match
+  // media on the backend without explicit picks).
+  campaignKind: string | null;
   productIds:  string[];
   // Pre-populated when the wizard is deep-linked from the media
   // library's "Generate Ads" button. Each id rides through to the
@@ -65,13 +70,14 @@ export function GenerateAdsWizard() {
   const step: WizardStepKey = STEPS.some(s => s.key === stepFromUrl) ? stepFromUrl : 'campaign';
 
   const [selections, setSelections] = useState<WizardSelections>({
-    campaignId:  initialCampaignId,
-    productIds:  initialProductIds,
-    mediaIds:    initialMediaIds,
-    templateIds: [],
-    ctaText:     '',
-    ctaUrl:      '',
-    urlParams:   ''
+    campaignId:   initialCampaignId,
+    campaignKind: null,
+    productIds:   initialProductIds,
+    mediaIds:     initialMediaIds,
+    templateIds:  [],
+    ctaText:      '',
+    ctaUrl:       '',
+    urlParams:    ''
   });
 
   // Keep ?campaignId / ?mediaIds / ?productIds clean once we've
@@ -118,7 +124,14 @@ export function GenerateAdsWizard() {
   // wizard footer reads this to enable/disable Next.
   const canProceed = useMemo(() => {
     if (step === 'campaign') return !!selections.campaignId;
-    if (step === 'products') return selections.productIds.length > 0 || selections.mediaIds.length > 0;
+    // Brand-mode campaigns can proceed with no picks — the seeder
+    // falls back to brand_match media. Product/synced campaigns
+    // still require a picked product or media.
+    if (step === 'products') {
+      return selections.productIds.length > 0
+          || selections.mediaIds.length > 0
+          || selections.campaignKind === 'brand';
+    }
     if (step === 'settings') return selections.templateIds.length > 0 && selections.ctaText.trim().length > 0;
     return true;
   }, [step, selections]);

@@ -135,18 +135,23 @@ export function Step2Picker({ value, onChange }: Props) {
   useEffect(() => {
     if (!value.campaignId) return;
     let cancelled = false;
-    apiJson<{ pinnedProducts: { id: string }[]; pinnedMedia: { id: string }[] }>(
-      `/api/campaigns/${value.campaignId}`
-    )
+    apiJson<{
+      campaign: { kind: string | null };
+      pinnedProducts: { id: string }[];
+      pinnedMedia: { id: string }[];
+    }>(`/api/campaigns/${value.campaignId}`)
       .then(res => {
         if (cancelled) return;
         const pinnedProductIds = (res.pinnedProducts || []).map(p => p.id);
         const pinnedMediaIds   = (res.pinnedMedia    || []).map(m => m.id);
-        if (!pinnedProductIds.length && !pinnedMediaIds.length) return;
-        onChange({
-          productIds: Array.from(new Set([...value.productIds, ...pinnedProductIds])),
-          mediaIds:   Array.from(new Set([...value.mediaIds,   ...pinnedMediaIds]))
-        });
+        const campaignKind     = res.campaign?.kind || null;
+        // Stash kind so the wizard's Step 2 gate can let brand
+        // campaigns proceed without picks. Always patch it (even
+        // when null) so a campaign change resets the prior value.
+        const patch: { campaignKind: string | null; productIds?: string[]; mediaIds?: string[] } = { campaignKind };
+        if (pinnedProductIds.length) patch.productIds = Array.from(new Set([...value.productIds, ...pinnedProductIds]));
+        if (pinnedMediaIds.length)   patch.mediaIds   = Array.from(new Set([...value.mediaIds,   ...pinnedMediaIds]));
+        onChange(patch);
       })
       .catch(() => { /* non-blocking — pinned hydration is best-effort */ });
     return () => { cancelled = true; };

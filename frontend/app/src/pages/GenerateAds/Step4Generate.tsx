@@ -32,7 +32,13 @@ export function Step4Generate({ value }: Props) {
   const toast = useToast();
   const navigate = useNavigate();
 
-  const totalCreatives = value.productIds.length * value.templateIds.length;
+  // Each seed (a picked product OR a picked media) cartesians against
+  // every selected template × shipping ratio. Media-only seeds are
+  // valid — seedFromMedia falls back to brand_match when no PMA links
+  // them to a product. Backend caps the total at MAX_CREATIVES_PER_RUN
+  // (6 today) regardless of this number.
+  const seedCount     = value.productIds.length + value.mediaIds.length;
+  const totalCreatives = seedCount * value.templateIds.length;
   const composedUrl = composeCtaUrl(value.ctaUrl, value.urlParams);
 
   const generate = async () => {
@@ -84,6 +90,14 @@ export function Step4Generate({ value }: Props) {
           }
         />
         <SummaryRow
+          label="Media"
+          value={
+            value.mediaIds.length
+              ? `${value.mediaIds.length} media selected`
+              : '— none —'
+          }
+        />
+        <SummaryRow
           label="Templates"
           value={
             value.templateIds.length
@@ -106,7 +120,7 @@ export function Step4Generate({ value }: Props) {
             <HStack spacing={2} mt={1}>
               <Text fontSize="lg" fontWeight="800" color="brand.ink">{totalCreatives}</Text>
               <Text fontSize="sm" color="brand.muted">
-                creative{totalCreatives === 1 ? '' : 's'} ({value.productIds.length} products × {value.templateIds.length} templates)
+                creative{totalCreatives === 1 ? '' : 's'} ({seedCount} seed{seedCount === 1 ? '' : 's'} × {value.templateIds.length} template{value.templateIds.length === 1 ? '' : 's'}, capped at 6 per run)
               </Text>
             </HStack>
           </Box>
@@ -116,15 +130,20 @@ export function Step4Generate({ value }: Props) {
             onClick={generate}
             isLoading={busy}
             loadingText="Generating…"
-            isDisabled={totalCreatives === 0 || !value.ctaText.trim()}
+            isDisabled={seedCount === 0 || value.templateIds.length === 0 || !value.ctaText.trim()}
           >
             Generate Ads
           </Button>
         </HStack>
 
-        {totalCreatives === 0 && (
+        {seedCount === 0 && (
           <Badge alignSelf="flex-start" colorScheme="orange" variant="subtle" fontSize="10px">
-            Pick at least one product and one template to enable Generate.
+            Pick at least one product or one media to enable Generate.
+          </Badge>
+        )}
+        {seedCount > 0 && value.templateIds.length === 0 && (
+          <Badge alignSelf="flex-start" colorScheme="orange" variant="subtle" fontSize="10px">
+            Pick at least one template on Step 3 to enable Generate.
           </Badge>
         )}
       </VStack>

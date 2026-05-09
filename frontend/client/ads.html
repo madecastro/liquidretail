@@ -1014,7 +1014,11 @@
       grid-row: 1; grid-column: 2;
       font-style: italic;
       font-weight: 500;
-      color: #FFFFFF;
+      /* Inherits color from .tp-zone.kind-quote_card (which uses
+         --brand-text-on-secondary, auto-derived against the card's bg).
+         Previously hardcoded white — that broke when card bg resolved
+         light. */
+      color: inherit;
       /* center vertically in row 1. The reflowColumnUnderQuoteCard
          pass shrinks the slot to natural content height when the
          quote is short, so centering doesn't usually leave visible
@@ -1041,17 +1045,25 @@
       display: flex; flex-direction: column; gap: 0.1em; line-height: 1;
     }
     .tp-zone.kind-quote_card.style-with_author_photo .tp-quote-author-name {
-      color: var(--tp-style-accent-border-color, var(--brand-accent, #FF6B35));
+      /* Inherit parent quote_card color (auto-derived against the
+         card's actual bg) instead of accent_border_color, which is
+         resolved against panel_bg and can land dark-on-dark when the
+         card sits on brand-secondary. */
+      color: inherit;
       font-weight: 800; font-size: 0.78em; letter-spacing: 0.04em;
       text-transform: uppercase;
     }
     .tp-zone.kind-quote_card.style-with_author_photo .tp-quote-verified {
       display: inline-block; margin-left: 0.3em;
-      color: var(--tp-style-accent-border-color, var(--brand-accent, #FF6B35));
+      color: inherit;
       font-weight: 800;
     }
     .tp-zone.kind-quote_card.style-with_author_photo .tp-quote-verified-tag {
-      color: rgba(255,255,255,0.7); font-size: 0.65em; letter-spacing: 0.05em;
+      /* Inherit parent's auto-derived color and de-emphasize via
+         opacity rather than a hardcoded translucent white that fails
+         on light card bgs. */
+      color: inherit; opacity: 0.7;
+      font-size: 0.65em; letter-spacing: 0.05em;
       text-transform: uppercase; font-weight: 600;
     }
 

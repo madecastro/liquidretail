@@ -26,15 +26,13 @@ export function CatalogHeader({ product, totalMatches }: { product: CatalogDetai
           </Badge>
           {product.draft && <Badge fontSize="9px" variant="subtle" colorScheme="orange">Draft</Badge>}
         </HStack>
-        <HStack spacing={3} wrap="wrap">
-          <Text fontSize="xs" color="brand.muted">{product.brand || '—'}</Text>
-          {product.categoryBreadcrumb && (
-            <Text fontSize="xs" color="brand.muted">· {product.categoryBreadcrumb}</Text>
-          )}
-          {product.lastSyncedAt && (
-            <Text fontSize="xs" color="brand.muted">· last sync {timeAgo(product.lastSyncedAt)}</Text>
-          )}
-        </HStack>
+        <Text fontSize="xs" color="brand.muted" noOfLines={1} w="100%">
+          {[
+            product.brand || '—',
+            product.categoryBreadcrumb || null,
+            product.lastSyncedAt ? `last sync ${timeAgo(product.lastSyncedAt)}` : null
+          ].filter(Boolean).join(' · ')}
+        </Text>
       </VStack>
 
       <VStack align="flex-end" spacing={0.5} flexShrink={0}>

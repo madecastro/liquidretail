@@ -39,6 +39,8 @@ type Campaign = {
   name:          string;
   status:        string | null;
   objective:     string | null;
+  kind:          string | null;
+
   budget:        { dailyMicros: number | null; lifetimeMicros: number | null; currency: string | null } | null;
   schedule:      { start: string | null; end: string | null } | null;
   productSetIds: string[];
@@ -254,7 +256,7 @@ function CampaignRow({ campaign: c }: { campaign: Campaign }) {
           </Box>
           <Button
             as={RouterLink}
-            to={`/generate-ads?campaignId=${c.id}`}
+            to={`/generate-ads?campaignId=${c.id}&step=${c.kind === 'brand' ? 'settings' : 'products'}`}
             variant="brand"
             size="sm"
             flexShrink={0}

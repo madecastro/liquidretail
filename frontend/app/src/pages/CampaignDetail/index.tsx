@@ -80,6 +80,8 @@ export function CampaignDetailPage() {
   const [products, setProducts]   = useState<ProductRow[]>([]);
   const [media, setMedia]         = useState<MediaRow[]>([]);
   const [ads, setAds]             = useState<AdRow[]>([]);
+  const [pinnedProductIds, setPinnedProductIds] = useState<string[]>([]);
+  const [pinnedMediaIds, setPinnedMediaIds]     = useState<string[]>([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState<string | null>(null);
 
@@ -90,15 +92,23 @@ export function CampaignDetailPage() {
     try {
       // Campaign + linked products land via /api/campaigns/:id/products
       // (existing endpoint hydrates products + campaign meta in one trip).
-      const [productsRes, mediaRes, adsRes] = await Promise.all([
+      const [productsRes, mediaRes, adsRes, detailRes] = await Promise.all([
         apiJson<{ campaign: Campaign; products: ProductRow[] }>(`/api/campaigns/${id}/products`),
         apiJson<{ media: MediaRow[] }>(`/api/campaigns/${id}/media`),
-        apiJson<{ ads: AdRow[] }>(`/api/ads?brandId=${encodeURIComponent(activeBrandId)}&campaignId=${encodeURIComponent(id)}&limit=200`)
+        apiJson<{ ads: AdRow[] }>(`/api/ads?brandId=${encodeURIComponent(activeBrandId)}&campaignId=${encodeURIComponent(id)}&limit=200`),
+        // Detail endpoint surfaces pinnedProducts + pinnedMedia (items
+        // added to this campaign that aren't yet on any Ad). We only
+        // need the ids — the hydrated rows already come back via the
+        // /products + /media endpoints above.
+        apiJson<{ pinnedProducts: { id: string }[]; pinnedMedia: { id: string }[] }>(`/api/campaigns/${id}`)
+          .catch(() => ({ pinnedProducts: [], pinnedMedia: [] }))
       ]);
       setCampaign(productsRes.campaign);
       setProducts(productsRes.products || []);
       setMedia(mediaRes.media || []);
       setAds(adsRes.ads || []);
+      setPinnedProductIds((detailRes.pinnedProducts || []).map(p => p.id));
+      setPinnedMediaIds((detailRes.pinnedMedia    || []).map(m => m.id));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load campaign');
     } finally {
@@ -148,11 +158,19 @@ export function CampaignDetailPage() {
     }
   };
 
-  const launchWizard = () => {
+  const launchWizard = (opts?: { onlyPinned?: boolean }) => {
     const params = new URLSearchParams({
       campaignId: campaign.id,
       step:       campaign.kind === 'brand' ? 'settings' : 'products'
     });
+    // The picker auto-loads pinned items via /api/campaigns/:id, but
+    // when the operator clicks "Generate from pinned only" we ALSO
+    // pre-pop the wizard's mediaIds/productIds URL params so picks
+    // fire immediately rather than waiting on the picker's hydration.
+    if (opts?.onlyPinned) {
+      if (pinnedProductIds.length) params.set('productIds', pinnedProductIds.join(','));
+      if (pinnedMediaIds.length)   params.set('mediaIds',   pinnedMediaIds.join(','));
+    }
     navigate(`/generate-ads?${params.toString()}`);
   };
 
@@ -190,10 +208,31 @@ export function CampaignDetailPage() {
               )}
               <Text fontSize="xs" color="brand.muted" mt={1}>{campaign.externalId}</Text>
             </Box>
-            <Button variant="brand" onClick={launchWizard}>Generate Ads</Button>
+            <Button variant="brand" onClick={() => launchWizard()}>Generate Ads</Button>
           </HStack>
         </CardBody>
       </Card>
+
+      {(pinnedProductIds.length > 0 || pinnedMediaIds.length > 0) && (
+        <Card variant="outline" bg="rsViolet.50" borderColor="rsViolet.200">
+          <CardBody>
+            <HStack justify="space-between" wrap="wrap" spacing={3}>
+              <Box>
+                <Text fontSize="xs" fontWeight="800" color="rsViolet.700" textTransform="uppercase" letterSpacing="0.06em">
+                  Queued for ad generation
+                </Text>
+                <Text fontSize="sm" color="brand.ink" mt={1}>
+                  {pinnedProductIds.length} product{pinnedProductIds.length === 1 ? '' : 's'} ·{' '}
+                  {pinnedMediaIds.length} media — items added to this campaign that aren't on any rendered ad yet.
+                </Text>
+              </Box>
+              <Button variant="brand" size="sm" onClick={() => launchWizard({ onlyPinned: true })}>
+                Generate from pinned
+              </Button>
+            </HStack>
+          </CardBody>
+        </Card>
+      )}
 
       <Tabs colorScheme="purple" variant="enclosed">
         <TabList>

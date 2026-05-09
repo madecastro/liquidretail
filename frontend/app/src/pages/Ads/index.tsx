@@ -331,14 +331,31 @@ export function AdsPage() {
                 overflow="hidden"
                 style={{ aspectRatio: '1 / 1' }}
               >
-                <Image
-                  src={ad.renderUrl}
-                  alt={ad.copy.headline || ad.template}
-                  width="100%"
-                  height="100%"
-                  objectFit="contain"
-                  loading="lazy"
-                />
+                {ad.kind === 'video' ? (
+                  <video
+                    src={ad.renderUrl}
+                    poster={ad.posterUrl || undefined}
+                    muted
+                    loop
+                    playsInline
+                    autoPlay
+                    preload="metadata"
+                    style={{
+                      width: '100%', height: '100%',
+                      objectFit: 'contain', display: 'block',
+                      background: '#000'
+                    }}
+                  />
+                ) : (
+                  <Image
+                    src={ad.renderUrl}
+                    alt={ad.copy.headline || ad.template}
+                    width="100%"
+                    height="100%"
+                    objectFit="contain"
+                    loading="lazy"
+                  />
+                )}
                 <Badge
                   position="absolute"
                   top={2}
@@ -382,7 +399,18 @@ export function AdsPage() {
             {selected && (
               <VStack align="stretch" spacing={4}>
                 <Box bg="gray.900" borderRadius="md" overflow="hidden" style={{ aspectRatio: `${selected.width} / ${selected.height}` }}>
-                  <Image src={selected.renderUrl} alt={selected.copy.headline || selected.template} width="100%" height="100%" objectFit="contain" />
+                  {selected.kind === 'video' ? (
+                    <video
+                      src={selected.renderUrl}
+                      poster={selected.posterUrl || undefined}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', background: '#000' }}
+                    />
+                  ) : (
+                    <Image src={selected.renderUrl} alt={selected.copy.headline || selected.template} width="100%" height="100%" objectFit="contain" />
+                  )}
                 </Box>
                 <SimpleGrid columns={2} spacing={3}>
                   <DetailRow label="Template" value={selected.template} />

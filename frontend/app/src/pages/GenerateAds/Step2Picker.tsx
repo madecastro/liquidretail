@@ -17,7 +17,7 @@
 // won't proportionally produce more ads.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Box, VStack, HStack, Text, Badge, Button, Wrap, WrapItem } from '@chakra-ui/react';
+import { Box, VStack, HStack, Text, Button, Wrap, WrapItem, Image } from '@chakra-ui/react';
 import type { WizardSelections } from './index';
 import { StepShell } from './index';
 import { apiJson } from '../../auth/apiFetch';
@@ -81,6 +81,53 @@ export function Step2Picker({ value, onChange }: Props) {
       .finally(() => { if (!cancelled) setLoadingM(false); });
     return () => { cancelled = true; };
   }, [brandId]);
+
+  // Hydrate any pre-selected ids that aren't in the first page. The
+  // wizard arrives with productIds/mediaIds from URL params (Generate
+  // Ads triggered from the Media Library or Catalog Browser) or from
+  // campaign pinned items — those ids aren't guaranteed to be in the
+  // most-recent-50 the picker loads by default. Use the ?ids= batch
+  // hydration we just added on the backend to fetch them, then PREPEND
+  // to the ribbon arrays so they're highlighted at the front.
+  useEffect(() => {
+    if (!brandId) return;
+    const known = new Set(products.map(p => p.id));
+    const missing = value.productIds.filter(id => !known.has(id));
+    if (!missing.length) return;
+    let cancelled = false;
+    apiJson<{ products: ProductRow[] }>(`/api/catalog?brandId=${encodeURIComponent(brandId)}&ids=${missing.join(',')}`)
+      .then(res => {
+        if (cancelled || !res.products?.length) return;
+        setProducts(prev => {
+          const have = new Set(prev.map(p => p.id));
+          return [...res.products.filter(p => !have.has(p.id)), ...prev];
+        });
+      })
+      .catch(() => { /* best-effort hydration */ });
+    return () => { cancelled = true; };
+  }, [brandId, value.productIds, products]);
+
+  useEffect(() => {
+    if (!brandId) return;
+    const known = new Set(media.map(m => m.id));
+    const missing = value.mediaIds.filter(id => !known.has(id));
+    if (!missing.length) return;
+    let cancelled = false;
+    apiJson<{ media: MediaRow[] }>(`/api/media?brandId=${encodeURIComponent(brandId)}&ids=${missing.join(',')}`)
+      .then(res => {
+        if (cancelled || !res.media?.length) return;
+        const rows = (res.media || []).map(m => ({
+          ...(m as MediaRow & { mediaId?: string }),
+          id: (m as MediaRow & { mediaId?: string }).mediaId || (m as MediaRow).id
+        }));
+        setMedia(prev => {
+          const have = new Set(prev.map(m => m.id));
+          return [...rows.filter(m => !have.has(m.id)), ...prev];
+        });
+      })
+      .catch(() => { /* best-effort hydration */ });
+    return () => { cancelled = true; };
+  }, [brandId, value.mediaIds, media]);
 
   // Pre-fill from campaign pinned items the first time we have a
   // campaign selected. We don't overwrite operator picks — only fold
@@ -195,27 +242,32 @@ export function Step2Picker({ value, onChange }: Props) {
                 const p = products.find(x => x.id === id);
                 return (
                   <WrapItem key={`p-${id}`}>
-                    <Badge
-                      colorScheme="purple" variant="subtle" px={2} py={1} borderRadius="md"
-                      cursor="pointer"
-                      onClick={() => toggleProduct(id)}
-                    >
-                      Product · {p?.title || id.slice(-6)} ✕
-                    </Badge>
+                    <SelectionChip
+                      tone="purple"
+                      kindLabel="Product"
+                      label={p?.title || id.slice(-6)}
+                      thumbSrc={p?.imageUrl || null}
+                      onRemove={() => toggleProduct(id)}
+                    />
                   </WrapItem>
                 );
               })}
               {value.mediaIds.map(id => {
                 const m = media.find(x => x.id === id);
+                const thumbSrc = m
+                  ? (m.fileType === 'video' && m.fileUrl.includes('/video/upload/')
+                      ? m.fileUrl.replace('/video/upload/', '/video/upload/so_0/').replace(/\.(mp4|mov|webm|m4v)(\?.*)?$/i, '.jpg$2')
+                      : m.fileUrl)
+                  : null;
                 return (
                   <WrapItem key={`m-${id}`}>
-                    <Badge
-                      colorScheme="blue" variant="subtle" px={2} py={1} borderRadius="md"
-                      cursor="pointer"
-                      onClick={() => toggleMedia(id)}
-                    >
-                      Media · {m?.primarySubjectLabel || m?.creatorHandle || id.slice(-6)} ✕
-                    </Badge>
+                    <SelectionChip
+                      tone="blue"
+                      kindLabel="Media"
+                      label={m?.primarySubjectLabel || m?.creatorHandle || id.slice(-6)}
+                      thumbSrc={thumbSrc}
+                      onRemove={() => toggleMedia(id)}
+                    />
                   </WrapItem>
                 );
               })}
@@ -301,6 +353,51 @@ export function Step2Picker({ value, onChange }: Props) {
         )}
       </VStack>
     </StepShell>
+  );
+}
+
+function SelectionChip({
+  tone, kindLabel, label, thumbSrc, onRemove
+}: {
+  tone: 'purple' | 'blue';
+  kindLabel: string;
+  label: string;
+  thumbSrc: string | null;
+  onRemove: () => void;
+}) {
+  const bg = tone === 'purple' ? 'rsViolet.50' : 'blue.50';
+  const fg = tone === 'purple' ? 'rsViolet.700' : 'blue.700';
+  const border = tone === 'purple' ? 'rsViolet.200' : 'blue.200';
+  return (
+    <HStack
+      bg={bg}
+      borderWidth="1px"
+      borderColor={border}
+      borderRadius="md"
+      pl={thumbSrc ? 0 : 2}
+      pr={2}
+      py={thumbSrc ? 0 : 1}
+      spacing={2}
+      cursor="pointer"
+      onClick={onRemove}
+      role="button"
+      _hover={{ borderColor: tone === 'purple' ? 'rsViolet.400' : 'blue.400' }}
+    >
+      {thumbSrc && (
+        <Image
+          src={thumbSrc}
+          alt={label}
+          w="28px" h="28px"
+          objectFit="cover"
+          borderLeftRadius="md"
+          flexShrink={0}
+        />
+      )}
+      <Text fontSize="xs" color={fg} fontWeight="700" noOfLines={1} maxW="180px">
+        {kindLabel} · {label}
+      </Text>
+      <Text fontSize="xs" color={fg} fontWeight="800" pl={1}>✕</Text>
+    </HStack>
   );
 }
 

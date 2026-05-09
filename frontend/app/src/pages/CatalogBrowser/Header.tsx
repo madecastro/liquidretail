@@ -4,6 +4,7 @@ import { HStack, VStack, Text, Badge, Box, Link, IconButton, Icon, Button } from
 import { useNavigate } from 'react-router-dom';
 import { sourceTone, formatPrice, timeAgo } from './format';
 import type { CatalogDetail } from './types';
+import { AddToCampaignMenu } from '../MediaLibrary/AddToCampaignMenu';
 
 export function CatalogHeader({ product, totalMatches }: { product: CatalogDetail; totalMatches: number }) {
   const tone = sourceTone(product.source);
@@ -58,10 +59,12 @@ export function CatalogHeader({ product, totalMatches }: { product: CatalogDetai
         </Button>
       )}
 
+      <AddToCampaignMenu productIds={[product.id]} />
+
       <Button
         variant="brand"
         size="sm"
-        onClick={() => navigate(`/generate-ads?productIds=${encodeURIComponent(product.id)}`)}
+        onClick={() => navigate(`/generate-ads?productIds=${encodeURIComponent(product.id)}&step=products`)}
       >
         Generate Ads →
       </Button>

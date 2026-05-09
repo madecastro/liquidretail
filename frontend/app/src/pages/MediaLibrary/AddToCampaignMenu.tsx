@@ -1,8 +1,11 @@
-// "Add to Campaign" dropdown for the bottom action bar. Replaces the
-// older "Add to Collection" affordance — Collections has been folded
-// into Campaign (Campaign.mediaIds[] is the storage). Lists the active
-// brand's campaigns (reach-social and synced) plus an inline "+ New
-// campaign…" entry that opens the existing quick-builder flow.
+// "Add to Campaign" dropdown. Used by:
+//   - Media Library bottom action bar (mediaIds)
+//   - Catalog Browser header           (productIds)
+//
+// Lists the active brand's campaigns + an inline "+ New campaign…"
+// entry that routes to /campaigns?new=1.
+//
+// Props are an XOR: pass either { mediaIds } or { productIds }.
 
 import { useEffect, useState } from 'react';
 import {
@@ -21,18 +24,26 @@ type CampaignRow = {
   status:    string | null;
 };
 
-type Props = {
-  mediaIds:    string[];
+type Props = (
+  | { mediaIds: string[]; productIds?: never }
+  | { productIds: string[]; mediaIds?: never }
+) & {
   isDisabled?: boolean;
+  /** Override the button label; defaults based on which kind is passed. */
+  label?: string;
 };
 
-export function AddToCampaignMenu({ mediaIds, isDisabled }: Props) {
+export function AddToCampaignMenu(props: Props) {
   const toast = useToast();
   const navigate = useNavigate();
   const { activeBrand } = useBrand();
   const [campaigns, setCampaigns] = useState<CampaignRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  const kind: 'media' | 'product' = 'mediaIds' in props && props.mediaIds ? 'media' : 'product';
+  const ids = (kind === 'media' ? props.mediaIds : props.productIds) || [];
+  const label = props.label || (kind === 'media' ? 'Add to Campaign' : 'Add to Campaign');
 
   useEffect(() => {
     if (!activeBrand?.id) return;
@@ -46,16 +57,18 @@ export function AddToCampaignMenu({ mediaIds, isDisabled }: Props) {
   }, [activeBrand?.id]);
 
   const handleAdd = async (c: CampaignRow) => {
-    if (!mediaIds.length) return;
+    if (!ids.length) return;
     setBusyId(c.id);
     try {
-      await apiJson(`/api/campaigns/${c.id}/media`, {
+      const path = kind === 'media' ? 'media' : 'products';
+      const body = kind === 'media' ? { mediaIds: ids } : { productIds: ids };
+      await apiJson(`/api/campaigns/${c.id}/${path}`, {
         method: 'POST',
-        body: JSON.stringify({ mediaIds })
+        body: JSON.stringify(body)
       });
       toast({
         title: `Added to "${c.name}"`,
-        description: `${mediaIds.length} media · pinned for ad generation`,
+        description: `${ids.length} ${kind} · pinned for ad generation`,
         status: 'success',
         duration: 2500
       });
@@ -72,14 +85,14 @@ export function AddToCampaignMenu({ mediaIds, isDisabled }: Props) {
   };
 
   return (
-    <Menu placement="top">
+    <Menu placement="bottom-end">
       <MenuButton
         as={Button}
         variant="outline"
         size="sm"
-        isDisabled={isDisabled || !mediaIds.length}
+        isDisabled={props.isDisabled || !ids.length}
       >
-        Add to Campaign
+        {label}
       </MenuButton>
       <MenuList maxH="340px" overflowY="auto" minW="260px">
         {loading ? (

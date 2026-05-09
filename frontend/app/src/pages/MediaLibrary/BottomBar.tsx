@@ -51,7 +51,7 @@ export function BottomBar({ selected, onDelete }: Props) {
       <Button
         variant="brand"
         size="sm"
-        onClick={() => navigate(`/generate-ads?mediaIds=${encodeURIComponent(selected.mediaId)}`)}
+        onClick={() => navigate(`/generate-ads?mediaIds=${encodeURIComponent(selected.mediaId)}&step=products`)}
       >
         Generate Ads →
       </Button>

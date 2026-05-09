@@ -549,6 +549,22 @@
     html.render-mode-video-overlay {
       background: transparent !important;
     }
+
+    /* And hide every element EXCEPT #tpStage's subtree. The standard
+       render-mode > * { display: none } rule hides direct body
+       children, but bootstrap re-enables those ancestors via
+       unhideStageAncestors() so #tpStage lays out — which also makes
+       the operator UI (template chips, debug panel, zone trace)
+       inside templatePreviewPanel visible again. With an opaque
+       stage background that didn't matter (the stage masked them),
+       but a transparent stage lets that chrome leak into the
+       screenshot. visibility:hidden doesn't cascade — children that
+       opt back in via visibility:visible show even when their
+       ancestor is visibility:hidden — so this hides everything,
+       then the stage subtree opts back in. */
+    body.render-mode-video-overlay * { visibility: hidden !important; }
+    body.render-mode-video-overlay #tpStage,
+    body.render-mode-video-overlay #tpStage * { visibility: visible !important; }
     .tp-zone {
       position: absolute; box-sizing: border-box; overflow: hidden;
       font-family: inherit;

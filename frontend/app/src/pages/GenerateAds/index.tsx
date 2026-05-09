@@ -18,7 +18,7 @@ import { useSearchParams, Link as RouterLink } from 'react-router-dom';
 import { Box, HStack, VStack, Button, Text, Heading, Flex, Badge } from '@chakra-ui/react';
 import { PageHeader } from '../../shell/PageHeader';
 import { Step1Campaign } from './Step1Campaign';
-import { Step2Products } from './Step2Products';
+import { Step2Picker } from './Step2Picker';
 import { Step3Settings } from './Step3Settings';
 import { Step4Generate } from './Step4Generate';
 
@@ -118,7 +118,7 @@ export function GenerateAdsWizard() {
   // wizard footer reads this to enable/disable Next.
   const canProceed = useMemo(() => {
     if (step === 'campaign') return !!selections.campaignId;
-    if (step === 'products') return selections.productIds.length > 0;
+    if (step === 'products') return selections.productIds.length > 0 || selections.mediaIds.length > 0;
     if (step === 'settings') return selections.templateIds.length > 0 && selections.ctaText.trim().length > 0;
     return true;
   }, [step, selections]);
@@ -135,7 +135,7 @@ export function GenerateAdsWizard() {
 
       <Box>
         {step === 'campaign' && <Step1Campaign value={selections} onChange={update} />}
-        {step === 'products' && <Step2Products value={selections} onChange={update} />}
+        {step === 'products' && <Step2Picker value={selections} onChange={update} />}
         {step === 'settings' && <Step3Settings value={selections} onChange={update} />}
         {step === 'generate' && <Step4Generate value={selections} />}
       </Box>

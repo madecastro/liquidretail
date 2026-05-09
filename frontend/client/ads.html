@@ -546,8 +546,21 @@
     body.render-mode-video-overlay,
     body.render-mode-video-overlay #tpStageFrame,
     body.render-mode-video-overlay #tpStage,
+    body.render-mode-video-overlay #templatePreviewPanel,
     html.render-mode-video-overlay {
       background: transparent !important;
+    }
+    /* Belt-and-braces: every ancestor of #tpStage walked by
+       unhideStageAncestors gets visibility:visible forced on it,
+       which lets their backgrounds paint. Section-card / nav /
+       any other dark surfaces leak through wherever #tpStage is
+       transparent (e.g. the slot region in video-overlay mode).
+       Force-zero the bg on every direct child of body except
+       script/style — they're all hidden ancestors at this point
+       and shouldn't render anything to the screenshot. */
+    body.render-mode-video-overlay > *:not(#templatePreviewPanel) {
+      background: transparent !important;
+      background-image: none !important;
     }
 
     /* And hide every element EXCEPT #tpStage's subtree. The standard

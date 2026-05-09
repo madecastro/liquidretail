@@ -1,24 +1,19 @@
-// Phase A-1 / A-3 — bottom action bar.
-// Delete (cascade) + Continue to Ad Generation are wired.
-// Add to Collection ships in A-3 (this commit).
-// Request Rights stays disabled — tracked under the dedicated rights-
-// management screen backlog row.
+// Bottom action bar.
+// Delete (cascade), Add to Campaign, and Continue to Ad Generation
+// are wired. Request Rights stays disabled — separate backlog ticket.
 
 import { HStack, Box, Text, Badge, Button, Tooltip } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import type { MediaListRow } from './types';
 import { matchLevelTone } from './format';
-import { AddToCollectionMenu } from './AddToCollectionMenu';
-import type { Collection } from './collectionsApi';
+import { AddToCampaignMenu } from './AddToCampaignMenu';
 
 type Props = {
-  selected:           MediaListRow | null;
-  onDelete:           () => void;
-  collections:        Collection[];
-  onCollectionsChanged: () => void;
+  selected:  MediaListRow | null;
+  onDelete:  () => void;
 };
 
-export function BottomBar({ selected, onDelete, collections, onCollectionsChanged }: Props) {
+export function BottomBar({ selected, onDelete }: Props) {
   const navigate = useNavigate();
   if (!selected) return <Box h="64px" bg="brand.surface" borderTopWidth="1px" borderTopColor="brand.border" />;
   const tone = matchLevelTone(selected.matchLevel);
@@ -51,11 +46,7 @@ export function BottomBar({ selected, onDelete, collections, onCollectionsChange
         <Button variant="outline" size="sm" isDisabled>Request Rights</Button>
       </Tooltip>
 
-      <AddToCollectionMenu
-        mediaIds={[selected.mediaId]}
-        collections={collections}
-        onChanged={onCollectionsChanged}
-      />
+      <AddToCampaignMenu mediaIds={[selected.mediaId]} />
 
       <Button
         variant="brand"

@@ -1,7 +1,7 @@
 // Phase 4a — danger zone for destructive brand operations.
 // Wires DELETE /api/brand/:id which cascades through cascadeDeleteBrand
-// (media + artifacts + catalog products + categories + collections +
-// integration credentials + campaigns + cloudinary).
+// (media + artifacts + catalog products + categories + integration
+// credentials + campaigns + cloudinary).
 //
 // Type-to-confirm matches the legacy brand.html UX so power users
 // can't fat-finger the delete.
@@ -38,7 +38,7 @@ export function DangerZone({ brand }: { brand: Brand }) {
               </Text>
               <Text fontSize="sm" fontWeight="700" color="brand.ink" mt={1}>Delete this brand</Text>
               <Text fontSize="xs" color="brand.muted" mt={0.5}>
-                Permanently removes this brand and all related data including collections, products, campaigns, and integrations. This action cannot be undone.
+                Permanently removes this brand and all related data including products, campaigns, media, and integrations. This action cannot be undone.
               </Text>
             </Box>
           </HStack>
@@ -113,7 +113,7 @@ function ConfirmDeleteModal({ isOpen, onClose, brand }: { isOpen: boolean; onClo
         <ModalBody>
           <VStack align="stretch" spacing={3}>
             <Text fontSize="sm">
-              This permanently deletes <Text as="span" fontWeight="700">{brand.name}</Text> and every related Media, CatalogProduct, Category, Collection, Campaign, and IntegrationCredential. Cloudinary assets are queued for cleanup. <Text as="span" fontWeight="700">This cannot be undone.</Text>
+              This permanently deletes <Text as="span" fontWeight="700">{brand.name}</Text> and every related Media, CatalogProduct, Category, Campaign, and IntegrationCredential. Cloudinary assets are queued for cleanup. <Text as="span" fontWeight="700">This cannot be undone.</Text>
             </Text>
             <FormControl>
               <FormLabel fontSize="xs" color="brand.muted">

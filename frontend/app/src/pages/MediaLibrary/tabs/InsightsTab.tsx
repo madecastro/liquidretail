@@ -14,9 +14,9 @@ import {
   Spinner, Badge, useToast, Avatar, Divider
 } from '@chakra-ui/react';
 import { apiJson } from '../../../auth/apiFetch';
-import type { MediaListRow } from '../types';
+import type { MediaListRow, DetectResult } from '../types';
 
-type Props = { row: MediaListRow | null };
+type Props = { row: MediaListRow | null; detect: DetectResult | null };
 
 type CommentRow = {
   id:             string;
@@ -43,13 +43,18 @@ type RefreshResponse = {
   commentsError: string | null;
 };
 
-export function InsightsTab({ row }: Props) {
+export function InsightsTab({ row, detect }: Props) {
   const toast = useToast();
   const [comments, setComments] = useState<CommentRow[] | null>(null);
   const [total, setTotal]       = useState(0);
   const [stats, setStats]       = useState<Record<string, number | string | null> | null>(null);
   const [loading, setLoading]   = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Seed stats from the detect endpoint's platformStats so persisted
+  // post analytics show on first render — Refresh button still pulls
+  // fresh numbers from IG when the operator wants them.
+  const persistedStats = detect?.platformStats || null;
 
   const loadComments = useCallback(async (mediaId: string) => {
     setLoading(true);
@@ -65,7 +70,9 @@ export function InsightsTab({ row }: Props) {
   }, [toast]);
 
   // Reset state when the selected media changes; load existing
-  // comments from Mongo (no IG round-trip yet).
+  // comments from Mongo (no IG round-trip yet). Stats reset to null
+  // here and the JSX falls back to persistedStats from the detect
+  // payload until the operator clicks Refresh.
   useEffect(() => {
     setStats(null);
     setComments(null);
@@ -116,7 +123,7 @@ export function InsightsTab({ row }: Props) {
         </Button>
       </HStack>
 
-      <StatsGrid stats={stats} />
+      <StatsGrid stats={stats || persistedStats} />
 
       <Divider />
 

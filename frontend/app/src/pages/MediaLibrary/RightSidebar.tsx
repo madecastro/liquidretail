@@ -40,7 +40,7 @@ export function RightSidebar({ row, detect }: Props) {
         </TabList>
         <TabPanels>
           <TabPanel px={4} py={4}><SummaryTab row={row} detect={detect} /></TabPanel>
-          <TabPanel px={4} py={4}><InsightsTab row={row} /></TabPanel>
+          <TabPanel px={4} py={4}><InsightsTab row={row} detect={detect} /></TabPanel>
           <TabPanel px={4} py={4}><ObjectsTab detect={detect} /></TabPanel>
           <TabPanel px={4} py={4}><CropsTab detect={detect} /></TabPanel>
           <TabPanel px={4} py={4}><TextTab detect={detect} /></TabPanel>

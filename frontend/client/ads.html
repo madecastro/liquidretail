@@ -538,6 +538,17 @@
     }
     body.render-mode #tpStage { transform: none !important; border-radius: 0 !important; }
     body.render-mode { margin: 0; padding: 0; }
+
+    /* Video-overlay render mode: every layer up the chain must be
+       transparent so Puppeteer.screenshot({ omitBackground: true })
+       actually emits transparent pixels in unpainted areas (instead
+       of compositing against html/body white). */
+    body.render-mode-video-overlay,
+    body.render-mode-video-overlay #tpStageFrame,
+    body.render-mode-video-overlay #tpStage,
+    html.render-mode-video-overlay {
+      background: transparent !important;
+    }
     .tp-zone {
       position: absolute; box-sizing: border-box; overflow: hidden;
       font-family: inherit;
@@ -1700,7 +1711,9 @@
     // leaving the stage 0×0 and tpStatus empty.
     document.addEventListener('DOMContentLoaded', function bootstrap() {
       const params = new URLSearchParams(window.location.search);
-      const renderMode = params.get('renderMode') === '1';
+      const renderModeRaw = params.get('renderMode') || '';
+      const renderMode = renderModeRaw === '1' || renderModeRaw === 'video-overlay';
+      const videoOverlayMode = renderModeRaw === 'video-overlay';
       if (!renderMode) {
         loadMediaList();
         return;
@@ -1717,6 +1730,10 @@
       // when Puppeteer screenshots. Padding zero so the stage
       // anchors at (0,0) for clean clipping.
       document.body.classList.add('render-mode');
+      if (videoOverlayMode) {
+        document.documentElement.classList.add('render-mode-video-overlay');
+        document.body.classList.add('render-mode-video-overlay');
+      }
       // The body.render-mode > * { display:none } rule hides every
       // direct child of body. #tpStage is several levels deep —
       // its display:block !important loses to an ancestor's

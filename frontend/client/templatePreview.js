@@ -24,10 +24,18 @@
   // / phone frame in production renders — those are operator-UI affordances.
   // Default every diagnostic toggle to false when render-mode is detected
   // at module load so drawTpCanvas's optional layers no-op cleanly.
-  const TP_RENDER_MODE = (() => {
-    try { return new URLSearchParams(window.location.search).get('renderMode') === '1'; }
-    catch (_) { return false; }
+  // Render-mode value:
+  //   '1'              — full static PNG render (image media + image fallback for video)
+  //   'video-overlay'  — transparent-slot PNG used as a Cloudinary overlay
+  //                      on top of a cropped source video. Skips painting
+  //                      the media zone + the canvas background so the
+  //                      video shows through after fl_layer_apply.
+  const TP_RENDER_MODE_VALUE = (() => {
+    try { return new URLSearchParams(window.location.search).get('renderMode') || ''; }
+    catch (_) { return ''; }
   })();
+  const TP_RENDER_MODE = TP_RENDER_MODE_VALUE === '1' || TP_RENDER_MODE_VALUE === 'video-overlay';
+  const TP_VIDEO_OVERLAY_MODE = TP_RENDER_MODE_VALUE === 'video-overlay';
 
   const TP_STATE = {
     template: null,
@@ -900,13 +908,21 @@
     // 'brand_fill' paint the brand primary; 'gradient' interpolates primary
     // → secondary; image/video modes fall back to brand primary as a base
     // color (the real renderer layers the asset on top).
-    const bgStyle = canvas.canvas.background?.style || 'gradient';
-    if (bgStyle === 'gradient') {
-      stage.style.background = `linear-gradient(135deg, ${primary} 0%, ${secondary} 100%)`;
-    } else if (bgStyle === 'solid' || bgStyle === 'brand_fill') {
-      stage.style.background = primary;
+    //
+    // Video-overlay render mode skips this entirely: the canvas background
+    // must be transparent so Cloudinary's fl_layer_apply has the video
+    // showing through anywhere the overlay is unpainted.
+    if (TP_VIDEO_OVERLAY_MODE) {
+      stage.style.background = 'transparent';
     } else {
-      stage.style.background = primary;
+      const bgStyle = canvas.canvas.background?.style || 'gradient';
+      if (bgStyle === 'gradient') {
+        stage.style.background = `linear-gradient(135deg, ${primary} 0%, ${secondary} 100%)`;
+      } else if (bgStyle === 'solid' || bgStyle === 'brand_fill') {
+        stage.style.background = primary;
+      } else {
+        stage.style.background = primary;
+      }
     }
 
     // Font-size is now baked in by applyCanvasSize() against canvas
@@ -2266,6 +2282,11 @@
         return `<div class="tp-placeholder">product_card (no variant)</div>`;
       }
       case 'media': {
+        // Video-overlay render mode emits an empty transparent zone so
+        // Cloudinary's video composite shows through. The slot's geometry
+        // still drives the layout — siblings position relative to it —
+        // but no <img>/<video> is painted.
+        if (TP_VIDEO_OVERLAY_MODE) return '';
         const media = tpGet(input, zone.slot);
         // Prefer video when the media object carries one (source Media
         // is a video); use the image as poster. Falls back to a plain

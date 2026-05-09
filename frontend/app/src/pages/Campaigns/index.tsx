@@ -10,7 +10,7 @@ import {
   Card, CardBody, VStack, HStack, Text, Heading, Button, Badge, Box, Spinner,
   useToast, useDisclosure
 } from '@chakra-ui/react';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '../../shell/PageHeader';
 import { apiJson } from '../../auth/apiFetch';
 import { NewCampaignModal } from './NewCampaignModal';
@@ -56,6 +56,21 @@ type Campaign = {
 export function CampaignsPage() {
   const toast = useToast();
   const newCampaignModal = useDisclosure();
+  const [params, setParams] = useSearchParams();
+
+  // Auto-open the New Campaign modal when the page is reached via
+  // /campaigns?new=1 (e.g. the Media Library's "Add to Campaign →
+  // + New campaign…" affordance). Strip the param after opening so
+  // a refresh doesn't re-trigger.
+  useEffect(() => {
+    if (params.get('new') === '1') {
+      newCampaignModal.onOpen();
+      const next = new URLSearchParams(params);
+      next.delete('new');
+      setParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading]     = useState(true);
   const [syncing, setSyncing]     = useState(false);

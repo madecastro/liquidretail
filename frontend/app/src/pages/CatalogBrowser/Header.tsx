@@ -1,14 +1,11 @@
 // Phase 4 follow-up #3 — top metadata strip above the gallery.
 
 import { HStack, VStack, Text, Badge, Box, Link, IconButton, Icon, Button } from '@chakra-ui/react';
-import { useNavigate } from 'react-router-dom';
 import { sourceTone, formatPrice, timeAgo } from './format';
 import type { CatalogDetail } from './types';
-import { AddToCampaignMenu } from '../MediaLibrary/AddToCampaignMenu';
 
 export function CatalogHeader({ product, totalMatches }: { product: CatalogDetail; totalMatches: number }) {
   const tone = sourceTone(product.source);
-  const navigate = useNavigate();
   return (
     <HStack
       px={5}
@@ -58,16 +55,6 @@ export function CatalogHeader({ product, totalMatches }: { product: CatalogDetai
           View on site
         </Button>
       )}
-
-      <AddToCampaignMenu productIds={[product.id]} />
-
-      <Button
-        variant="brand"
-        size="sm"
-        onClick={() => navigate(`/generate-ads?productIds=${encodeURIComponent(product.id)}`)}
-      >
-        Generate Ads →
-      </Button>
 
       <IconButton aria-label="More" variant="ghost" size="sm" icon={<KebabIcon />} />
       {/* `Box` empty to keep gap consistent with MediaLibrary header style */}

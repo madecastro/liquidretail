@@ -16,6 +16,7 @@ import { Sidebar } from './Sidebar';
 import { CatalogHeader } from './Header';
 import { ImageGallery } from './ImageGallery';
 import { RightSidebar } from './RightSidebar';
+import { BottomBar } from './BottomBar';
 import { CatalogErrorBoundary } from './ErrorBoundary';
 import { useCatalogList, useCatalogDetail, useCatalogMatches } from './hooks';
 
@@ -102,6 +103,11 @@ export function CatalogBrowserPage() {
           matches={matches.data?.matches || []}
         />
       </Flex>
+
+      <BottomBar
+        product={detail.data?.product || null}
+        totalMatches={matches.data?.total || 0}
+      />
     </Flex>
     </CatalogErrorBoundary>
   );

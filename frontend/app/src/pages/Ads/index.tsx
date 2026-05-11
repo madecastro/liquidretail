@@ -59,17 +59,18 @@ type AdRow = {
 type AdsResponse = { ads: AdRow[]; total: number; limit: number; offset: number };
 
 type RunStatus = {
-  runId:       string;
-  brandId:     string;
-  campaignId:  string;
-  total:       number;
-  succeeded:   number;
-  skipped:     number;
-  failed:      number;
-  status:      'running' | 'done' | 'failed';
-  errors:      Array<{ index: number; stage: string; template: string; aspectRatio: string; message: string }>;
-  startedAt:   string;
-  completedAt: string | null;
+  runId:           string;
+  brandId:         string;
+  campaignId:      string;
+  total:           number;
+  succeeded:       number;
+  skipped:         number;
+  failed:          number;
+  status:          'running' | 'done' | 'failed';
+  queuedRemaining: number;
+  errors:          Array<{ index: number; stage: string; template: string; aspectRatio: string; message: string }>;
+  startedAt:       string;
+  completedAt:     string | null;
 };
 
 const POLL_INTERVAL_MS = 2500;
@@ -359,7 +360,33 @@ export function AdsPage() {
         </HStack>
       </HStack>
 
-      {run && <RunProgress run={run} timedOut={pollTimedOut} />}
+      {run && (
+        <RunProgress
+          run={run}
+          timedOut={pollTimedOut}
+          onGenerateMore={async () => {
+            try {
+              const res = await apiJson<{ campaignRunId: string }>(`/api/ads/runs`, {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ campaignId: run.campaignId })
+              });
+              const nextParams = new URLSearchParams(params);
+              nextParams.set('campaignRunId', res.campaignRunId);
+              nextParams.set('campaignId',    run.campaignId);
+              setParams(nextParams, { replace: false });
+              toast({ title: 'Next batch started', status: 'success', duration: 2500 });
+            } catch (e) {
+              toast({
+                title:       'Could not start next batch',
+                description: e instanceof Error ? e.message : String(e),
+                status:      'error',
+                duration:    5000
+              });
+            }
+          }}
+        />
+      )}
 
       {loading && (
         <Box textAlign="center" py={6}>
@@ -612,9 +639,37 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function RunProgress({ run, timedOut }: { run: RunStatus; timedOut: boolean }) {
+function RunProgress({
+  run, timedOut, onGenerateMore
+}: {
+  run: RunStatus;
+  timedOut: boolean;
+  onGenerateMore: () => Promise<void> | void;
+}) {
+  const [busy, setBusy] = useState(false);
   const finished = run.succeeded + run.skipped + run.failed;
   const pct = run.total > 0 ? Math.round((finished / run.total) * 100) : 0;
+
+  const handleGenerateMore = async () => {
+    setBusy(true);
+    try { await onGenerateMore(); }
+    finally { setBusy(false); }
+  };
+
+  // "Generate more" affordance — appears whenever the run has settled
+  // (done OR timed-out) and there's queued inventory left for this
+  // campaign. Drains the next batch via POST /api/ads/runs.
+  const generateMoreBtn = (run.queuedRemaining > 0 && (run.status === 'done' || timedOut)) ? (
+    <Button
+      variant="brand"
+      size="sm"
+      onClick={handleGenerateMore}
+      isLoading={busy}
+      loadingText="Starting…"
+    >
+      Generate more ({run.queuedRemaining} queued)
+    </Button>
+  ) : null;
 
   if (timedOut) {
     return (
@@ -629,6 +684,7 @@ function RunProgress({ run, timedOut }: { run: RunStatus; timedOut: boolean }) {
               {finished} of {run.total} creatives completed. The renderer may still be working —
               refresh in a moment to see the rest, or check the server logs.
             </Text>
+            {generateMoreBtn && <HStack justify="flex-end">{generateMoreBtn}</HStack>}
           </VStack>
         </CardBody>
       </Card>
@@ -636,7 +692,23 @@ function RunProgress({ run, timedOut }: { run: RunStatus; timedOut: boolean }) {
   }
 
   if (run.status === 'done') {
-    if (run.failed === 0) return null;   // Quiet on full success — the gallery itself is the signal.
+    if (run.failed === 0) {
+      // Full success — quiet card with only the "Generate more"
+      // affordance when there's queued inventory remaining.
+      if (!generateMoreBtn) return null;
+      return (
+        <Card variant="outline" borderColor="green.300" bg="green.50">
+          <CardBody>
+            <HStack justify="space-between" align="center">
+              <Text fontSize="sm" fontWeight="700" color="green.700">
+                Run complete — {run.succeeded} rendered.
+              </Text>
+              {generateMoreBtn}
+            </HStack>
+          </CardBody>
+        </Card>
+      );
+    }
     return (
       <Card variant="outline" borderColor="red.300" bg="red.50">
         <CardBody>
@@ -657,6 +729,7 @@ function RunProgress({ run, timedOut }: { run: RunStatus; timedOut: boolean }) {
                 + {run.errors.length - 5} more — check server logs for the full list.
               </Text>
             )}
+            {generateMoreBtn && <HStack justify="flex-end" pt={1}>{generateMoreBtn}</HStack>}
           </VStack>
         </CardBody>
       </Card>

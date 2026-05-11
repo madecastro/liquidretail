@@ -29,14 +29,17 @@ type AdRow = {
   productId:    string | null;
   template:     string;
   aspectRatio:  string;
-  mediaSource:  string;
+  matchTier:    'product_match' | 'product_category' | 'brand_match' | 'brand_only';
+  variantKind:  'product_image' | 'ugc';
+  readinessScore: number | null;
   campaignKind: string | null;
   kind:         'image' | 'video';
-  renderUrl:    string;
+  // Render-output fields null until status transitions to 'draft' or beyond.
+  renderUrl:    string | null;
   posterUrl:    string | null;
-  width:        number;
-  height:       number;
-  bytes:        number;
+  width:        number | null;
+  height:       number | null;
+  bytes:        number | null;
   copy: {
     headline?:     string;
     cta_text?:     string;
@@ -44,9 +47,12 @@ type AdRow = {
     productName?:  string;
     productPrice?: string;
   };
+  ctaText:      string;
   ctaUrl:       string;
   ctaUrlParams: string;
-  status:       'draft' | 'live' | 'archived';
+  status:       'queued' | 'rendering' | 'draft' | 'live' | 'archived' | 'failed';
+  queuedAt:     string | null;
+  renderedAt:   string | null;
   generatedAt:  string;
 };
 
@@ -331,30 +337,43 @@ export function AdsPage() {
                 overflow="hidden"
                 style={{ aspectRatio: '1 / 1' }}
               >
-                {ad.kind === 'video' ? (
-                  <video
-                    src={ad.renderUrl}
-                    poster={ad.posterUrl || undefined}
-                    muted
-                    loop
-                    playsInline
-                    autoPlay
-                    preload="metadata"
-                    style={{
-                      width: '100%', height: '100%',
-                      objectFit: 'contain', display: 'block',
-                      background: '#000'
-                    }}
-                  />
+                {ad.renderUrl ? (
+                  ad.kind === 'video' ? (
+                    <video
+                      src={ad.renderUrl}
+                      poster={ad.posterUrl || undefined}
+                      muted
+                      loop
+                      playsInline
+                      autoPlay
+                      preload="metadata"
+                      style={{
+                        width: '100%', height: '100%',
+                        objectFit: 'contain', display: 'block',
+                        background: '#000'
+                      }}
+                    />
+                  ) : (
+                    <Image
+                      src={ad.renderUrl}
+                      alt={ad.copy.headline || ad.template}
+                      width="100%"
+                      height="100%"
+                      objectFit="contain"
+                      loading="lazy"
+                    />
+                  )
                 ) : (
-                  <Image
-                    src={ad.renderUrl}
-                    alt={ad.copy.headline || ad.template}
-                    width="100%"
-                    height="100%"
-                    objectFit="contain"
-                    loading="lazy"
-                  />
+                  <Box
+                    w="100%" h="100%"
+                    display="flex" alignItems="center" justifyContent="center"
+                    color="gray.400"
+                    fontSize="11px"
+                    textTransform="uppercase"
+                    letterSpacing="0.08em"
+                  >
+                    {ad.status === 'queued' ? 'Queued' : ad.status === 'rendering' ? 'Rendering…' : ad.status === 'failed' ? 'Render failed' : 'No render'}
+                  </Box>
                 )}
                 <Badge
                   position="absolute"
@@ -399,24 +418,31 @@ export function AdsPage() {
             {selected && (
               <VStack align="stretch" spacing={4}>
                 <Box bg="gray.900" borderRadius="md" overflow="hidden" style={{ aspectRatio: `${selected.width} / ${selected.height}` }}>
-                  {selected.kind === 'video' ? (
-                    <video
-                      src={selected.renderUrl}
-                      poster={selected.posterUrl || undefined}
-                      controls
-                      playsInline
-                      preload="metadata"
-                      style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', background: '#000' }}
-                    />
+                  {selected.renderUrl ? (
+                    selected.kind === 'video' ? (
+                      <video
+                        src={selected.renderUrl}
+                        poster={selected.posterUrl || undefined}
+                        controls
+                        playsInline
+                        preload="metadata"
+                        style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', background: '#000' }}
+                      />
+                    ) : (
+                      <Image src={selected.renderUrl} alt={selected.copy.headline || selected.template} width="100%" height="100%" objectFit="contain" />
+                    )
                   ) : (
-                    <Image src={selected.renderUrl} alt={selected.copy.headline || selected.template} width="100%" height="100%" objectFit="contain" />
+                    <Box w="100%" h="100%" display="flex" alignItems="center" justifyContent="center" color="gray.400" fontSize="12px">
+                      {selected.status === 'queued' ? 'Queued for render' : selected.status === 'rendering' ? 'Rendering…' : selected.status === 'failed' ? 'Render failed' : 'No render'}
+                    </Box>
                   )}
                 </Box>
                 <SimpleGrid columns={2} spacing={3}>
                   <DetailRow label="Template" value={selected.template} />
                   <DetailRow label="Aspect ratio" value={selected.aspectRatio} />
                   <DetailRow label="Status" value={selected.status} />
-                  <DetailRow label="Media source" value={selected.mediaSource} />
+                  <DetailRow label="Match tier" value={selected.matchTier} />
+                  <DetailRow label="Variant" value={selected.variantKind} />
                   <DetailRow label="CTA" value={selected.copy.cta_text || selected.ctaUrl} />
                   <DetailRow label="Generated" value={new Date(selected.generatedAt).toLocaleString()} />
                 </SimpleGrid>
@@ -434,9 +460,11 @@ export function AdsPage() {
                     Delete
                   </Button>
                   <HStack spacing={2}>
-                    <Button as="a" href={selected.renderUrl} target="_blank" variant="outline" size="sm">
-                      Open in Cloudinary
-                    </Button>
+                    {selected.renderUrl && (
+                      <Button as="a" href={selected.renderUrl} target="_blank" variant="outline" size="sm">
+                        Open in Cloudinary
+                      </Button>
+                    )}
                     {selected.status === 'draft' && (
                       <>
                         <Button

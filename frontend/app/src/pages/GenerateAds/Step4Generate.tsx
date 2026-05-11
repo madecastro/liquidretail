@@ -54,11 +54,9 @@ export function Step4Generate({ value }: Props) {
           templateIds: value.templateIds,
           cta:         { text: value.ctaText, url: value.ctaUrl },
           urlParams:   value.urlParams,
-          // Smoke-test default — bypasses the (campaignId, derivationDigest)
-          // de-dupe so a re-fire produces fresh renders instead of returning
-          // any blank Ads cached during earlier broken deploys. Once the
-          // pipeline stabilizes this drops to a wizard checkbox so dedupe
-          // is the default again (saves Cloudinary bytes on identical inputs).
+          // Legacy passthrough — the new queue-time identityDigest dedup
+          // makes this a no-op on the server, but the field is still
+          // accepted for backwards compat with operator muscle memory.
           refresh:     true
         })
       });

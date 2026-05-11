@@ -95,7 +95,7 @@ export function CampaignDetailPage() {
       const [productsRes, mediaRes, adsRes, detailRes] = await Promise.all([
         apiJson<{ campaign: Campaign; products: ProductRow[] }>(`/api/campaigns/${id}/products`),
         apiJson<{ media: MediaRow[] }>(`/api/campaigns/${id}/media`),
-        apiJson<{ ads: AdRow[] }>(`/api/ads?brandId=${encodeURIComponent(activeBrandId)}&campaignId=${encodeURIComponent(id)}&limit=200`),
+        apiJson<{ ads: AdRow[] }>(`/api/ads?brandId=${encodeURIComponent(activeBrandId)}&campaignId=${encodeURIComponent(id)}&rendered=true&limit=200`),
         // Detail endpoint surfaces pinnedProducts + pinnedMedia (items
         // added to this campaign that aren't yet on any Ad). We only
         // need the ids — the hydrated rows already come back via the

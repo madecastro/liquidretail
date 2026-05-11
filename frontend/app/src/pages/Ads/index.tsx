@@ -75,11 +75,13 @@ type RunStatus = {
 const POLL_INTERVAL_MS = 2500;
 const POLL_TIMEOUT_MS  = 10 * 60 * 1000;   // 10 minutes — generous for full Puppeteer batch
 
+type CampaignOption = { id: string; name: string };
+
 export function AdsPage() {
   const { activeBrand } = useBrand();
   const activeBrandId = activeBrand?.id || null;
   const toast = useToast();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const campaignRunId = params.get('campaignRunId');
   const campaignId    = params.get('campaignId');
 
@@ -91,7 +93,36 @@ export function AdsPage() {
   const [selected, setSelected] = useState<AdRow | null>(null);
   const [run, setRun]       = useState<RunStatus | null>(null);
   const [pollTimedOut, setPollTimedOut] = useState(false);
+  const [campaigns, setCampaigns] = useState<CampaignOption[]>([]);
   const detailModal = useDisclosure();
+
+  // Pull the brand's campaigns once per active-brand change for the
+  // campaign filter dropdown. Failure is silent — the dropdown just
+  // shows "All campaigns" and the URL-driven campaignId still works.
+  useEffect(() => {
+    if (!activeBrandId) { setCampaigns([]); return; }
+    let cancelled = false;
+    apiJson<{ campaigns: CampaignOption[] }>(`/api/campaigns?brandId=${encodeURIComponent(activeBrandId)}`)
+      .then(res => { if (!cancelled) setCampaigns(res.campaigns || []); })
+      .catch(() => { if (!cancelled) setCampaigns([]); });
+    return () => { cancelled = true; };
+  }, [activeBrandId]);
+
+  const setCampaignFilter = (nextCampaignId: string) => {
+    const next = new URLSearchParams(params);
+    if (nextCampaignId) next.set('campaignId', nextCampaignId);
+    else                next.delete('campaignId');
+    // Changing the campaign filter invalidates an open run scope —
+    // a run belongs to one campaign, so cross-campaign filtering
+    // shouldn't keep the run-tied view in the URL.
+    next.delete('campaignRunId');
+    setParams(next, { replace: false });
+  };
+
+  const activeCampaignName = useMemo(
+    () => campaigns.find(c => c.id === campaignId)?.name || null,
+    [campaigns, campaignId]
+  );
 
   // Reset run state when the campaignRunId param changes (e.g. user
   // bookmarks a different run, or navigates back to /ads with no run).
@@ -254,6 +285,55 @@ export function AdsPage() {
         description="Every ad creative the renderer has produced for this brand. Filter by campaign or status; click for the full creative + copy + tracking URL."
       />
 
+      {/* Campaign filter — primary slice of the page. Pulled out of
+          the secondary toolbar and styled prominently so operators
+          can re-scope the gallery at a glance. */}
+      <Card variant="outline" borderColor={campaignId ? 'brand.accent' : 'brand.border'} borderWidth={campaignId ? '2px' : '1px'}>
+        <CardBody py={3} px={4}>
+          <HStack spacing={4} align="center" wrap="wrap">
+            <Text
+              fontSize="11px"
+              fontWeight="800"
+              textTransform="uppercase"
+              letterSpacing="0.1em"
+              color="brand.muted"
+              flexShrink={0}
+            >
+              Campaign
+            </Text>
+            <Select
+              size="md"
+              fontSize="sm"
+              fontWeight="700"
+              width={{ base: '100%', md: '380px' }}
+              value={campaignId || ''}
+              onChange={(e) => setCampaignFilter(e.target.value)}
+              placeholder=""
+            >
+              <option value="">All campaigns</option>
+              {campaigns.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </Select>
+            {campaignId && (
+              <Badge colorScheme="purple" fontSize="10px" px={2} py={1} borderRadius="md">
+                Filtered{activeCampaignName ? ` · ${activeCampaignName}` : ''}
+              </Badge>
+            )}
+            <Box flex={1} />
+            {campaignId && (
+              <Button
+                size="xs"
+                variant="ghost"
+                onClick={() => setCampaignFilter('')}
+              >
+                Clear
+              </Button>
+            )}
+          </HStack>
+        </CardBody>
+      </Card>
+
       <HStack justify="space-between" align="center" wrap="wrap" spacing={3}>
         <Heading size="sm" textTransform="uppercase" letterSpacing="0.04em" color="brand.ink">
           {headline}
@@ -266,9 +346,12 @@ export function AdsPage() {
             onChange={(e) => setStatus(e.target.value)}
           >
             <option value="">All statuses</option>
+            <option value="queued">Queued</option>
+            <option value="rendering">Rendering</option>
             <option value="draft">Draft</option>
             <option value="live">Live</option>
             <option value="archived">Archived</option>
+            <option value="failed">Failed</option>
           </Select>
           <Button as={RouterLink} to="/generate-ads" variant="brand" size="sm">
             Generate Ads

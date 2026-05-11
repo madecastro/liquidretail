@@ -8,13 +8,14 @@
 //     already populating.
 //   - Navigate to /brand.
 //
-// OAuth round-trip handling:
-// The integrations callbacks always bounce back to /brand (per
-// buildIntegrationBounceUrl). We can't change that without a
-// backend touch, so instead we stash localStorage.onboarding_resume_to
-// = '/onboarding/connect' before navigating to OAuth, and the /brand
-// page reads it on mount and bounces back here preserving the
-// callback's status query params.
+// OAuth round-trip handling (post 2026-05-11):
+// startConnect sends onboarding=true to the connect endpoint; that
+// flag rides through OAuth state and tells the callback to bounce
+// to /onboarding/connect (this page) instead of /brand. The picker
+// modal — IG / Meta Ads / Google Ads — opens RIGHT HERE based on
+// the bounce's ig_setup / ads_setup / gads_setup query params. No
+// intermediate /brand visit; operator sees their progress on this
+// same page as each integration finalizes.
 
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -26,6 +27,9 @@ import { CheckCircle2, AlertCircle, ArrowRight } from 'lucide-react';
 import { apiJson } from '../../auth/apiFetch';
 import { useAuth } from '../../auth/AuthContext';
 import { useBrand } from '../../brand/BrandContext';
+import { IGPickerModal } from '../Brand/IGPickerModal';
+import { AdsPickerModal } from '../Brand/AdsPickerModal';
+import { GoogleAdsPickerModal } from '../Brand/GoogleAdsPickerModal';
 
 // ── State ─────────────────────────────────────────────────────────
 
@@ -48,7 +52,6 @@ export function ConnectPage() {
   const auth = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
-  const [searchParams] = useSearchParams();
   const { activeBrand } = useBrand();
   const brandId = activeBrand?.id || localStorage.getItem('brand_id');
 
@@ -58,6 +61,13 @@ export function ConnectPage() {
     catalog: false, social: false, ads: false
   });
   const [submitting, setSubmitting] = useState(false);
+  // Picker state — set when a post-OAuth bounce includes a setup id.
+  // Picker resolves the credential pending → active, then onCompleted
+  // refreshes the status grid.
+  const [igPickerCredId,        setIgPickerCredId]        = useState<string | null>(null);
+  const [adsPickerCredId,       setAdsPickerCredId]       = useState<string | null>(null);
+  const [googleAdsPickerCredId, setGoogleAdsPickerCredId] = useState<string | null>(null);
+  const [params, setParams] = useSearchParams();
 
   // Pull current integration state. Three calls in parallel; one is
   // bound to fail noisily (404) if the brand isn't fully resolved
@@ -89,18 +99,47 @@ export function ConnectPage() {
     void refresh();
   }, [auth.status, navigate, refresh]);
 
-  // OAuth callback bounce: surface success/error toasts when the
-  // page loads with provider status params.
+  // OAuth callback bounce: surface success/error toasts AND auto-open
+  // the right picker modal when the page loads with provider setup
+  // params. The picker finalizes the credential pending → active so
+  // the operator never leaves /onboarding/connect.
   useEffect(() => {
-    const igStatus    = searchParams.get('ig_status');
-    const adsStatus   = searchParams.get('ads_status');
-    const googleStatus = searchParams.get('google_status');
-    if (igStatus === 'pending')  toast({ title: 'Instagram connected — finalize in the brand page', status: 'success', duration: 3500 });
-    if (igStatus === 'denied' || igStatus === 'error') toast({ title: 'Instagram connect failed', description: searchParams.get('ig_msg') || '', status: 'error', duration: 5000 });
-    if (adsStatus === 'pending') toast({ title: 'Meta Ads connected', status: 'success', duration: 3500 });
-    if (adsStatus === 'denied' || adsStatus === 'error') toast({ title: 'Meta Ads connect failed', status: 'error', duration: 5000 });
-    if (googleStatus === 'pending') toast({ title: 'Google Ads connected', status: 'success', duration: 3500 });
-    if (googleStatus === 'denied' || googleStatus === 'error') toast({ title: 'Google Ads connect failed', status: 'error', duration: 5000 });
+    const igStatus    = params.get('ig_status');
+    const adsStatus   = params.get('ads_status');
+    const gadsStatus  = params.get('gads_status');
+    const igSetup     = params.get('ig_setup');
+    const adsSetup    = params.get('ads_setup');
+    const gadsSetup   = params.get('gads_setup');
+
+    if (igStatus === 'pending' && igSetup) {
+      toast({ title: 'Instagram connected — pick your page + catalog', status: 'success', duration: 3500 });
+      setIgPickerCredId(igSetup);
+    }
+    if (igStatus === 'denied' || igStatus === 'error') {
+      toast({ title: 'Instagram connect failed', description: params.get('ig_msg') || '', status: 'error', duration: 5000 });
+    }
+    if (adsStatus === 'pending' && adsSetup) {
+      toast({ title: 'Meta Ads connected — pick your ad account', status: 'success', duration: 3500 });
+      setAdsPickerCredId(adsSetup);
+    }
+    if (adsStatus === 'denied' || adsStatus === 'error') {
+      toast({ title: 'Meta Ads connect failed', description: params.get('ads_msg') || '', status: 'error', duration: 5000 });
+    }
+    if (gadsStatus === 'pending' && gadsSetup) {
+      toast({ title: 'Google Ads connected — pick your account', status: 'success', duration: 3500 });
+      setGoogleAdsPickerCredId(gadsSetup);
+    }
+    if (gadsStatus === 'denied' || gadsStatus === 'error') {
+      toast({ title: 'Google Ads connect failed', description: params.get('gads_msg') || '', status: 'error', duration: 5000 });
+    }
+
+    // Strip OAuth bounce params from the URL so a hard refresh doesn't
+    // re-trigger the picker / toasts.
+    const next = new URLSearchParams(params);
+    ['ig_status','ig_msg','ig_setup',
+     'ads_status','ads_msg','ads_setup',
+     'gads_status','gads_msg','gads_setup'].forEach(k => next.delete(k));
+    setParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -109,18 +148,18 @@ export function ConnectPage() {
       toast({ title: 'No active brand — finish brand setup first', status: 'error', duration: 4000 });
       return;
     }
-    // Stash the resume target so the /brand page bounces us back
-    // here after the integration callback's hardcoded bounce.
-    localStorage.setItem('onboarding_resume_to', '/onboarding/connect');
     try {
+      // onboarding=true tells the OAuth callback to bounce back here
+      // (/onboarding/connect) instead of the default /brand. The
+      // picker modal then auto-opens on this page via the URL-param
+      // effect above.
       const res = await apiJson<{ authorizeUrl: string }>(path, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Brand-Id': brandId },
-        body: JSON.stringify({ redirect: window.location.origin })
+        body: JSON.stringify({ redirect: window.location.origin, onboarding: true })
       });
       window.location.href = res.authorizeUrl;
     } catch (e) {
-      localStorage.removeItem('onboarding_resume_to');
       toast({
         title:       'Could not start the connect flow',
         description: e instanceof Error ? e.message : String(e),
@@ -273,6 +312,28 @@ export function ConnectPage() {
           </Tooltip>
         </HStack>
       </VStack>
+
+      {/* Picker modals — opened by the post-OAuth bounce. Each resolves
+          its credential from pending → active; onCompleted refreshes
+          the status grid so the section flips to Connected in-place. */}
+      <IGPickerModal
+        isOpen={!!igPickerCredId}
+        onClose={() => setIgPickerCredId(null)}
+        credentialId={igPickerCredId}
+        onCompleted={() => { setIgPickerCredId(null); void refresh(); }}
+      />
+      <AdsPickerModal
+        isOpen={!!adsPickerCredId}
+        onClose={() => setAdsPickerCredId(null)}
+        credentialId={adsPickerCredId}
+        onCompleted={() => { setAdsPickerCredId(null); void refresh(); }}
+      />
+      <GoogleAdsPickerModal
+        isOpen={!!googleAdsPickerCredId}
+        onClose={() => setGoogleAdsPickerCredId(null)}
+        credentialId={googleAdsPickerCredId}
+        onCompleted={() => { setGoogleAdsPickerCredId(null); void refresh(); }}
+      />
     </Shell>
   );
 }

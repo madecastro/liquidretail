@@ -13,6 +13,7 @@ type ListFilters = {
   category?:    string;
   inStock?:     boolean;
   hasReviews?:  boolean;
+  showVariants?: boolean;      // include non-primary Meta item-group variants
 };
 
 export function useCatalogList(initialFilters: ListFilters = {}) {
@@ -39,8 +40,9 @@ export function useCatalogList(initialFilters: ListFilters = {}) {
     if (filters.q)        p.set('q', filters.q);
     if (filters.source)   p.set('source', filters.source);
     if (filters.category) p.set('category', filters.category);
-    if (filters.inStock)    p.set('inStock', '1');
-    if (filters.hasReviews) p.set('hasReviews', '1');
+    if (filters.inStock)      p.set('inStock', '1');
+    if (filters.hasReviews)   p.set('hasReviews', '1');
+    if (filters.showVariants) p.set('showVariants', '1');
     return p.toString();
   }, [brandId, filters]);
 

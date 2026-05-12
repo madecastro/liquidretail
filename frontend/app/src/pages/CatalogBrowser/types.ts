@@ -22,6 +22,9 @@ export type CatalogListRow = {
   matchCount:   number;
   gtin:         string | null;
   mpn:          string | null;
+  itemGroupId:  string | null;
+  isPrimaryVariant: boolean;
+  variantCount: number;
   detectedFromMediaId: string | null;
   firstSeenAt?: string;
   lastSyncedAt?: string;

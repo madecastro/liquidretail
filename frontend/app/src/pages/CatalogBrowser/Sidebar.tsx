@@ -2,7 +2,7 @@
 // title, price, source pill, draft pill, match count, and a small
 // filter row at top (search + source select + drafts toggle).
 
-import { Box, Flex, Text, Image, VStack, HStack, Badge, Button, Spinner, Input, Select, IconButton, Icon } from '@chakra-ui/react';
+import { Box, Flex, Text, Image, VStack, HStack, Badge, Button, Spinner, Input, Select, IconButton, Icon, Checkbox } from '@chakra-ui/react';
 import type { CatalogListRow } from './types';
 import { sourceTone, formatPrice, timeAgo } from './format';
 
@@ -12,6 +12,7 @@ type Filters = {
   category?:    string;
   inStock?:     boolean;
   hasReviews?:  boolean;
+  showVariants?: boolean;
 };
 
 type Props = {
@@ -101,6 +102,13 @@ export function Sidebar({
               </Select>
             )}
           </HStack>
+          <Checkbox
+            size="sm"
+            isChecked={!!filters.showVariants}
+            onChange={e => onFilters({ ...filters, showVariants: e.target.checked || undefined })}
+          >
+            <Text fontSize="xs" color="brand.muted">Show all variants</Text>
+          </Checkbox>
         </VStack>
       </Box>
 
@@ -168,6 +176,12 @@ function SidebarRow({ row, isActive, onClick }: { row: CatalogListRow; isActive:
               {tone.label}
             </Badge>
             {row.draft && <Badge fontSize="9px" variant="subtle" colorScheme="orange">Draft</Badge>}
+            {row.variantCount > 0 && (
+              <Badge fontSize="9px" variant="subtle" colorScheme="blue">+{row.variantCount} variant{row.variantCount === 1 ? '' : 's'}</Badge>
+            )}
+            {!row.isPrimaryVariant && (
+              <Badge fontSize="9px" variant="subtle" colorScheme="gray">Variant</Badge>
+            )}
             {row.matchCount > 0 && <Badge fontSize="9px" variant="subtle" colorScheme="purple">{row.matchCount} match{row.matchCount === 1 ? '' : 'es'}</Badge>}
             <Text fontSize="9px" color="brand.muted">{timeAgo(row.lastSyncedAt)}</Text>
           </HStack>

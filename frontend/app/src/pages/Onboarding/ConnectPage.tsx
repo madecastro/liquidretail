@@ -36,6 +36,11 @@ import { GoogleAdsPickerModal } from '../Brand/GoogleAdsPickerModal';
 type IntegrationStatus = {
   connected: boolean;
   pending?: boolean;
+  // True when the advertiser has another brand with creds for this
+  // integration. Server-side, the connect endpoint will force the
+  // OAuth asset picker / account chooser to re-show; this flag lets
+  // the UI surface a hint banner so the operator knows what to expect.
+  additionalBrandMode?: boolean;
   // Provider-specific fields are flattened into the `details` blob.
   details?: Record<string, unknown>;
 };
@@ -75,15 +80,17 @@ export function ConnectPage() {
   // bubbling the error.
   const refresh = useCallback(async () => {
     try {
+      type StatusResp = { credentials: Array<{ status: string; igUserId?: string }>; additionalBrandMode?: boolean };
+      const fallback: StatusResp = { credentials: [], additionalBrandMode: false };
       const [ig, meta, google] = await Promise.all([
-        apiJson<{ credentials: Array<{ status: string; igUserId?: string }> }>('/api/integrations/instagram/status').catch(() => ({ credentials: [] })),
-        apiJson<{ credentials: Array<{ status: string }> }>('/api/integrations/meta-ads/status').catch(() => ({ credentials: [] })),
-        apiJson<{ credentials: Array<{ status: string }> }>('/api/integrations/google-ads/status').catch(() => ({ credentials: [] }))
+        apiJson<StatusResp>('/api/integrations/instagram/status').catch(() => fallback),
+        apiJson<StatusResp>('/api/integrations/meta-ads/status').catch(() => fallback),
+        apiJson<StatusResp>('/api/integrations/google-ads/status').catch(() => fallback)
       ]);
       setStatuses({
-        ig:     { connected: ig.credentials.some((c) => c.status === 'active'),     pending: ig.credentials.some((c) => c.status === 'pending') },
-        meta:   { connected: meta.credentials.some((c) => c.status === 'active'),   pending: meta.credentials.some((c) => c.status === 'pending') },
-        google: { connected: google.credentials.some((c) => c.status === 'active'), pending: google.credentials.some((c) => c.status === 'pending') }
+        ig:     { connected: ig.credentials.some((c) => c.status === 'active'),     pending: ig.credentials.some((c) => c.status === 'pending'),     additionalBrandMode: !!ig.additionalBrandMode },
+        meta:   { connected: meta.credentials.some((c) => c.status === 'active'),   pending: meta.credentials.some((c) => c.status === 'pending'),   additionalBrandMode: !!meta.additionalBrandMode },
+        google: { connected: google.credentials.some((c) => c.status === 'active'), pending: google.credentials.some((c) => c.status === 'pending'), additionalBrandMode: !!google.additionalBrandMode }
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -173,6 +180,7 @@ export function ConnectPage() {
   const ig     = statuses?.ig;
   const meta   = statuses?.meta;
   const google = statuses?.google;
+  const additionalBrandMode = !!(ig?.additionalBrandMode || meta?.additionalBrandMode || google?.additionalBrandMode);
 
   const catalogDecided = !!ig?.connected || !!ig?.pending || skipped.catalog;
   const socialDecided  = !!ig?.connected || !!ig?.pending || skipped.social;     // IG covers both
@@ -225,14 +233,37 @@ export function ConnectPage() {
       <VStack align="stretch" spacing={6}>
         <Box>
           <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.08em" color="rsViolet.500" mb={2}>
-            Step 3 of 3 — Connect
+            {additionalBrandMode ? `Attach integrations to ${activeBrand?.name || 'this brand'}` : 'Step 3 of 3 — Connect'}
           </Text>
-          <Heading size="md" color="brand.ink">Plug in your data sources</Heading>
+          <Heading size="md" color="brand.ink">{additionalBrandMode ? 'Connect a different account for this brand' : 'Plug in your data sources'}</Heading>
           <Text fontSize="sm" color="brand.muted" mt={2}>
-            We need a product catalog, a social account, and at least one ad account to generate
-            performant ads. You can skip any section, but match quality and reporting will degrade.
+            {additionalBrandMode
+              ? 'You already have integrations on another brand under this workspace. To connect a different Meta business account / Google account for this brand, click connect — you\'ll be prompted to grant access to additional assets in the OAuth dialog. If you skip the picker, the existing account is reused.'
+              : 'We need a product catalog, a social account, and at least one ad account to generate performant ads. You can skip any section, but match quality and reporting will degrade.'}
           </Text>
         </Box>
+        {additionalBrandMode && (
+          <Box
+            bg="rsYellow.50"
+            borderWidth="1px"
+            borderColor="rsYellow.200"
+            borderRadius="lg"
+            px={4}
+            py={3}
+          >
+            <HStack spacing={2} align="flex-start">
+              <Icon as={AlertCircle} boxSize={4} color="rsOrange.500" mt={0.5} />
+              <Box>
+                <Text fontSize="sm" fontWeight="700" color="rsOrange.700">Adding a second brand?</Text>
+                <Text fontSize="xs" color="brand.muted" mt={1}>
+                  When Meta shows the asset picker, check the additional business account / IG page / ad account
+                  you want to attach to this brand. Google will show its account chooser so you can pick a
+                  different login. If the existing account is the right one, just confirm.
+                </Text>
+              </Box>
+            </HStack>
+          </Box>
+        )}
 
         <Section
           title="Catalog"

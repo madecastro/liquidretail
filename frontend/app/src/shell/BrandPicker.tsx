@@ -5,6 +5,7 @@ import {
   Button, HStack, Spinner
 } from '@chakra-ui/react';
 import { useBrand } from '../brand/BrandContext';
+import type { BrandSummary } from '../brand/types';
 import { NewBrandModal } from './NewBrandModal';
 
 // Sidebar dropdown showing the active brand + a list to switch.
@@ -31,14 +32,17 @@ export function BrandPicker() {
   const [newBrandOpen, setNewBrandOpen] = useState(false);
   const showWorkspaceSwitcher = memberships.length > 1;
 
-  // After a successful create: refresh the brand list, switch to the
-  // new brand, and bounce to the connect step so the user can wire IG
-  // + ads. dispatch-syncs auto-fires once integrations land, which is
-  // what triggers catalog sync → product-path detect + post detect.
-  const handleCreated = async (newBrandId: string) => {
+  // After a successful create: promote the new brand active FIRST
+  // (stamps localStorage.brand_id so subsequent apiFetch calls scope
+  // to it), then refresh the list for the picker UI, then navigate.
+  // Order matters — if we refresh-then-setActive, setActiveBrand sees
+  // a stale `brands` closure that doesn't contain the new id and the
+  // localStorage flip silently no-ops, leaving every status check +
+  // dispatch-syncs scoped to the previous brand.
+  const handleCreated = async (newBrand: BrandSummary) => {
     setNewBrandOpen(false);
+    setActiveBrand(newBrand);
     await refreshBrands();
-    setActiveBrand(newBrandId);
     navigate('/onboarding/connect');
   };
 

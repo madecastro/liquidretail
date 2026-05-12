@@ -22,7 +22,12 @@ type BrandState = {
   activeBrand:       BrandSummary | null;
   activeAdvertiserId: string | null;
   memberships:       Membership[];
-  setActiveBrand:    (id: string) => void;
+  // Accepts an id (lookup against current `brands`) OR a full
+  // BrandSummary. The summary form is for callers that just created a
+  // brand and want to promote it active before the brand list refresh
+  // has landed — avoids the stale-closure pitfall where the id lookup
+  // would silently miss against the pre-refresh array.
+  setActiveBrand:    (idOrBrand: string | BrandSummary) => void;
   setActiveAdvertiser: (advertiserId: string) => void;
   refreshBrands:     () => Promise<void>;
 };
@@ -90,8 +95,15 @@ export function BrandProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const setActiveBrand = useCallback((id: string) => {
-    const brand = brands.find(b => b.id === id);
+  const setActiveBrand = useCallback((idOrBrand: string | BrandSummary) => {
+    // String form: look up against current state. Object form: trust
+    // the caller (used by NewBrandModal → BrandPicker after create,
+    // when the new brand isn't in `brands` yet — refreshBrands races
+    // setActiveBrand and React doesn't flush the brands update
+    // synchronously, so an id-only path silently no-ops).
+    const brand = typeof idOrBrand === 'string'
+      ? brands.find(b => b.id === idOrBrand)
+      : idOrBrand;
     if (!brand) return;
     localStorage.setItem('brand_id', brand.id);
     localStorage.setItem('brand_name', brand.name);

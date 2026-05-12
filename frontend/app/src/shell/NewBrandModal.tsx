@@ -5,6 +5,7 @@ import {
   Button, VStack, Text, useToast
 } from '@chakra-ui/react';
 import { apiJson } from '../auth/apiFetch';
+import type { BrandSummary } from '../brand/types';
 
 type CreateResponse = {
   brand: {
@@ -20,7 +21,12 @@ type CreateResponse = {
 type Props = {
   isOpen:    boolean;
   onClose:   () => void;
-  onCreated: (brandId: string) => void;
+  // Receive the full new brand object so the caller can promote it to
+  // active without waiting for a brand-list refresh to land (which
+  // would otherwise leave setActiveBrand looking up the new id in a
+  // stale `brands` array — silent failure, localStorage.brand_id
+  // never flips, every subsequent request scopes to the OLD brand).
+  onCreated: (brand: BrandSummary) => void;
 };
 
 export function NewBrandModal({ isOpen, onClose, onCreated }: Props) {
@@ -61,7 +67,21 @@ export function NewBrandModal({ isOpen, onClose, onCreated }: Props) {
         duration:    3500
       });
       reset();
-      onCreated(res.brand.id);
+      // Pad the response into a BrandSummary so callers can use it
+      // immediately (the /api/brand POST response is a slim shape;
+      // missing fields default to safe nulls/empty arrays).
+      onCreated({
+        id:                res.brand.id,
+        name:              res.brand.name,
+        slug:              res.brand.slug,
+        logoUrl:           null,
+        websiteUrl:        res.brand.websiteUrl,
+        primaryColor:      res.brand.primaryColor,
+        source:            res.brand.source,
+        enrichmentSources: [],
+        curatedFields:     ['name'],
+        createdAt:         new Date().toISOString()
+      });
     } catch (e) {
       toast({
         title:       'Could not create brand',

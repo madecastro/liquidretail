@@ -36,6 +36,7 @@ export type SecondaryNavItem = {
 
 export const SECONDARY_NAV: readonly SecondaryNavItem[] = [
   { path: '/catalog',       label: 'Product Catalog' },
+  { path: '/detect',        label: 'Detect Review' },
   { path: '/media-library', label: 'Media Library' },
   { path: '/settings',      label: 'Settings' }
 ] as const;
@@ -44,8 +45,9 @@ export const SECONDARY_NAV: readonly SecondaryNavItem[] = [
 // nav items when the user lands on them (deep links + the wizard).
 const ALIAS_TO_STEP: Record<string, StepKey> = {
   '/generate-ads':  'campaigns',
-  '/upload':        'campaigns',
-  '/detect':        'campaigns'
+  '/upload':        'campaigns'
+  // /detect is now a top-level secondary nav entry (Detect Review),
+  // no longer aliased to a primary step.
 };
 
 export function statusFromPath(currentPath: string): Record<StepKey, StepStatus> {

@@ -10,7 +10,7 @@ import { BrandPage as OnboardingBrandPage } from './pages/Onboarding/BrandPage';
 import { ConnectPage } from './pages/Onboarding/ConnectPage';
 import { BrandPage } from './pages/Brand';
 import { UploadPage } from './pages/Upload';
-import { DetectPage } from './pages/Detect';
+import { DetectReviewPage } from './pages/DetectReview';
 import { CampaignsPage } from './pages/Campaigns';
 import { CampaignDetailPage } from './pages/CampaignDetail';
 import { AdsPage } from './pages/Ads';
@@ -35,9 +35,12 @@ export function App() {
               <Route path="/campaigns/:id"  element={<RequireAuth><CampaignDetailPage /></RequireAuth>} />
               <Route path="/ads"            element={<RequireAuth><AdsPage /></RequireAuth>} />
               <Route path="/generate-ads"   element={<RequireAuth><GenerateAdsWizard /></RequireAuth>} />
+              {/* Detect Review — secondary nav entry. Operator queue
+                  for reviewing AI-detected products before they land in
+                  the Product Catalog. */}
+              <Route path="/detect"         element={<RequireAuth><DetectReviewPage /></RequireAuth>} />
               {/* Deep-link / wizard-internal routes — not in primary nav */}
               <Route path="/upload"         element={<RequireAuth><UploadPage /></RequireAuth>} />
-              <Route path="/detect"         element={<RequireAuth><DetectPage /></RequireAuth>} />
               <Route path="/media-library"  element={<RequireAuth><MediaLibraryPage /></RequireAuth>} />
               <Route path="/catalog"        element={<RequireAuth><CatalogBrowserPage /></RequireAuth>} />
               <Route path="/settings"       element={<RequireAuth><SettingsPage /></RequireAuth>} />

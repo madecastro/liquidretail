@@ -410,36 +410,29 @@
     }
 
     try {
-      // Render-mode (Puppeteer) carries the variant selectors that
-      // deriveStage used when it built the artifact. Including them here
-      // hits the SAME cache slot — without them, the cache key drifts
-      // (productId=null, paletteSource='media', variantKind='ugc') and
-      // the rebuild produces a different artifact than the queued Ad
-      // expects (literal "Product" placeholder, identical palette across
-      // brand/media variants). Operator preview (no __tpRenderForce)
-      // keeps the bypass-cache, refresh:true behavior so slider tweaks
-      // re-derive on the fly.
+      // Render-mode (Puppeteer): fetch the artifact deriveStage already
+      // wrote, by id. Skips the cache-keyed POST entirely and avoids
+      // any chance of cache-miss-rebuild timing out at the gateway.
+      // Operator preview keeps the POST + refresh:true behavior so
+      // slider/template changes re-derive live.
       const force = window.__tpRenderForce || {};
-      const isRenderMode = !!force.template;
-      const renderOpts = isRenderMode ? {
-        productId:     force.productId     || null,
-        paletteSource: force.paletteSource || 'media',
-        variantKind:   force.variantKind   || 'ugc'
-      } : {};
-      const res = await fetch('/api/layout-input?include=canvas', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mediaId:     state.mediaId,
-          template:    TP_STATE.template,
-          aspect_ratio: TP_STATE.aspectRatio,
-          options:     { allow_invalid: true, conservation: TP_STATE.conservation, ...renderOpts },
-          // Render mode hits the cached artifact (already derived by
-          // deriveStage); operator preview always re-derives so slider
-          // / template changes re-roll on the fly.
-          refresh:     !isRenderMode
-        })
-      });
+      const isRenderMode = !!force.layoutInputArtifactId;
+      let res;
+      if (isRenderMode) {
+        res = await fetch(`/api/layout-input/by-id/${encodeURIComponent(force.layoutInputArtifactId)}`);
+      } else {
+        res = await fetch('/api/layout-input?include=canvas', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mediaId:      state.mediaId,
+            template:     TP_STATE.template,
+            aspect_ratio: TP_STATE.aspectRatio,
+            options:      { allow_invalid: true, conservation: TP_STATE.conservation },
+            refresh:      true
+          })
+        });
+      }
       const data = await res.json();
       // Diagnostic — picked up by the render service's page-signal
       // listener so a 0-size stage can be traced back to the actual

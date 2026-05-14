@@ -8,12 +8,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   Card, CardBody, VStack, HStack, Text, Heading, Button, Badge, Box, Spinner,
-  useToast, useDisclosure
+  Tooltip, useToast, useDisclosure
 } from '@chakra-ui/react';
 import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '../../shell/PageHeader';
 import { apiJson } from '../../auth/apiFetch';
 import { NewCampaignModal } from './NewCampaignModal';
+import { useAdReadiness, type AdReadiness } from '../../brand/useAdReadiness';
 
 export type CampaignInsights = {
   impressions:           number | null;
@@ -53,10 +54,22 @@ type Campaign = {
   lastSyncedAt:  string | null;
 };
 
+// Compose the tooltip body when ad-readiness blocks a button. Lists
+// each blocker on its own line. Shown via Chakra Tooltip when the user
+// hovers the disabled trigger.
+function readinessTooltip(r: AdReadiness): string {
+  if (r.ready) return '';
+  const lines = (r.blockers || []).map(b => `• ${b.message}`);
+  return [r.reason, ...lines].filter(Boolean).join('\n');
+}
+
 export function CampaignsPage() {
   const toast = useToast();
   const newCampaignModal = useDisclosure();
   const [params, setParams] = useSearchParams();
+  const readiness = useAdReadiness();
+  const gateDisabled = !readiness.ready;
+  const gateTip = readinessTooltip(readiness);
 
   // Auto-open the New Campaign modal when the page is reached via
   // /campaigns?new=1 (e.g. the Media Library's "Add to Campaign →
@@ -135,14 +148,51 @@ export function CampaignsPage() {
           >
             Sync now
           </Button>
-          <Button size="sm" variant="outline" onClick={newCampaignModal.onOpen}>
-            New campaign
-          </Button>
-          <Button as={RouterLink} to="/generate-ads" variant="brand" size="sm">
-            Generate Ads
-          </Button>
+          <Tooltip label={gateTip} isDisabled={!gateDisabled} hasArrow whiteSpace="pre-line">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={newCampaignModal.onOpen}
+              isDisabled={gateDisabled}
+            >
+              New campaign
+            </Button>
+          </Tooltip>
+          <Tooltip label={gateTip} isDisabled={!gateDisabled} hasArrow whiteSpace="pre-line">
+            {/* Button-as-Link can't take isDisabled directly — render a
+                disabled <Button> instead when gated. */}
+            {gateDisabled
+              ? <Button variant="brand" size="sm" isDisabled>Generate Ads</Button>
+              : <Button as={RouterLink} to="/generate-ads" variant="brand" size="sm">Generate Ads</Button>
+            }
+          </Tooltip>
         </HStack>
       </HStack>
+
+      {gateDisabled && !readiness.loading && (
+        <Card variant="outline" borderColor="orange.300" bg="orange.50">
+          <CardBody py={3}>
+            <VStack align="stretch" spacing={1}>
+              <Text fontSize="11px" fontWeight="700" color="orange.700" textTransform="uppercase" letterSpacing="0.06em">
+                Account setup incomplete
+              </Text>
+              <Text fontSize="sm" color="brand.ink">{readiness.reason}</Text>
+              {readiness.blockers.length > 0 && (
+                <VStack align="stretch" spacing={0.5} pt={1}>
+                  {readiness.blockers.map(b => (
+                    <Text key={b.code} fontSize="11px" color="brand.muted">• {b.message}</Text>
+                  ))}
+                </VStack>
+              )}
+              <HStack pt={2}>
+                <Button as={RouterLink} to="/brand" variant="outline" size="xs">
+                  Open onboarding status
+                </Button>
+              </HStack>
+            </VStack>
+          </CardBody>
+        </Card>
+      )}
 
       <NewCampaignModal isOpen={newCampaignModal.isOpen} onClose={newCampaignModal.onClose} />
 
@@ -176,9 +226,16 @@ export function CampaignsPage() {
                 <Button as={RouterLink} to="/brand" variant="outline" size="sm">
                   Connect integrations
                 </Button>
-                <Button onClick={newCampaignModal.onOpen} variant="brand" size="sm">
-                  New campaign
-                </Button>
+                <Tooltip label={gateTip} isDisabled={!gateDisabled} hasArrow whiteSpace="pre-line">
+                  <Button
+                    onClick={newCampaignModal.onOpen}
+                    variant="brand"
+                    size="sm"
+                    isDisabled={gateDisabled}
+                  >
+                    New campaign
+                  </Button>
+                </Tooltip>
               </HStack>
             </VStack>
           </CardBody>
@@ -186,7 +243,7 @@ export function CampaignsPage() {
       ) : (
         <VStack align="stretch" spacing={3}>
           {campaigns.map(c => (
-            <CampaignRow key={c.id} campaign={c} />
+            <CampaignRow key={c.id} campaign={c} gateDisabled={gateDisabled} gateTip={gateTip} />
           ))}
         </VStack>
       )}
@@ -194,7 +251,7 @@ export function CampaignsPage() {
   );
 }
 
-function CampaignRow({ campaign: c }: { campaign: Campaign }) {
+function CampaignRow({ campaign: c, gateDisabled, gateTip }: { campaign: Campaign; gateDisabled: boolean; gateTip: string }) {
   const platformLabel = c.platform === 'meta-ads' ? 'Meta'
                       : c.platform === 'google-ads' ? 'Google'
                       : c.platform;
@@ -269,15 +326,22 @@ function CampaignRow({ campaign: c }: { campaign: Campaign }) {
             </HStack>
             {c.insights && <InsightsRow insights={c.insights} fallbackCurrency={c.budget?.currency || null} />}
           </Box>
-          <Button
-            as={RouterLink}
-            to={`/generate-ads?campaignId=${c.id}&step=products`}
-            variant="brand"
-            size="sm"
-            flexShrink={0}
-          >
-            Generate Ads
-          </Button>
+          <Tooltip label={gateTip} isDisabled={!gateDisabled} hasArrow whiteSpace="pre-line">
+            {gateDisabled
+              ? <Button variant="brand" size="sm" flexShrink={0} isDisabled>Generate Ads</Button>
+              : (
+                <Button
+                  as={RouterLink}
+                  to={`/generate-ads?campaignId=${c.id}&step=products`}
+                  variant="brand"
+                  size="sm"
+                  flexShrink={0}
+                >
+                  Generate Ads
+                </Button>
+              )
+            }
+          </Tooltip>
         </HStack>
       </CardBody>
     </Card>

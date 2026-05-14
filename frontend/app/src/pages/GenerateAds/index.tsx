@@ -42,6 +42,12 @@ export type WizardSelections = {
   ctaText:     string;
   ctaUrl:      string;
   urlParams:   string;       // raw querystring fragment, e.g. utm_source=...&utm_medium=...
+  // Pairing-level exclusions surfaced from Step 2's match ribbons.
+  // Each entry is `${productId||'null'}|${mediaId}` — POST'd to
+  // /api/ads/generate as [{productId, mediaId}] objects so the
+  // backend can drop the matching tuples from the cartesian.
+  // brand_match exclusions use productId='null' (no specific SKU).
+  excludedPairings: string[];
 };
 
 const STEPS: Array<{ key: WizardStepKey; label: string; description: string }> = [
@@ -77,7 +83,8 @@ export function GenerateAdsWizard() {
     templateIds:  [],
     ctaText:      '',
     ctaUrl:       '',
-    urlParams:    ''
+    urlParams:    '',
+    excludedPairings: []
   });
 
   // Keep ?campaignId / ?mediaIds / ?productIds clean once we've
@@ -122,7 +129,7 @@ export function GenerateAdsWizard() {
         && patch.campaignId !== prev.campaignId
         && !!prev.campaignId;
       if (switchingExistingCampaign) {
-        return { ...prev, ...patch, productIds: [], mediaIds: [] };
+        return { ...prev, ...patch, productIds: [], mediaIds: [], excludedPairings: [] };
       }
       return { ...prev, ...patch };
     });

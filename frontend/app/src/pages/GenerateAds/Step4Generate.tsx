@@ -50,6 +50,13 @@ export function Step4Generate({ value }: Props) {
   const generate = async () => {
     setBusy(true);
     try {
+      // Decode the Step 2 picker's pairing-exclusions back into the
+      // shape the backend expects: [{productId|null, mediaId}].
+      // Encoded as `${productId||'null'}|${mediaId}` strings.
+      const excludePairings = (value.excludedPairings || []).map(s => {
+        const [pid, mid] = s.split('|');
+        return { productId: pid === 'null' ? null : pid, mediaId: mid };
+      });
       const res = await apiJson<GenerateResponse>('/api/ads/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -60,6 +67,7 @@ export function Step4Generate({ value }: Props) {
           templateIds: value.templateIds,
           cta:         { text: value.ctaText, url: value.ctaUrl },
           urlParams:   value.urlParams,
+          excludePairings,
           // Legacy passthrough — the new queue-time identityDigest dedup
           // makes this a no-op on the server, but the field is still
           // accepted for backwards compat with operator muscle memory.

@@ -17,12 +17,26 @@
 // won't proportionally produce more ads.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Box, VStack, HStack, Text, Button, Wrap, WrapItem, Image } from '@chakra-ui/react';
+import { Box, VStack, HStack, Text, Button, Wrap, WrapItem, Image, Tooltip, Badge } from '@chakra-ui/react';
 import type { WizardSelections } from './index';
 import { StepShell } from './index';
 import { apiJson } from '../../auth/apiFetch';
 import { useBrand } from '../../brand/BrandContext';
 import { RibbonPicker, ProductTile, MediaTile } from './RibbonPicker';
+
+// Match-evidence fields the picker surfaces on related-ribbon tiles.
+// Backed by /api/catalog/:id/matches, /api/media/:id/related-products,
+// and /api/brand/:id/brand-matches — all three return matchTier +
+// outcomeReasoning so the tooltip shows "why this match" alongside
+// the score and provider winner.
+type MatchTier = 'product_match' | 'product_category' | 'brand_match';
+type MatchEvidence = {
+  matchTier:        MatchTier | null;
+  outcomeReasoning: string | null;
+  winner:           string | null;
+  matchSource:      string | null;
+  catalogCombinedScore: number | null;
+};
 
 type ProductRow = {
   id:        string;
@@ -31,6 +45,10 @@ type ProductRow = {
   price?:    number | null;
   currency?: string | null;
   brand?:    string | null;
+} & Partial<MatchEvidence> & {
+  // Set on tiles surfaced from /api/media/:id/related-products. Used
+  // as the "seed" when constructing the exclusion key for an X click.
+  seedMediaId?: string;
 };
 
 type MediaRow = {
@@ -39,7 +57,18 @@ type MediaRow = {
   fileUrl:             string;
   creatorHandle:       string | null;
   primarySubjectLabel: string | null;
+} & Partial<MatchEvidence> & {
+  seedProductId?: string | null;   // null for brand_match (no SKU)
+  likes?:    number | null;
+  comments?: number | null;
+  saves?:    number | null;
 };
+
+// Pairing-key encoder. brand_match seeds use 'null' as the productId
+// half so brand-wide exclusions don't collide with SKU-targeted ones.
+function pairingKey(productId: string | null, mediaId: string): string {
+  return `${productId || 'null'}|${mediaId}`;
+}
 
 type Props = {
   value:    WizardSelections;
@@ -161,17 +190,18 @@ export function Step2Picker({ value, onChange }: Props) {
   }, [value.campaignId]);
 
   // Cross-direction lookups. When the operator selects one or more
-  // media, fetch related products from each (deduped); same for
-  // products → related media. Cap each related ribbon to ~12 to
-  // keep it scannable.
+  // media, fetch related products from each (deduped + tagged with
+  // the seed mediaId so the X exclusion knows which pairing to drop);
+  // same for products → related media. Cap each related ribbon to ~24
+  // (was 12) so the per-tier groups don't all squeeze into one bucket.
   useEffect(() => {
     let cancelled = false;
     if (!value.mediaIds.length) { setRelatedProducts([]); return; }
     Promise.all(
-      value.mediaIds.slice(0, 5).map(id =>
-        apiJson<{ products: ProductRow[] }>(`/api/media/${id}/related-products`)
-          .then(r => r.products || [])
-          .catch(() => [])
+      value.mediaIds.slice(0, 5).map(seedId =>
+        apiJson<{ products: ProductRow[] }>(`/api/media/${seedId}/related-products`)
+          .then(r => (r.products || []).map(p => ({ ...p, seedMediaId: seedId })))
+          .catch(() => [] as ProductRow[])
       )
     ).then(lists => {
       if (cancelled) return;
@@ -179,10 +209,16 @@ export function Step2Picker({ value, onChange }: Props) {
       const flat: ProductRow[] = [];
       for (const list of lists) {
         for (const p of list) {
-          if (!seen.has(p.id)) { seen.add(p.id); flat.push(p); }
+          // Dedupe by (seedMediaId, productId) so the same product
+          // surfaced from two seed media still gets one tile per pair —
+          // each pair is independently excludable.
+          const key = `${p.seedMediaId}|${p.id}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          flat.push(p);
         }
       }
-      setRelatedProducts(flat.slice(0, 12));
+      setRelatedProducts(flat.slice(0, 24));
     });
     return () => { cancelled = true; };
   }, [value.mediaIds, value.productIds]);
@@ -191,9 +227,18 @@ export function Step2Picker({ value, onChange }: Props) {
     let cancelled = false;
     if (!value.productIds.length) { setRelatedMedia([]); return; }
     Promise.all(
-      value.productIds.slice(0, 5).map(id =>
-        apiJson<{ matches: { mediaId: string; media: MediaRow }[] }>(`/api/catalog/${id}/matches`)
-          .then(r => (r.matches || []).map(x => ({ ...x.media, id: x.mediaId })))
+      value.productIds.slice(0, 5).map(seedId =>
+        apiJson<{ matches: { mediaId: string; matchTier: MatchTier | null; outcomeReasoning: string | null; winner: string | null; matchSource: string | null; catalogCombinedScore: number | null; media: MediaRow }[] }>(`/api/catalog/${seedId}/matches`)
+          .then(r => (r.matches || []).map(x => ({
+            ...x.media,
+            id: x.mediaId,
+            seedProductId:        seedId,
+            matchTier:            x.matchTier,
+            outcomeReasoning:     x.outcomeReasoning,
+            winner:               x.winner,
+            matchSource:          x.matchSource,
+            catalogCombinedScore: x.catalogCombinedScore
+          })))
           .catch(() => [] as MediaRow[])
       )
     ).then(lists => {
@@ -202,16 +247,65 @@ export function Step2Picker({ value, onChange }: Props) {
       const flat: MediaRow[] = [];
       for (const list of lists) {
         for (const m of list) {
-          if (!seen.has(m.id)) { seen.add(m.id); flat.push(m); }
+          // Dedupe by (seedProductId, mediaId) — same media surfaced
+          // from two seed products gets one tile per pair so each is
+          // independently excludable.
+          const key = `${m.seedProductId}|${m.id}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          flat.push(m);
         }
       }
-      setRelatedMedia(flat.slice(0, 12));
+      setRelatedMedia(flat.slice(0, 24));
     });
     return () => { cancelled = true; };
   }, [value.productIds, value.mediaIds]);
 
+  // Brand-wide brand_match posts. Always fetched (independent of which
+  // products/media are picked) — these are the seeds that ride along
+  // for any ad-generate run regardless of product selection. Operator
+  // can individually exclude any of them via the X overlay.
+  const [brandMatches, setBrandMatches] = useState<MediaRow[]>([]);
+  useEffect(() => {
+    if (!brandId) { setBrandMatches([]); return; }
+    let cancelled = false;
+    apiJson<{ matches: Array<{
+      mediaId: string;
+      matchTier: MatchTier;
+      outcome: string | null;
+      outcomeReasoning: string | null;
+      winner: string | null;
+      matchSource: string | null;
+      confidence: number | null;
+      media: { externalId: string; fileType: 'image' | 'video'; fileUrl: string; source: string; permalink: string | null; creatorHandle: string | null; postedAt: string | null; likes: number | null; comments: number | null; saves: number | null; adSuitability: number | null; createdAt: string };
+    }> }>(`/api/brand/${encodeURIComponent(brandId)}/brand-matches?limit=24`)
+      .then(r => {
+        if (cancelled) return;
+        const rows: MediaRow[] = (r.matches || []).map(x => ({
+          id:                  x.mediaId,
+          fileType:            x.media.fileType,
+          fileUrl:             x.media.fileUrl,
+          creatorHandle:       x.media.creatorHandle,
+          primarySubjectLabel: null,
+          seedProductId:       null,             // brand_match has no SKU seed
+          matchTier:           x.matchTier,
+          outcomeReasoning:    x.outcomeReasoning,
+          winner:              x.winner,
+          matchSource:         x.matchSource,
+          catalogCombinedScore: x.confidence,
+          likes:               x.media.likes,
+          comments:            x.media.comments,
+          saves:               x.media.saves
+        }));
+        setBrandMatches(rows);
+      })
+      .catch(() => { if (!cancelled) setBrandMatches([]); });
+    return () => { cancelled = true; };
+  }, [brandId]);
+
   const productSet = useMemo(() => new Set(value.productIds), [value.productIds]);
   const mediaSet   = useMemo(() => new Set(value.mediaIds),   [value.mediaIds]);
+  const excludedSet = useMemo(() => new Set(value.excludedPairings), [value.excludedPairings]);
 
   const toggleProduct = (id: string) => {
     onChange({
@@ -227,8 +321,20 @@ export function Step2Picker({ value, onChange }: Props) {
         : [...value.mediaIds, id]
     });
   };
+  // Toggle a (productId, mediaId) pairing in the exclusion set. Used
+  // by the X overlay on every related-ribbon tile. Pure additive —
+  // doesn't change picks, only what fans out from them.
+  const toggleExclude = (productId: string | null, mediaId: string) => {
+    const k = pairingKey(productId, mediaId);
+    onChange({
+      excludedPairings: excludedSet.has(k)
+        ? value.excludedPairings.filter(x => x !== k)
+        : [...value.excludedPairings, k]
+    });
+  };
 
   const totalSelected = value.productIds.length + value.mediaIds.length;
+  const excludedCount = value.excludedPairings.length;
 
   return (
     <StepShell
@@ -303,24 +409,28 @@ export function Step2Picker({ value, onChange }: Props) {
           )}
         />
 
-        {/* Related products from selected media */}
+        {/* Related products from selected media — grouped by match tier */}
         {relatedProducts.length > 0 && (
-          <Box>
-            <SectionHeader
-              title="Related products"
-              subtitle="Surfaced from your selected media — click to add"
-              tone="muted"
-            />
-            <RibbonPicker
-              items={relatedProducts}
-              getId={p => p.id}
-              selectedIds={productSet}
-              onToggle={toggleProduct}
-              render={(p, selected, onClick) => (
-                <ProductTile product={p} selected={selected} onClick={onClick} />
-              )}
-            />
-          </Box>
+          <RelatedTierBlocks
+            heading="Products that will pair with your selected media"
+            tiers={groupByTier(relatedProducts)}
+            renderTile={(p, key) => {
+              const excluded = excludedSet.has(key);
+              return (
+                <ExcludeWrapper
+                  excluded={excluded}
+                  onExclude={() => toggleExclude(p.id, p.seedMediaId || '')}
+                  reason={p.outcomeReasoning}
+                  score={p.catalogCombinedScore}
+                  winner={p.winner}
+                  source={p.matchSource}
+                >
+                  <ProductTile product={p} selected={productSet.has(p.id)} onClick={() => toggleProduct(p.id)} />
+                </ExcludeWrapper>
+              );
+            }}
+            keyFor={(p) => pairingKey(p.id, p.seedMediaId || '')}
+          />
         )}
 
         {/* Media ribbon */}
@@ -337,27 +447,194 @@ export function Step2Picker({ value, onChange }: Props) {
           )}
         />
 
-        {/* Related media from selected products */}
+        {/* Related media from selected products — grouped by match tier */}
         {relatedMedia.length > 0 && (
+          <RelatedTierBlocks
+            heading="Posts that will pair with your selected products"
+            tiers={groupByTier(relatedMedia)}
+            renderTile={(m, key) => {
+              const excluded = excludedSet.has(key);
+              return (
+                <ExcludeWrapper
+                  excluded={excluded}
+                  onExclude={() => toggleExclude(m.seedProductId || null, m.id)}
+                  reason={m.outcomeReasoning}
+                  score={m.catalogCombinedScore}
+                  winner={m.winner}
+                  source={m.matchSource}
+                  stats={{ likes: m.likes ?? null, comments: m.comments ?? null, saves: m.saves ?? null }}
+                >
+                  <MediaTile media={m} selected={mediaSet.has(m.id)} onClick={() => toggleMedia(m.id)} />
+                </ExcludeWrapper>
+              );
+            }}
+            keyFor={(m) => pairingKey(m.seedProductId || null, m.id)}
+          />
+        )}
+
+        {/* Brand-wide brand_match posts. Always visible (independent of
+            picks) so operators can curate what fans out at the brand
+            tier across every generation run. */}
+        {brandMatches.length > 0 && (
           <Box>
             <SectionHeader
-              title="Related media"
-              subtitle="Surfaced from your selected products — click to add"
+              title="Brand-only posts"
+              subtitle={`Posts matched to the brand without identifying a specific product. These ride along on every run unless excluded. (${brandMatches.length})`}
               tone="muted"
             />
             <RibbonPicker
-              items={relatedMedia}
+              items={brandMatches}
               getId={m => m.id}
               selectedIds={mediaSet}
               onToggle={toggleMedia}
-              render={(m, selected, onClick) => (
-                <MediaTile media={m} selected={selected} onClick={onClick} />
-              )}
+              render={(m) => {
+                const key = pairingKey(null, m.id);
+                const excluded = excludedSet.has(key);
+                return (
+                  <ExcludeWrapper
+                    excluded={excluded}
+                    onExclude={() => toggleExclude(null, m.id)}
+                    reason={m.outcomeReasoning}
+                    score={m.catalogCombinedScore}
+                    winner={m.winner}
+                    source={m.matchSource}
+                    stats={{ likes: m.likes ?? null, comments: m.comments ?? null, saves: m.saves ?? null }}
+                  >
+                    <MediaTile media={m} selected={mediaSet.has(m.id)} onClick={() => toggleMedia(m.id)} />
+                  </ExcludeWrapper>
+                );
+              }}
             />
           </Box>
         )}
+
+        {excludedCount > 0 && (
+          <HStack pt={1}>
+            <Badge colorScheme="orange" variant="subtle" fontSize="10px">
+              {excludedCount} pairing{excludedCount === 1 ? '' : 's'} excluded
+            </Badge>
+            <Button
+              size="xs"
+              variant="ghost"
+              onClick={() => onChange({ excludedPairings: [] })}
+            >
+              Clear exclusions
+            </Button>
+          </HStack>
+        )}
       </VStack>
     </StepShell>
+  );
+}
+
+// Group a related-ribbon row list by matchTier. Renders one ribbon per
+// non-empty tier with a tier-specific subtitle. Tier 1/2 are derived
+// from the per-pick endpoints; brand_match rides along in its own
+// section above (not multiplexed here).
+const TIER_LABELS: Record<MatchTier, { title: string; subtitle: string }> = {
+  product_match:    { title: 'Product match',  subtitle: 'Specific SKU identified in the matched item.' },
+  product_category: { title: 'Category match', subtitle: 'Same category, different SKU — broader pairing.' },
+  brand_match:      { title: 'Brand match',    subtitle: 'Brand-fit only; no specific product identified.' }
+};
+
+function groupByTier<T extends { matchTier?: MatchTier | null }>(rows: T[]): Array<{ tier: MatchTier; items: T[] }> {
+  const order: MatchTier[] = ['product_match', 'product_category', 'brand_match'];
+  const buckets = new Map<MatchTier, T[]>();
+  for (const r of rows) {
+    const t = (r.matchTier as MatchTier) || 'product_category';
+    if (!buckets.has(t)) buckets.set(t, []);
+    buckets.get(t)!.push(r);
+  }
+  return order.filter(t => buckets.has(t)).map(t => ({ tier: t, items: buckets.get(t)! }));
+}
+
+function RelatedTierBlocks<T>({
+  heading, tiers, renderTile, keyFor
+}: {
+  heading: string;
+  tiers: Array<{ tier: MatchTier; items: T[] }>;
+  renderTile: (item: T, key: string) => React.ReactNode;
+  keyFor: (item: T) => string;
+}) {
+  return (
+    <Box>
+      <SectionHeader title={heading} subtitle="Click ✕ on any tile to remove that pairing from this run." tone="muted" />
+      <VStack align="stretch" spacing={4}>
+        {tiers.map(({ tier, items }) => (
+          <Box key={tier}>
+            <HStack mb={1.5}>
+              <Badge fontSize="9px" colorScheme={tier === 'product_match' ? 'green' : tier === 'product_category' ? 'purple' : 'blue'}>
+                {TIER_LABELS[tier].title}
+              </Badge>
+              <Text fontSize="11px" color="brand.muted">{TIER_LABELS[tier].subtitle}</Text>
+              <Text fontSize="11px" color="brand.muted" fontWeight="700">· {items.length}</Text>
+            </HStack>
+            <Box overflowX="auto" overflowY="hidden" pb={2}>
+              <HStack spacing={3} align="stretch" minW="min-content">
+                {items.map(it => (
+                  <Box key={keyFor(it)} flexShrink={0}>{renderTile(it, keyFor(it))}</Box>
+                ))}
+              </HStack>
+            </Box>
+          </Box>
+        ))}
+      </VStack>
+    </Box>
+  );
+}
+
+// Wraps any tile with an exclusion overlay (X) + a hover tooltip
+// surfacing the match reason / score / provider winner. When excluded,
+// dims the tile and changes the X to a "↺" restore action.
+function ExcludeWrapper({
+  excluded, onExclude, reason, score, winner, source, stats, children
+}: {
+  excluded: boolean;
+  onExclude: () => void;
+  reason: string | null | undefined;
+  score: number | null | undefined;
+  winner: string | null | undefined;
+  source: string | null | undefined;
+  stats?: { likes: number | null; comments: number | null; saves: number | null };
+  children: React.ReactNode;
+}) {
+  const tipLines: string[] = [];
+  if (reason)  tipLines.push(reason);
+  if (score != null) tipLines.push(`score: ${(score * 100).toFixed(0)}%`);
+  if (winner) tipLines.push(`via: ${winner}${source ? ` @ ${source}` : ''}`);
+  if (stats && (stats.likes != null || stats.comments != null || stats.saves != null)) {
+    const parts = [];
+    if (stats.likes    != null) parts.push(`${stats.likes} likes`);
+    if (stats.comments != null) parts.push(`${stats.comments} comments`);
+    if (stats.saves    != null) parts.push(`${stats.saves} saves`);
+    tipLines.push(parts.join(' · '));
+  }
+  const tip = tipLines.join('\n') || 'No match evidence stored.';
+  return (
+    <Tooltip label={tip} hasArrow placement="top" whiteSpace="pre-line" openDelay={200}>
+      <Box position="relative" opacity={excluded ? 0.4 : 1} transition="opacity 120ms">
+        {children}
+        <Box
+          as="button"
+          onClick={(e: React.MouseEvent) => { e.stopPropagation(); onExclude(); }}
+          position="absolute"
+          top={1.5}
+          left={1.5}
+          w="22px" h="22px"
+          borderRadius="full"
+          bg={excluded ? 'gray.700' : 'red.500'}
+          color="white"
+          fontSize="11px"
+          fontWeight="800"
+          display="flex" alignItems="center" justifyContent="center"
+          boxShadow="md"
+          _hover={{ transform: 'scale(1.1)' }}
+          aria-label={excluded ? 'Restore pairing' : 'Exclude pairing from this run'}
+        >
+          {excluded ? '↺' : '✕'}
+        </Box>
+      </Box>
+    </Tooltip>
   );
 }
 

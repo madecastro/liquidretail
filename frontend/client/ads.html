@@ -1762,6 +1762,15 @@
       const mediaParam   = params.get('media');
       const templateParam = params.get('template');
       const ratioParam    = params.get('ratio');
+      // Variant selectors — optional in URL because not every template
+      // call needs them, but when present they MUST flow through to the
+      // /api/layout-input POST so the page hits the same cache slot the
+      // server-side deriveStage just wrote. Without them the page rebuilt
+      // with default options, producing wrong product slot text and
+      // identical media/brand palette variants.
+      const productIdParam     = params.get('productId')     || null;
+      const paletteSourceParam = params.get('paletteSource') || null;
+      const variantKindParam   = params.get('variantKind')   || null;
       if (!mediaParam || !templateParam || !ratioParam) {
         document.body.innerHTML =
           '<div style="padding:20px;font-family:system-ui;color:#900;">renderMode: missing required params media/template/ratio</div>';
@@ -1793,8 +1802,17 @@
       state.mediaId = mediaParam;
       state.rights = { approved: true };  // render path trusts the source
       // Force the requested template + ratio so renderTemplatePreview
-      // doesn't pick a default for us.
-      window.__tpRenderForce = { template: templateParam, ratio: ratioParam };
+      // doesn't pick a default for us. Also pass the variant selectors
+      // through so the layout-input fetch hits the cached artifact
+      // deriveStage already produced (rather than rebuilding with
+      // default options).
+      window.__tpRenderForce = {
+        template:      templateParam,
+        ratio:         ratioParam,
+        productId:     productIdParam,
+        paletteSource: paletteSourceParam,
+        variantKind:   variantKindParam
+      };
       document.getElementById('templatePreviewPanel').classList.remove('hidden');
       // Wait for every <img> inside #tpStage to finish loading (or
       // error) so the screenshot doesn't capture half-decoded media.

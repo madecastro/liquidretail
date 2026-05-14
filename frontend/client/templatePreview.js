@@ -410,6 +410,22 @@
     }
 
     try {
+      // Render-mode (Puppeteer) carries the variant selectors that
+      // deriveStage used when it built the artifact. Including them here
+      // hits the SAME cache slot — without them, the cache key drifts
+      // (productId=null, paletteSource='media', variantKind='ugc') and
+      // the rebuild produces a different artifact than the queued Ad
+      // expects (literal "Product" placeholder, identical palette across
+      // brand/media variants). Operator preview (no __tpRenderForce)
+      // keeps the bypass-cache, refresh:true behavior so slider tweaks
+      // re-derive on the fly.
+      const force = window.__tpRenderForce || {};
+      const isRenderMode = !!force.template;
+      const renderOpts = isRenderMode ? {
+        productId:     force.productId     || null,
+        paletteSource: force.paletteSource || 'media',
+        variantKind:   force.variantKind   || 'ugc'
+      } : {};
       const res = await fetch('/api/layout-input?include=canvas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -417,12 +433,11 @@
           mediaId:     state.mediaId,
           template:    TP_STATE.template,
           aspect_ratio: TP_STATE.aspectRatio,
-          options:     { allow_invalid: true, conservation: TP_STATE.conservation },
-          // Cache key is (mediaId, template, ratio) — doesn't include
-          // conservation — so bypass the cache whenever we render. Cheap
-          // for on-demand single-media preview; revisit if this lands on
-          // a batch rendering path.
-          refresh:     true
+          options:     { allow_invalid: true, conservation: TP_STATE.conservation, ...renderOpts },
+          // Render mode hits the cached artifact (already derived by
+          // deriveStage); operator preview always re-derives so slider
+          // / template changes re-roll on the fly.
+          refresh:     !isRenderMode
         })
       });
       const data = await res.json();

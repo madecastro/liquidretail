@@ -24,7 +24,11 @@ type AdRow = {
   id:           string;
   brandId:      string;
   campaignId:   string;
-  campaignRunId: string;
+  // Every run that selected this Ad. Empty until the Ad is first
+  // picked by a CampaignRun; re-render dedupe hits append the new
+  // runId so /ads?campaignRunId=X always finds the Ad if it's ever
+  // been part of run X.
+  campaignRunIds: string[];
   mediaId:      string | null;
   productId:    string | null;
   template:     string;
@@ -262,7 +266,7 @@ export function AdsPage() {
       try {
         const res = await apiJson<AdsResponse>(`/api/ads?${qp.toString()}`);
         const filtered = campaignRunId
-          ? res.ads.filter(a => a.campaignRunId === campaignRunId)
+          ? res.ads.filter(a => Array.isArray(a.campaignRunIds) && a.campaignRunIds.includes(campaignRunId))
           : res.ads;
         setRows(filtered);
         setTotal(filtered.length);

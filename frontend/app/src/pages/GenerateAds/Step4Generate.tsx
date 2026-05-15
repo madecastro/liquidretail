@@ -67,11 +67,14 @@ export function Step4Generate({ value }: Props) {
           templateIds: value.templateIds,
           cta:         { text: value.ctaText, url: value.ctaUrl },
           urlParams:   value.urlParams,
-          excludePairings,
-          // Legacy passthrough — the new queue-time identityDigest dedup
-          // makes this a no-op on the server, but the field is still
-          // accepted for backwards compat with operator muscle memory.
-          refresh:     true
+          excludePairings
+          // refresh:true was a smoke-test workaround for the bug where
+          // dedupe-hit ads kept their original campaignRunId and made
+          // /ads?campaignRunId=X come back empty. Resolved by #111
+          // (campaignRunIds[] $addToSet on every run pick), so we now
+          // run with dedupe-by-default — re-running the wizard on the
+          // same picks correctly surfaces the existing ads in the new
+          // run's gallery.
         })
       });
       toast({

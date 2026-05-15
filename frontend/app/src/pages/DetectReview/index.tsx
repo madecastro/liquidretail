@@ -85,6 +85,12 @@ export function DetectReviewPage() {
       const params = new URLSearchParams({
         brandId,
         source: 'detect-identified',
+        // showVariants=1 bypasses the catalog list's "primary variants
+        // only" collapse. Detect drafts created before the fix that
+        // forces isPrimaryVariant=true still need this to surface;
+        // and even after the fix, the review page semantically wants
+        // every row regardless of variant role.
+        showVariants: '1',
         limit:  '100'
       });
       if (draftsOnly) params.set('draft', '1');

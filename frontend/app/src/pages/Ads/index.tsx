@@ -544,9 +544,9 @@ export function AdsPage() {
       )}
 
       {/* Selection toolbar — appears once the operator ticks any
-          checkbox. Limits "Push to Meta" to rendered images for V1
-          (videoComposite is V2). The count reflects the eligible
-          subset, not the raw selection size. */}
+          checkbox. Image and video creatives both push; videos go
+          through Meta's async upload + processing pipeline (~30s–3min
+          per video) so larger video batches will take a while. */}
       {selectedIds.size > 0 && (
         <Card variant="outline" borderColor="blue.300" bg="blue.50">
           <CardBody py={3}>
@@ -556,7 +556,7 @@ export function AdsPage() {
                   {selectedIds.size} selected
                 </Badge>
                 <Text fontSize="sm" color="brand.ink">
-                  Push these ads to Meta as PAUSED creatives. Only image renders ship in V1.
+                  Push these ads to Meta as PAUSED creatives. Videos take a bit longer (Meta processes them async).
                 </Text>
               </HStack>
               <HStack spacing={2}>

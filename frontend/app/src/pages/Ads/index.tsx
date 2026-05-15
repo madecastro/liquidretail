@@ -54,6 +54,32 @@ type AdRow = {
   queuedAt:     string | null;
   renderedAt:   string | null;
   generatedAt:  string;
+  // Meta Ads sync — populated once the operator pushes the ad to a
+  // connected Meta ad account. Drives the per-card "Synced to Meta"
+  // / "Push failed" pill and the detail-modal "View on Meta" link.
+  metaAdId:           string | null;
+  metaAdCreativeId:   string | null;
+  metaAdsetId:        string | null;
+  metaCampaignId:     string | null;
+  metaAdAccountId:    string | null;
+  metaSyncStatus:     'synced' | 'failed' | null;
+  metaSyncError:      string | null;
+  metaSyncedAt:       string | null;
+};
+
+type MetaAdsetRow = {
+  adsetId:        string;
+  adsetName:      string;
+  adsetStatus:    string | null;
+  campaignId:     string;
+  campaignName:   string;
+  campaignStatus: string | null;
+};
+
+type PushResult = {
+  pushed: number;
+  failed: number;
+  perAd:  Array<{ adId: string; ok: boolean; metaAdId?: string; error?: string }>;
 };
 
 type AdsResponse = { ads: AdRow[]; total: number; limit: number; offset: number };
@@ -96,6 +122,98 @@ export function AdsPage() {
   const [pollTimedOut, setPollTimedOut] = useState(false);
   const [campaigns, setCampaigns] = useState<CampaignOption[]>([]);
   const detailModal = useDisclosure();
+
+  // Meta-push selection + modal state. selectedIds holds the ad ids
+  // the operator has ticked for batch push; the toolbar appears when
+  // the set is non-empty. metaAdsets is fetched lazily on modal open.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [metaAdsets, setMetaAdsets]   = useState<MetaAdsetRow[]>([]);
+  const [adsetsLoading, setAdsetsLoading] = useState(false);
+  const [chosenAdsetId, setChosenAdsetId] = useState<string>('');
+  const [pushing, setPushing] = useState(false);
+  const pushModal = useDisclosure();
+
+  function toggleSelect(adId: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(adId)) next.delete(adId); else next.add(adId);
+      return next;
+    });
+  }
+  function clearSelection() { setSelectedIds(new Set()); }
+
+  // Fetch the brand's Meta AdSets when the push modal opens. Always
+  // fresh (don't cache across opens) so a newly-synced AdSet shows
+  // up without a page reload.
+  const openPushModal = async () => {
+    if (!activeBrandId) return;
+    setChosenAdsetId('');
+    setMetaAdsets([]);
+    pushModal.onOpen();
+    setAdsetsLoading(true);
+    try {
+      const res = await apiJson<{ adsets: MetaAdsetRow[] }>(
+        `/api/ads/meta-adsets?brandId=${encodeURIComponent(activeBrandId)}`
+      );
+      setMetaAdsets(res.adsets || []);
+    } catch (e) {
+      toast({
+        title:       'Could not load Meta AdSets',
+        description: e instanceof Error ? e.message : String(e),
+        status:      'error',
+        duration:    5000
+      });
+    } finally {
+      setAdsetsLoading(false);
+    }
+  };
+
+  const submitPush = async () => {
+    if (!activeBrandId || !chosenAdsetId || selectedIds.size === 0) return;
+    setPushing(true);
+    try {
+      const adIds = Array.from(selectedIds);
+      const result = await apiJson<PushResult>('/api/ads/push-to-meta', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ brandId: activeBrandId, adsetId: chosenAdsetId, adIds })
+      });
+      const summary = result.failed === 0
+        ? `Pushed ${result.pushed} ad${result.pushed === 1 ? '' : 's'} as PAUSED.`
+        : `Pushed ${result.pushed}, failed ${result.failed}. Check the failed pills for the error.`;
+      toast({
+        title:       result.failed === 0 ? 'Synced to Meta' : 'Pushed with errors',
+        description: summary,
+        status:      result.failed === 0 ? 'success' : 'warning',
+        duration:    5000
+      });
+      pushModal.onClose();
+      clearSelection();
+      // Refresh the list so the new metaSyncStatus pills show up.
+      await fetchRef.current?.();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast({
+        title:       'Push failed',
+        description: msg,
+        status:      'error',
+        duration:    7000
+      });
+    } finally {
+      setPushing(false);
+    }
+  };
+
+  // Group AdSets by campaign for the dropdown rendering.
+  const adsetsByCampaign = useMemo(() => {
+    const groups = new Map<string, { campaignName: string; adsets: MetaAdsetRow[] }>();
+    for (const a of metaAdsets) {
+      const k = a.campaignId;
+      if (!groups.has(k)) groups.set(k, { campaignName: a.campaignName, adsets: [] });
+      groups.get(k)!.adsets.push(a);
+    }
+    return Array.from(groups.values());
+  }, [metaAdsets]);
 
   // Pull the brand's campaigns once per active-brand change for the
   // campaign filter dropdown. Failure is silent — the dropdown just
@@ -425,6 +543,38 @@ export function AdsPage() {
         </Card>
       )}
 
+      {/* Selection toolbar — appears once the operator ticks any
+          checkbox. Limits "Push to Meta" to rendered images for V1
+          (videoComposite is V2). The count reflects the eligible
+          subset, not the raw selection size. */}
+      {selectedIds.size > 0 && (
+        <Card variant="outline" borderColor="blue.300" bg="blue.50">
+          <CardBody py={3}>
+            <HStack justify="space-between" align="center">
+              <HStack spacing={3}>
+                <Badge colorScheme="blue" fontSize="11px">
+                  {selectedIds.size} selected
+                </Badge>
+                <Text fontSize="sm" color="brand.ink">
+                  Push these ads to Meta as PAUSED creatives. Only image renders ship in V1.
+                </Text>
+              </HStack>
+              <HStack spacing={2}>
+                <Button size="sm" variant="ghost" onClick={clearSelection}>Clear</Button>
+                <Button
+                  size="sm"
+                  variant="brand"
+                  onClick={openPushModal}
+                  isDisabled={!activeBrandId}
+                >
+                  Push {selectedIds.size} to Meta
+                </Button>
+              </HStack>
+            </HStack>
+          </CardBody>
+        </Card>
+      )}
+
       {!loading && rows.length > 0 && (
         <SimpleGrid columns={{ base: 1, sm: 2, md: 3, lg: 4 }} spacing={4}>
           {rows.map((ad) => (
@@ -495,6 +645,60 @@ export function AdsPage() {
                 >
                   {ad.status}
                 </Badge>
+                {/* Selection checkbox — clickable independent of the
+                    card body so toggling doesn't open the detail modal. */}
+                <Box
+                  position="absolute"
+                  top={2}
+                  left={2}
+                  bg="blackAlpha.700"
+                  borderRadius="md"
+                  p={1}
+                  cursor="pointer"
+                  onClick={(e) => { e.stopPropagation(); toggleSelect(ad.id); }}
+                >
+                  <Box
+                    w="18px" h="18px"
+                    borderRadius="sm"
+                    borderWidth="2px"
+                    borderColor={selectedIds.has(ad.id) ? 'blue.400' : 'whiteAlpha.700'}
+                    bg={selectedIds.has(ad.id) ? 'blue.400' : 'transparent'}
+                    display="flex" alignItems="center" justifyContent="center"
+                    color="white"
+                    fontSize="11px"
+                    fontWeight="800"
+                  >
+                    {selectedIds.has(ad.id) ? '✓' : ''}
+                  </Box>
+                </Box>
+                {/* Meta sync pill — bottom-right of the tile. Synced
+                    pill links to Ads Manager; failed pill surfaces the
+                    error in a tooltip. */}
+                {ad.metaSyncStatus === 'synced' && (
+                  <Badge
+                    as="a"
+                    href={ad.metaAdId
+                      ? `https://www.facebook.com/adsmanager/manage/ads?selected_ad_ids=${ad.metaAdId}`
+                      : 'https://www.facebook.com/adsmanager'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    position="absolute" bottom={2} right={2}
+                    colorScheme="blue" fontSize="9px"
+                    cursor="pointer"
+                  >
+                    Synced ↗
+                  </Badge>
+                )}
+                {ad.metaSyncStatus === 'failed' && (
+                  <Badge
+                    title={ad.metaSyncError || 'Push failed'}
+                    position="absolute" bottom={2} right={2}
+                    colorScheme="red" fontSize="9px"
+                  >
+                    Push failed
+                  </Badge>
+                )}
               </Box>
               <CardBody py={3}>
                 <VStack align="stretch" spacing={1}>
@@ -619,6 +823,69 @@ export function AdsPage() {
                 </HStack>
               </VStack>
             )}
+          </ModalBody>
+        </ModalContent>
+      </Modal>
+
+      {/* Push-to-Meta modal — single AdSet dropdown grouped by Meta
+          Campaign. Submitting fans out the selected adIds to the
+          backend's batch endpoint; the toast summarizes the per-ad
+          result and the gallery refreshes to show the new pills. */}
+      <Modal isOpen={pushModal.isOpen} onClose={pushModal.onClose} size="lg">
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Push {selectedIds.size} ad{selectedIds.size === 1 ? '' : 's'} to Meta</ModalHeader>
+          <ModalCloseButton isDisabled={pushing} />
+          <ModalBody pb={6}>
+            <VStack align="stretch" spacing={4}>
+              <Text fontSize="sm" color="brand.muted">
+                Pick the AdSet that the new ads will belong to. They'll be created as <strong>PAUSED</strong> — activate them in Meta Ads Manager when you're ready.
+              </Text>
+              {adsetsLoading ? (
+                <HStack py={4} justify="center"><Spinner size="sm" /><Text fontSize="sm" color="brand.muted">Loading AdSets…</Text></HStack>
+              ) : metaAdsets.length === 0 ? (
+                <Box bg="orange.50" borderColor="orange.300" borderWidth="1px" borderRadius="md" p={3}>
+                  <Text fontSize="sm" color="orange.700" fontWeight="700">No Meta AdSets found.</Text>
+                  <Text fontSize="xs" color="brand.muted" mt={1}>
+                    Connect Meta Ads on the Brand page and run a campaign sync, then come back here.
+                  </Text>
+                </Box>
+              ) : (
+                <Box>
+                  <Text fontSize="xs" fontWeight="800" color="brand.muted" textTransform="uppercase" letterSpacing="0.06em" mb={1}>
+                    Target AdSet
+                  </Text>
+                  <Select
+                    value={chosenAdsetId}
+                    onChange={(e) => setChosenAdsetId(e.target.value)}
+                    placeholder="Pick an AdSet…"
+                  >
+                    {adsetsByCampaign.map(group => (
+                      <optgroup key={group.campaignName} label={group.campaignName}>
+                        {group.adsets.map(a => (
+                          <option key={a.adsetId} value={a.adsetId}>
+                            {a.adsetName}{a.adsetStatus ? ` · ${a.adsetStatus}` : ''}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </Select>
+                </Box>
+              )}
+              <HStack justify="flex-end" spacing={2}>
+                <Button variant="outline" size="sm" onClick={pushModal.onClose} isDisabled={pushing}>Cancel</Button>
+                <Button
+                  variant="brand"
+                  size="sm"
+                  onClick={submitPush}
+                  isDisabled={!chosenAdsetId || pushing}
+                  isLoading={pushing}
+                  loadingText="Pushing…"
+                >
+                  Push as PAUSED
+                </Button>
+              </HStack>
+            </VStack>
           </ModalBody>
         </ModalContent>
       </Modal>

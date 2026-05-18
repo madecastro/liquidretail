@@ -23,7 +23,7 @@ import {
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter,
   ModalCloseButton, FormControl, FormLabel, FormHelperText, Input, Select,
   Textarea, Button, ButtonGroup, HStack, VStack, Text, useToast,
-  SimpleGrid, Divider, Image, Box
+  SimpleGrid, Divider, Image, Box, Badge, IconButton
 } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { apiJson } from '../../auth/apiFetch';
@@ -47,18 +47,25 @@ type PromotionalDetails = {
   // prize media is picked at create time from the brand's Media library.
   raffleEntriesPerDollar?: number | null;
   rafflePrize?:            string;
-  rafflePrizeMediaId?:     string | null;
+  // Multi-select up to MAX_PRIZE_MEDIA. The FIRST element is the
+  // canonical hero (drives non-rendered thumbnails). Each element
+  // generates its own ad variant per (template × ratio × paletteSource)
+  // at expand time (Option B per-prize variants).
+  rafflePrizeMediaIds?:    string[];
   raffleDrawDate?:         string;     // yyyy-mm-dd; defaults to endsAt server-side if absent
 };
 
-// Lightweight summary of the selected prize media, kept in state so we
-// can render a thumbnail next to the picker button without re-fetching.
+// Lightweight summary of a single picked prize media. The operator
+// can select up to MAX_PRIZE_MEDIA; we keep them in selection order
+// so the first one stays the canonical hero.
 type PrizePreview = {
   id:       string;
   fileType: 'image' | 'video';
   thumbUrl: string;
   label:    string | null;
 };
+
+const MAX_PRIZE_MEDIA = 5;
 
 type CreatedCampaign = {
   id:                  string;
@@ -84,7 +91,7 @@ export function NewCampaignModal({ isOpen, onClose }: { isOpen: boolean; onClose
   const [name, setName] = useState('');
   const [kind, setKind] = useState<CampaignKind>('product');
   const [promo, setPromo] = useState<PromotionalDetails>({});
-  const [prizePreview, setPrizePreview] = useState<PrizePreview | null>(null);
+  const [prizePreviews, setPrizePreviews] = useState<PrizePreview[]>([]);
   const [prizePickerOpen, setPrizePickerOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -94,7 +101,7 @@ export function NewCampaignModal({ isOpen, onClose }: { isOpen: boolean; onClose
       setName('');
       setKind('product');
       setPromo({});
-      setPrizePreview(null);
+      setPrizePreviews([]);
       setPrizePickerOpen(false);
       setSubmitting(false);
     }
@@ -124,9 +131,9 @@ export function NewCampaignModal({ isOpen, onClose }: { isOpen: boolean; onClose
       if (promo.raffleEntriesPerDollar != null && !Number.isNaN(promo.raffleEntriesPerDollar)) {
         out.raffleEntriesPerDollar = promo.raffleEntriesPerDollar;
       }
-      if (promo.rafflePrize?.trim())     out.rafflePrize        = promo.rafflePrize.trim();
-      if (promo.rafflePrizeMediaId)      out.rafflePrizeMediaId = promo.rafflePrizeMediaId;
-      if (promo.raffleDrawDate)          out.raffleDrawDate     = promo.raffleDrawDate;
+      if (promo.rafflePrize?.trim())     out.rafflePrize         = promo.rafflePrize.trim();
+      if (promo.rafflePrizeMediaIds?.length) out.rafflePrizeMediaIds = promo.rafflePrizeMediaIds;
+      if (promo.raffleDrawDate)          out.raffleDrawDate      = promo.raffleDrawDate;
     }
     return Object.keys(out).length ? out : null;
   }
@@ -308,51 +315,74 @@ export function NewCampaignModal({ isOpen, onClose }: { isOpen: boolean; onClose
                     </FormControl>
 
                     <FormControl>
-                      <FormLabel fontSize="sm">Prize media</FormLabel>
-                      <HStack spacing={3} align="center">
-                        {prizePreview ? (
-                          <HStack
-                            bg="brand.surface"
-                            borderWidth="1px"
-                            borderColor="brand.border"
-                            borderRadius="md"
-                            p={1}
-                            spacing={2}
-                          >
-                            <Image
-                              src={prizePreview.thumbUrl}
-                              alt={prizePreview.label || 'Prize'}
-                              w="48px" h="48px" objectFit="cover" borderRadius="sm"
-                            />
-                            <Text fontSize="xs" color="brand.muted" noOfLines={1} maxW="200px">
-                              {prizePreview.label || `Media ${prizePreview.id.slice(-6)}`}
-                            </Text>
-                            <Button
-                              size="xs"
-                              variant="ghost"
-                              onClick={() => {
-                                setPrizePreview(null);
-                                setPromo(p => ({ ...p, rafflePrizeMediaId: null }));
-                              }}
-                              isDisabled={submitting}
+                      <FormLabel fontSize="sm">Prize media (up to {MAX_PRIZE_MEDIA})</FormLabel>
+                      {prizePreviews.length > 0 && (
+                        <HStack spacing={2} wrap="wrap" mb={2}>
+                          {prizePreviews.map((p, i) => (
+                            <Box
+                              key={p.id}
+                              position="relative"
+                              bg="brand.surface"
+                              borderWidth="1px"
+                              borderColor={i === 0 ? 'rsViolet.400' : 'brand.border'}
+                              borderRadius="md"
+                              p={1}
                             >
-                              ✕
-                            </Button>
-                          </HStack>
-                        ) : (
-                          <Text fontSize="xs" color="brand.muted">No prize media selected yet.</Text>
-                        )}
+                              <Image
+                                src={p.thumbUrl}
+                                alt={p.label || `Prize ${i + 1}`}
+                                w="64px" h="64px" objectFit="cover" borderRadius="sm"
+                              />
+                              {/* Numbered badge — 1 = canonical hero (drives non-
+                                  rendered contexts like the campaign card and
+                                  the wizard banner). 2-5 each generate their
+                                  own ad variant per (template × ratio × palette). */}
+                              <Badge
+                                position="absolute" top={-1} left={-1}
+                                colorScheme={i === 0 ? 'purple' : 'gray'}
+                                variant="solid"
+                                fontSize="9px"
+                                borderRadius="full"
+                                px={1.5}
+                              >
+                                {i === 0 ? 'Canonical' : `#${i + 1}`}
+                              </Badge>
+                              <IconButton
+                                aria-label="Remove"
+                                size="xs"
+                                position="absolute"
+                                top={0}
+                                right={0}
+                                variant="ghost"
+                                onClick={() => {
+                                  const next = prizePreviews.filter(x => x.id !== p.id);
+                                  setPrizePreviews(next);
+                                  setPromo(prev => ({ ...prev, rafflePrizeMediaIds: next.map(x => x.id) }));
+                                }}
+                                isDisabled={submitting}
+                                icon={<Text fontSize="11px">✕</Text>}
+                              />
+                            </Box>
+                          ))}
+                        </HStack>
+                      )}
+                      <HStack spacing={3}>
                         <Button
                           size="sm"
                           variant="outline"
                           onClick={() => setPrizePickerOpen(true)}
-                          isDisabled={submitting}
+                          isDisabled={submitting || prizePreviews.length >= MAX_PRIZE_MEDIA}
                         >
-                          {prizePreview ? 'Change' : 'Pick from media library'}
+                          {prizePreviews.length === 0 ? 'Pick from media library' : 'Add more'}
                         </Button>
+                        {prizePreviews.length >= MAX_PRIZE_MEDIA && (
+                          <Text fontSize="11px" color="brand.muted">
+                            Max {MAX_PRIZE_MEDIA} reached.
+                          </Text>
+                        )}
                       </HStack>
                       <FormHelperText fontSize="11px" color="brand.muted">
-                        The prize visual — usually a reel/post/carousel the brand has on social. This becomes the hero of every raffle ad.
+                        Pick up to {MAX_PRIZE_MEDIA} visuals for the prize — usually reels/posts/carousels the brand has on social. The first is the canonical hero (used in summaries and as a fallback); each additional one generates its own ad variant.
                       </FormHelperText>
                     </FormControl>
 
@@ -461,9 +491,19 @@ export function NewCampaignModal({ isOpen, onClose }: { isOpen: boolean; onClose
       <PrizeMediaPicker
         isOpen={prizePickerOpen}
         onClose={() => setPrizePickerOpen(false)}
-        onSelect={(preview) => {
-          setPrizePreview(preview);
-          setPromo(p => ({ ...p, rafflePrizeMediaId: preview.id }));
+        alreadySelectedIds={prizePreviews.map(p => p.id)}
+        maxSelectable={MAX_PRIZE_MEDIA}
+        onConfirm={(newlyPicked) => {
+          // newlyPicked is the multi-selection from THIS picker session.
+          // Append to existing previews (preserving canonical-first order)
+          // up to the per-campaign cap.
+          const next = [...prizePreviews];
+          for (const p of newlyPicked) {
+            if (next.length >= MAX_PRIZE_MEDIA) break;
+            if (!next.some(x => x.id === p.id)) next.push(p);
+          }
+          setPrizePreviews(next);
+          setPromo(prev => ({ ...prev, rafflePrizeMediaIds: next.map(x => x.id) }));
           setPrizePickerOpen(false);
         }}
       />
@@ -483,21 +523,29 @@ type MediaLibRow = {
   creatorHandle?:       string | null;
   primarySubjectLabel?: string | null;
 };
-function PrizeMediaPicker({ isOpen, onClose, onSelect }: {
+function PrizeMediaPicker({ isOpen, onClose, onConfirm, alreadySelectedIds, maxSelectable }: {
   isOpen: boolean;
   onClose: () => void;
-  onSelect: (preview: PrizePreview) => void;
+  onConfirm: (picks: PrizePreview[]) => void;
+  alreadySelectedIds: string[];
+  maxSelectable: number;
 }) {
   const { activeBrand } = useBrand();
   const brandId = activeBrand?.id || null;
-  const [rows, setRows]       = useState<MediaLibRow[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [rows, setRows]               = useState<MediaLibRow[]>([]);
+  const [loading, setLoading]         = useState(false);
+  // Per-session multi-select. The parent already has previously-picked
+  // media in alreadySelectedIds; the picker disables those tiles so the
+  // operator doesn't double-add. New picks accumulate here in click
+  // order so we can pass them back to the parent in that order.
+  const [picks, setPicks] = useState<PrizePreview[]>([]);
 
   useEffect(() => {
     if (!isOpen || !brandId) return;
     let cancelled = false;
+    setPicks([]);
     setLoading(true);
-    apiJson<{ media: MediaLibRow[] }>(`/api/media?brandId=${encodeURIComponent(brandId)}&limit=100`)
+    apiJson<{ media: MediaLibRow[] }>(`/api/media?brandId=${encodeURIComponent(brandId)}&limit=200`)
       .then(res => { if (!cancelled) setRows(res.media || []); })
       .catch(() => { if (!cancelled) setRows([]); })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -513,13 +561,40 @@ function PrizeMediaPicker({ isOpen, onClose, onSelect }: {
     return m.fileUrl;
   }
 
+  const slotsLeft = Math.max(0, maxSelectable - alreadySelectedIds.length);
+
+  function toggle(m: MediaLibRow) {
+    const id = m.mediaId || m.id || '';
+    if (alreadySelectedIds.includes(id)) return;
+    setPicks(prev => {
+      const exists = prev.findIndex(x => x.id === id);
+      if (exists >= 0) return prev.filter(x => x.id !== id);
+      if (prev.length >= slotsLeft) return prev;
+      return [
+        ...prev,
+        { id, fileType: m.fileType, thumbUrl: thumbFor(m), label: m.primarySubjectLabel || m.creatorHandle || `Media ${id.slice(-6)}` }
+      ];
+    });
+  }
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="3xl">
+    // scrollBehavior="inside" — without it, the document scrolls past
+    // the modal instead of the modal's body scrolling its own list.
+    // The visible bug pre-fix: operator can't see the full library
+    // when more than ~12 tiles render.
+    <Modal isOpen={isOpen} onClose={onClose} size="3xl" scrollBehavior="inside">
       <ModalOverlay />
-      <ModalContent>
-        <ModalHeader>Pick prize media</ModalHeader>
+      <ModalContent maxH="85vh">
+        <ModalHeader>
+          <HStack justify="space-between" align="center" pr={8}>
+            <Text>Pick prize media</Text>
+            <Text fontSize="11px" color="brand.muted" fontWeight="500">
+              {picks.length} selected · {slotsLeft - picks.length} slot{slotsLeft - picks.length === 1 ? '' : 's'} left
+            </Text>
+          </HStack>
+        </ModalHeader>
         <ModalCloseButton />
-        <ModalBody pb={6}>
+        <ModalBody>
           {loading ? (
             <Text fontSize="sm" color="brand.muted" py={4} textAlign="center">Loading media…</Text>
           ) : rows.length === 0 ? (
@@ -532,22 +607,48 @@ function PrizeMediaPicker({ isOpen, onClose, onSelect }: {
                 const id = m.mediaId || m.id || '';
                 const label = m.primarySubjectLabel || m.creatorHandle || `Media ${id.slice(-6)}`;
                 const thumb = thumbFor(m);
+                const alreadyPicked = alreadySelectedIds.includes(id);
+                const sessionPickIndex = picks.findIndex(x => x.id === id);
+                const isPicked = sessionPickIndex >= 0;
+                const tileDisabled = alreadyPicked || (!isPicked && picks.length >= slotsLeft);
                 return (
                   <Box
                     key={id}
                     as="button"
-                    onClick={() => onSelect({ id, fileType: m.fileType, thumbUrl: thumb, label })}
+                    onClick={() => toggle(m)}
                     borderWidth="2px"
-                    borderColor="brand.border"
+                    borderColor={isPicked ? 'rsViolet.400' : alreadyPicked ? 'green.300' : 'brand.border'}
                     borderRadius="md"
                     overflow="hidden"
                     textAlign="left"
-                    _hover={{ borderColor: 'rsViolet.400', transform: 'translateY(-1px)' }}
+                    position="relative"
+                    cursor={tileDisabled ? 'not-allowed' : 'pointer'}
+                    opacity={tileDisabled && !isPicked ? 0.5 : 1}
+                    _hover={tileDisabled && !isPicked ? {} : { borderColor: 'rsViolet.400', transform: 'translateY(-1px)' }}
                     transition="all 120ms"
+                    disabled={tileDisabled && !isPicked}
                   >
                     <Box w="100%" bg="gray.100" style={{ aspectRatio: '1 / 1' }}>
                       <Image src={thumb} alt={label} w="100%" h="100%" objectFit="cover" />
                     </Box>
+                    {isPicked && (
+                      <Badge
+                        position="absolute" top={1} right={1}
+                        colorScheme="purple" variant="solid"
+                        fontSize="11px" px={2}
+                      >
+                        {sessionPickIndex + 1}
+                      </Badge>
+                    )}
+                    {alreadyPicked && (
+                      <Badge
+                        position="absolute" top={1} right={1}
+                        colorScheme="green" variant="solid"
+                        fontSize="9px"
+                      >
+                        Already added
+                      </Badge>
+                    )}
                     <Box p={2}>
                       <Text fontSize="11px" fontWeight="700" color="brand.ink" noOfLines={1}>{label}</Text>
                       <Text fontSize="9px" color="brand.muted" textTransform="uppercase" letterSpacing="0.04em">
@@ -560,6 +661,18 @@ function PrizeMediaPicker({ isOpen, onClose, onSelect }: {
             </SimpleGrid>
           )}
         </ModalBody>
+        <ModalFooter>
+          <HStack spacing={3}>
+            <Button variant="outline" onClick={onClose}>Cancel</Button>
+            <Button
+              variant="brand"
+              onClick={() => onConfirm(picks)}
+              isDisabled={picks.length === 0}
+            >
+              Add {picks.length} {picks.length === 1 ? 'pick' : 'picks'}
+            </Button>
+          </HStack>
+        </ModalFooter>
       </ModalContent>
     </Modal>
   );

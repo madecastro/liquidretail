@@ -261,6 +261,49 @@ export function Step2Picker({ value, onChange }: Props) {
     return () => { cancelled = true; };
   }, [value.productIds, value.mediaIds]);
 
+  // Promotional context — when the active campaign is promotional,
+  // surface the operator-supplied offer details as a banner above the
+  // picker so they stay oriented while choosing products/media. Lives
+  // outside WizardSelections (read-only, doesn't ride into the
+  // generate POST). Hydrated alongside the existing campaign fetch.
+  type PromoContext = {
+    kind:          string | null;
+    discountType:  string | null;
+    discountValue: number | null;
+    discountCode:  string | null;
+    rafflePrize:   string | null;
+    raffleEntriesPerDollar: number | null;
+    raffleDrawDate: string | null;
+    endsAt:        string | null;
+  };
+  const [promoContext, setPromoContext] = useState<PromoContext | null>(null);
+  useEffect(() => {
+    if (!value.campaignId) { setPromoContext(null); return; }
+    let cancelled = false;
+    apiJson<{ campaign: { kind: string | null; promotionalDetails: Record<string, unknown> | null } }>(
+      `/api/campaigns/${value.campaignId}`
+    ).then(res => {
+      if (cancelled) return;
+      const c = res.campaign;
+      if (c?.kind !== 'promotional' || !c?.promotionalDetails) {
+        setPromoContext(null);
+        return;
+      }
+      const p = c.promotionalDetails;
+      setPromoContext({
+        kind:          c.kind,
+        discountType:  (p.discountType as string)  || null,
+        discountValue: (p.discountValue as number) ?? null,
+        discountCode:  (p.discountCode as string)  || null,
+        rafflePrize:   (p.rafflePrize as string)   || null,
+        raffleEntriesPerDollar: (p.raffleEntriesPerDollar as number) ?? null,
+        raffleDrawDate: (p.raffleDrawDate as string) || null,
+        endsAt:        (p.endsAt as string)        || null
+      });
+    }).catch(() => { if (!cancelled) setPromoContext(null); });
+    return () => { cancelled = true; };
+  }, [value.campaignId]);
+
   // Brand-wide brand_match posts. Always fetched (independent of which
   // products/media are picked) — these are the seeds that ride along
   // for any ad-generate run regardless of product selection. Operator
@@ -342,6 +385,8 @@ export function Step2Picker({ value, onChange }: Props) {
       helper={`Each product or media seeds creatives. The render path caps at 6 ads per run, so 1–2 picks usually fills the batch. ${totalSelected > 0 ? `${totalSelected} selected.` : ''}`}
     >
       <VStack align="stretch" spacing={6}>
+        {promoContext && <PromoContextBanner ctx={promoContext} />}
+
         {/* Selected items summary */}
         {totalSelected > 0 && (
           <Box>
@@ -680,6 +725,86 @@ function SelectionChip({
       </Text>
       <Text fontSize="xs" color={fg} fontWeight="800" pl={1}>✕</Text>
     </HStack>
+  );
+}
+
+// Promotional context banner — appears at the top of Step 2 when the
+// active campaign is promotional. Keeps the operator oriented while
+// picking products/media: shows offer label, promo code, prize (for
+// raffle), entries rate, and a countdown when the offer/draw ends
+// within the next 14 days.
+type PromoContextBannerProps = {
+  ctx: {
+    discountType:  string | null;
+    discountValue: number | null;
+    discountCode:  string | null;
+    rafflePrize:   string | null;
+    raffleEntriesPerDollar: number | null;
+    raffleDrawDate: string | null;
+    endsAt:        string | null;
+  };
+};
+function PromoContextBanner({ ctx }: PromoContextBannerProps) {
+  const isRaffle = ctx.discountType === 'raffle';
+  const offerLabel = isRaffle ? 'Raffle / Sweepstakes'
+    : ctx.discountType === 'percent'       ? `${ctx.discountValue ?? '—'}% off`
+    : ctx.discountType === 'amount'        ? `$${ctx.discountValue ?? '—'} off`
+    : ctx.discountType === 'bogo'          ? 'Buy one, get one'
+    : ctx.discountType === 'bundle'        ? 'Bundle savings'
+    : ctx.discountType === 'gift'          ? 'Free gift'
+    : ctx.discountType === 'free_shipping' ? 'Free shipping'
+    : 'Promotional';
+
+  const drawOrEnd = (isRaffle ? ctx.raffleDrawDate : null) || ctx.endsAt || null;
+  const daysLeft  = drawOrEnd
+    ? Math.ceil((new Date(drawOrEnd).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    : null;
+  const countdownLabel = isRaffle ? 'Drawing' : 'Ends';
+  const urgency = daysLeft != null && Number.isFinite(daysLeft) && daysLeft > 0 && daysLeft <= 14;
+
+  return (
+    <Box
+      bg="orange.50"
+      borderWidth="1px"
+      borderColor="orange.200"
+      borderRadius="md"
+      px={4} py={3}
+    >
+      <HStack spacing={3} wrap="wrap">
+        <Badge colorScheme="orange" variant="solid" fontSize="10px">{offerLabel}</Badge>
+        {isRaffle && ctx.rafflePrize && (
+          <Text fontSize="sm" color="brand.ink" fontWeight="700">Win: {ctx.rafflePrize}</Text>
+        )}
+        {isRaffle && ctx.raffleEntriesPerDollar != null && (
+          <Text fontSize="sm" color="brand.muted">
+            {ctx.raffleEntriesPerDollar} entr{ctx.raffleEntriesPerDollar === 1 ? 'y' : 'ies'} / $1
+          </Text>
+        )}
+        {ctx.discountCode && (
+          <HStack spacing={1}>
+            <Text fontSize="11px" color="brand.muted">Code:</Text>
+            <Text fontSize="11px" fontWeight="700" color="brand.ink" fontFamily="mono">
+              {ctx.discountCode}
+            </Text>
+          </HStack>
+        )}
+        {urgency && daysLeft != null && (
+          <Badge colorScheme="red" variant="subtle" fontSize="10px">
+            {countdownLabel} in {daysLeft} day{daysLeft === 1 ? '' : 's'}
+          </Badge>
+        )}
+        {drawOrEnd && !urgency && (
+          <Text fontSize="11px" color="brand.muted">
+            {countdownLabel}: {new Date(drawOrEnd).toISOString().slice(0, 10)}
+          </Text>
+        )}
+      </HStack>
+      <Text fontSize="11px" color="brand.muted" mt={1.5}>
+        {isRaffle
+          ? 'Headlines anchor on the prize; product becomes the entry mechanic (per-purchase entry counter rides on the product card).'
+          : 'Headlines surface the offer. Pick products that fit the offer narrative.'}
+      </Text>
+    </Box>
   );
 }
 

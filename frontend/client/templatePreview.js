@@ -1063,6 +1063,34 @@
       }
       stage.appendChild(layer);
     }
+
+    // Promotional offer pill — top-right corner overlay rendered on
+    // top of all canvas zones. Independent of LLM-derived headlines
+    // so the offer reads consistently regardless of derivation drift.
+    // Backend (layoutInputService.deriveCampaignOffer) only sets
+    // input.campaign.offer when the campaign is promotional AND a
+    // label can be derived; presence-check keeps non-promotional ads
+    // pill-free.
+    drawOfferPill(stage, input);
+  }
+
+  function drawOfferPill(stage, input) {
+    const offer = input && input.campaign && input.campaign.offer;
+    if (!offer || !offer.label) return;
+    const pill = document.createElement('div');
+    pill.className = 'tp-offer-pill';
+    if (offer.kind) pill.classList.add(`tp-offer-pill-${offer.kind}`);
+    const labelEl = document.createElement('div');
+    labelEl.className = 'tp-offer-pill-label';
+    labelEl.textContent = offer.label;
+    pill.appendChild(labelEl);
+    if (offer.urgency) {
+      const urgencyEl = document.createElement('div');
+      urgencyEl.className = 'tp-offer-pill-urgency';
+      urgencyEl.textContent = offer.urgency;
+      pill.appendChild(urgencyEl);
+    }
+    stage.appendChild(pill);
   }
 
   // Project the backend's resolved style_bindings onto CSS custom

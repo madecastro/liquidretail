@@ -586,6 +586,51 @@
     .tp-zone video { width: 100%; height: 100%; object-fit: cover; display: block; }
     .tp-zone.kind-media img { border-radius: inherit; }
 
+    /* ── Promotional offer pill ─────────────────────────────────────
+       Renders on TOP of every canvas zone (zIndex 90 sits above the
+       overlay debug layer's zones but below modal chrome). Painted by
+       templatePreview.drawOfferPill when the canonical input carries
+       input.campaign.offer.label. Auto-scales via em — the stage's
+       em base is canvasW / 22 so a 1.3em pill scales the same way
+       headlines do across ratios.
+
+       Colors: bg = palette_vibrant (brand.accentColor in brand-variant
+       ads; the in-image vibrant pick in media-variant ads). Text uses
+       brand-text-on-accent which the renderer computes for WCAG
+       contrast against accent.
+
+       Per-kind classes (tp-offer-pill-raffle / -giveaway / -discount)
+       are hooks for future visual variants — V1 styles them identically. */
+    .tp-offer-pill {
+      position: absolute;
+      top: 4%;
+      right: 4%;
+      z-index: 90;
+      background: var(--brand-accent, #FF6B35);
+      color: var(--brand-text-on-accent, #ffffff);
+      border-radius: 999px;
+      padding: 0.5em 0.95em;
+      font-family: var(--tp-style-font-family-headline, var(--brand-font, Inter, system-ui, sans-serif));
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      line-height: 1.1;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.18);
+      max-width: 42%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.15em;
+      transform: rotate(-2deg);
+      transform-origin: top right;
+    }
+    .tp-offer-pill-label   { font-size: 1.05em; }
+    .tp-offer-pill-urgency {
+      font-size: 0.62em;
+      opacity: 0.95;
+      letter-spacing: 0.08em;
+    }
+
     /* Plain text zones sit directly on the stage background (headline,
        eyebrow, product_meta). Body font fixed Inter via the
        --tp-style-font-family-body var; the responsive brand font ONLY

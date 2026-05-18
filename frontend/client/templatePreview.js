@@ -1350,6 +1350,14 @@
       stage.appendChild(renderPlacedElement(el, input));
     }
 
+    // Promotional offer pill — same overlay treatment as canvas-mode
+    // (drawTpCanvas paints it after its zones). Renders only when
+    // input.campaign.offer.label is set. Sits on top of placed
+    // elements at top-right and never overlaps the auto-fit pass
+    // (the pill carries no data-element-id, so the fit loop below
+    // skips it cleanly).
+    drawOfferPill(stage, input);
+
     // Auto-fit text for every text-bearing element. Two RAFs so the
     // stage font-size set above has actually committed.
     // Dense multi-block elements (product_meta + quote) get a lower

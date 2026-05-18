@@ -26,8 +26,25 @@ import { useBrand } from '../../brand/BrandContext';
 
 // ── Types ─────────────────────────────────────────────────────────
 
+type DiscountType = 'percent' | 'amount' | 'bogo' | 'bundle' | 'gift' | 'free_shipping' | 'raffle';
+type PromotionalDetails = {
+  discountType?:  DiscountType | '';
+  discountValue?: number | null;
+  discountCode?:  string | null;
+  giveaway?:      string | null;
+  startsAt?:      string | null;
+  endsAt?:        string | null;
+  headline?:      string | null;
+  notes?:         string | null;
+  raffleEntriesPerDollar?: number | null;
+  rafflePrize?:            string | null;
+  rafflePrizeMediaId?:     string | null;
+  raffleDrawDate?:         string | null;
+};
+
 type Campaign = {
   id:            string;
+  _id?:          string;
   platform:      string;
   externalId:    string;
   name:          string;
@@ -36,6 +53,7 @@ type Campaign = {
   kind:          string | null;
   matchedProductIds?: string[];
   productSetIds?: string[];
+  promotionalDetails?: PromotionalDetails | null;
 };
 
 type ProductRow = {
@@ -100,10 +118,20 @@ export function CampaignDetailPage() {
         // added to this campaign that aren't yet on any Ad). We only
         // need the ids — the hydrated rows already come back via the
         // /products + /media endpoints above.
-        apiJson<{ pinnedProducts: { id: string }[]; pinnedMedia: { id: string }[] }>(`/api/campaigns/${id}`)
-          .catch(() => ({ pinnedProducts: [], pinnedMedia: [] }))
+        // /api/campaigns/:id returns the full Campaign doc as `campaign`
+        // — that's where promotionalDetails comes from. The /products
+        // endpoint's `campaign` projection is leaner; we merge the
+        // promotional block in below.
+        apiJson<{ pinnedProducts: { id: string }[]; pinnedMedia: { id: string }[]; campaign?: Campaign }>(`/api/campaigns/${id}`)
+          .catch(() => ({ pinnedProducts: [], pinnedMedia: [], campaign: undefined as Campaign | undefined }))
       ]);
-      setCampaign(productsRes.campaign);
+      // Stamp promotionalDetails onto the campaign from the detail
+      // response — /products doesn't project it.
+      const fullCampaign: Campaign = {
+        ...productsRes.campaign,
+        promotionalDetails: (detailRes.campaign?.promotionalDetails ?? null) as PromotionalDetails | null
+      };
+      setCampaign(fullCampaign);
       setProducts(productsRes.products || []);
       setMedia(mediaRes.media || []);
       setAds(adsRes.ads || []);
@@ -216,6 +244,14 @@ export function CampaignDetailPage() {
         </CardBody>
       </Card>
 
+      {campaign.kind === 'promotional' && (
+        <PromotionalDetailsCard
+          campaign={campaign}
+          editable={editable}
+          onSaved={(updated) => setCampaign(prev => prev ? { ...prev, promotionalDetails: updated } : prev)}
+        />
+      )}
+
       {(pinnedProductIds.length > 0 || pinnedMediaIds.length > 0) && (
         <Card variant="outline" bg="rsViolet.50" borderColor="rsViolet.200">
           <CardBody>
@@ -271,6 +307,340 @@ export function CampaignDetailPage() {
         </TabPanels>
       </Tabs>
     </VStack>
+  );
+}
+
+// ── Promotional details ───────────────────────────────────────────
+//
+// Read-only summary card with an Edit modal for the promotionalDetails
+// block. Mirrors the NewCampaignModal field shapes; PATCH sends a
+// partial merge so editing entriesPerDollar alone doesn't blow away
+// the prize description (backend merges over existing values).
+
+type PromoCardProps = {
+  campaign: Campaign;
+  editable: boolean;
+  onSaved:  (updated: PromotionalDetails | null) => void;
+};
+function PromotionalDetailsCard({ campaign, editable, onSaved }: PromoCardProps) {
+  const promo = campaign.promotionalDetails || {};
+  const isRaffle = promo.discountType === 'raffle';
+  const editModal = useDisclosure();
+  const offerLabel =
+    promo.discountType === 'percent'       ? `${promo.discountValue ?? '—'}% off`
+    : promo.discountType === 'amount'      ? `$${promo.discountValue ?? '—'} off`
+    : promo.discountType === 'bogo'        ? 'Buy one, get one'
+    : promo.discountType === 'bundle'      ? 'Bundle savings'
+    : promo.discountType === 'gift'        ? 'Free gift'
+    : promo.discountType === 'free_shipping' ? 'Free shipping'
+    : promo.discountType === 'raffle'      ? 'Raffle / Sweepstakes'
+    : '—';
+  const window = (promo.startsAt || promo.endsAt)
+    ? `${formatDate(promo.startsAt)} → ${formatDate(promo.endsAt)}`
+    : null;
+
+  return (
+    <Card variant="outline" borderColor="orange.200" bg="orange.50">
+      <CardBody>
+        <HStack justify="space-between" align="flex-start" wrap="wrap" spacing={4}>
+          <Box flex={1} minW={0}>
+            <Text fontSize="xs" fontWeight="800" color="orange.700" textTransform="uppercase" letterSpacing="0.06em" mb={2}>
+              Promotional details
+            </Text>
+            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
+              <DetailLine label="Offer">{offerLabel}</DetailLine>
+              {isRaffle && (
+                <DetailLine label="Entries per dollar">
+                  {promo.raffleEntriesPerDollar != null ? `${promo.raffleEntriesPerDollar}` : '—'}
+                </DetailLine>
+              )}
+              {promo.discountCode && <DetailLine label="Promo code">{promo.discountCode}</DetailLine>}
+              {window && <DetailLine label="Window">{window}</DetailLine>}
+              {isRaffle && promo.raffleDrawDate && (
+                <DetailLine label="Drawing date">{formatDate(promo.raffleDrawDate)}</DetailLine>
+              )}
+              {isRaffle && promo.rafflePrize && <DetailLine label="Prize">{promo.rafflePrize}</DetailLine>}
+              {!isRaffle && promo.giveaway && <DetailLine label="Giveaway">{promo.giveaway}</DetailLine>}
+              {promo.headline && <DetailLine label="Headline anchor">{promo.headline}</DetailLine>}
+            </SimpleGrid>
+            {promo.notes && (
+              <Box mt={3}>
+                <Text fontSize="9px" fontWeight="800" color="brand.muted" textTransform="uppercase" letterSpacing="0.06em" mb={0.5}>
+                  Notes for the LLM
+                </Text>
+                <Text fontSize="sm" color="brand.ink">{promo.notes}</Text>
+              </Box>
+            )}
+          </Box>
+          {editable && (
+            <Button size="sm" variant="outline" onClick={editModal.onOpen}>Edit</Button>
+          )}
+        </HStack>
+      </CardBody>
+      <EditPromotionalModal
+        isOpen={editModal.isOpen}
+        onClose={editModal.onClose}
+        campaignId={campaign.id}
+        initial={promo}
+        onSaved={(updated) => { onSaved(updated); editModal.onClose(); }}
+      />
+    </Card>
+  );
+}
+
+function DetailLine({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <Box>
+      <Text fontSize="9px" fontWeight="800" color="brand.muted" textTransform="uppercase" letterSpacing="0.06em" mb={0.5}>
+        {label}
+      </Text>
+      <Text fontSize="sm" color="brand.ink">{children}</Text>
+    </Box>
+  );
+}
+
+function formatDate(iso?: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toISOString().slice(0, 10);
+}
+
+// Edit modal — same field set as NewCampaignModal's promotional
+// section, plus the raffle-only subset. PATCH /api/campaigns/:id
+// with a partial body so an empty field clears it (server merges
+// non-undefined keys). Date inputs use yyyy-mm-dd; we strip times
+// before sending.
+function EditPromotionalModal({ isOpen, onClose, campaignId, initial, onSaved }: {
+  isOpen:     boolean;
+  onClose:    () => void;
+  campaignId: string;
+  initial:    PromotionalDetails;
+  onSaved:    (updated: PromotionalDetails | null) => void;
+}) {
+  const toast = useToast();
+  const [form, setForm]       = useState<PromotionalDetails>({});
+  const [saving, setSaving]   = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    // Hydrate from current campaign values — dates trimmed to yyyy-mm-dd.
+    setForm({
+      discountType:           initial.discountType || '',
+      discountValue:          initial.discountValue ?? null,
+      discountCode:           initial.discountCode || '',
+      giveaway:               initial.giveaway || '',
+      startsAt:               initial.startsAt ? String(initial.startsAt).slice(0, 10) : '',
+      endsAt:                 initial.endsAt   ? String(initial.endsAt).slice(0, 10)   : '',
+      headline:               initial.headline || '',
+      notes:                  initial.notes || '',
+      raffleEntriesPerDollar: initial.raffleEntriesPerDollar ?? null,
+      rafflePrize:            initial.rafflePrize || '',
+      rafflePrizeMediaId:     initial.rafflePrizeMediaId || null,
+      raffleDrawDate:         initial.raffleDrawDate ? String(initial.raffleDrawDate).slice(0, 10) : ''
+    });
+  }, [isOpen, initial]);
+
+  const isRaffle = form.discountType === 'raffle';
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      // Build a partial — empty strings become null so they actually
+      // clear the field server-side instead of being skipped by the
+      // merge.
+      const payload: PromotionalDetails = {
+        discountType:  form.discountType || undefined,
+        discountValue: form.discountValue ?? null,
+        discountCode:  form.discountCode?.trim() || null,
+        giveaway:      form.giveaway?.trim() || null,
+        startsAt:      form.startsAt || null,
+        endsAt:        form.endsAt   || null,
+        headline:      form.headline?.trim() || null,
+        notes:         form.notes?.trim()    || null
+      };
+      if (isRaffle) {
+        payload.raffleEntriesPerDollar = form.raffleEntriesPerDollar ?? null;
+        payload.rafflePrize            = form.rafflePrize?.trim() || null;
+        payload.rafflePrizeMediaId     = form.rafflePrizeMediaId || null;
+        payload.raffleDrawDate         = form.raffleDrawDate || null;
+      }
+      const res = await apiJson<{ campaign: { promotionalDetails: PromotionalDetails | null } }>(
+        `/api/campaigns/${campaignId}`,
+        {
+          method:  'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ promotionalDetails: payload })
+        }
+      );
+      toast({ title: 'Promotional details saved', status: 'success', duration: 2500 });
+      onSaved(res.campaign.promotionalDetails || null);
+    } catch (err) {
+      toast({
+        title:       'Save failed',
+        description: err instanceof Error ? err.message : String(err),
+        status:      'error',
+        duration:    6000
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} size="lg">
+      <ModalOverlay />
+      <ModalContent>
+        <ModalHeader>Edit promotional details</ModalHeader>
+        <ModalCloseButton isDisabled={saving} />
+        <ModalBody pb={6}>
+          <VStack align="stretch" spacing={4}>
+            <SimpleGrid columns={2} spacing={3}>
+              <Box>
+                <Text fontSize="9px" fontWeight="800" color="brand.muted" textTransform="uppercase" letterSpacing="0.06em" mb={1}>Offer type</Text>
+                <Box as="select"
+                  value={form.discountType || ''}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm(f => ({ ...f, discountType: e.target.value as DiscountType | '' }))}
+                  disabled={saving}
+                  style={{ width: '100%', padding: '8px', borderRadius: '6px', borderWidth: '1px', borderColor: '#E2E8F0', fontSize: '14px' }}
+                >
+                  <option value="">—</option>
+                  <option value="percent">Percent off</option>
+                  <option value="amount">Dollar amount off</option>
+                  <option value="bogo">Buy one get one</option>
+                  <option value="bundle">Bundle savings</option>
+                  <option value="gift">Free gift</option>
+                  <option value="free_shipping">Free shipping</option>
+                  <option value="raffle">Raffle / Sweepstakes</option>
+                </Box>
+              </Box>
+              {isRaffle ? (
+                <Box>
+                  <Text fontSize="9px" fontWeight="800" color="brand.muted" textTransform="uppercase" letterSpacing="0.06em" mb={1}>Entries per dollar</Text>
+                  <Input
+                    type="number" step="0.1" size="sm"
+                    value={form.raffleEntriesPerDollar ?? ''}
+                    onChange={e => {
+                      const n = e.target.value === '' ? null : Number(e.target.value);
+                      setForm(f => ({ ...f, raffleEntriesPerDollar: n }));
+                    }}
+                    isDisabled={saving}
+                  />
+                </Box>
+              ) : (
+                <Box>
+                  <Text fontSize="9px" fontWeight="800" color="brand.muted" textTransform="uppercase" letterSpacing="0.06em" mb={1}>Value</Text>
+                  <Input
+                    type="number" size="sm"
+                    value={form.discountValue ?? ''}
+                    onChange={e => {
+                      const n = e.target.value === '' ? null : Number(e.target.value);
+                      setForm(f => ({ ...f, discountValue: n }));
+                    }}
+                    isDisabled={saving}
+                  />
+                </Box>
+              )}
+            </SimpleGrid>
+
+            {isRaffle && (
+              <>
+                <Box>
+                  <Text fontSize="9px" fontWeight="800" color="brand.muted" textTransform="uppercase" letterSpacing="0.06em" mb={1}>Prize</Text>
+                  <Input
+                    size="sm"
+                    value={form.rafflePrize || ''}
+                    onChange={e => setForm(f => ({ ...f, rafflePrize: e.target.value }))}
+                    isDisabled={saving}
+                  />
+                </Box>
+                <Box>
+                  <Text fontSize="9px" fontWeight="800" color="brand.muted" textTransform="uppercase" letterSpacing="0.06em" mb={1}>Drawing date</Text>
+                  <Input
+                    type="date" size="sm"
+                    value={form.raffleDrawDate || ''}
+                    onChange={e => setForm(f => ({ ...f, raffleDrawDate: e.target.value }))}
+                    isDisabled={saving}
+                  />
+                  <Text fontSize="11px" color="brand.muted" mt={1}>
+                    Prize media is set at create time and edited from the media picker (not exposed here in V1 — reach out if you need to swap).
+                  </Text>
+                </Box>
+              </>
+            )}
+
+            <Box>
+              <Text fontSize="9px" fontWeight="800" color="brand.muted" textTransform="uppercase" letterSpacing="0.06em" mb={1}>Promo code</Text>
+              <Input
+                size="sm"
+                value={form.discountCode || ''}
+                onChange={e => setForm(f => ({ ...f, discountCode: e.target.value }))}
+                isDisabled={saving}
+              />
+            </Box>
+
+            {!isRaffle && (
+              <Box>
+                <Text fontSize="9px" fontWeight="800" color="brand.muted" textTransform="uppercase" letterSpacing="0.06em" mb={1}>Giveaway</Text>
+                <Input
+                  size="sm"
+                  value={form.giveaway || ''}
+                  onChange={e => setForm(f => ({ ...f, giveaway: e.target.value }))}
+                  isDisabled={saving}
+                />
+              </Box>
+            )}
+
+            <SimpleGrid columns={2} spacing={3}>
+              <Box>
+                <Text fontSize="9px" fontWeight="800" color="brand.muted" textTransform="uppercase" letterSpacing="0.06em" mb={1}>Starts</Text>
+                <Input
+                  type="date" size="sm"
+                  value={form.startsAt || ''}
+                  onChange={e => setForm(f => ({ ...f, startsAt: e.target.value }))}
+                  isDisabled={saving}
+                />
+              </Box>
+              <Box>
+                <Text fontSize="9px" fontWeight="800" color="brand.muted" textTransform="uppercase" letterSpacing="0.06em" mb={1}>Ends</Text>
+                <Input
+                  type="date" size="sm"
+                  value={form.endsAt || ''}
+                  onChange={e => setForm(f => ({ ...f, endsAt: e.target.value }))}
+                  isDisabled={saving}
+                />
+              </Box>
+            </SimpleGrid>
+
+            <Box>
+              <Text fontSize="9px" fontWeight="800" color="brand.muted" textTransform="uppercase" letterSpacing="0.06em" mb={1}>Headline anchor</Text>
+              <Input
+                size="sm"
+                value={form.headline || ''}
+                onChange={e => setForm(f => ({ ...f, headline: e.target.value }))}
+                isDisabled={saving}
+              />
+            </Box>
+
+            <Box>
+              <Text fontSize="9px" fontWeight="800" color="brand.muted" textTransform="uppercase" letterSpacing="0.06em" mb={1}>Notes for the LLM</Text>
+              <Input
+                size="sm"
+                value={form.notes || ''}
+                onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+                isDisabled={saving}
+              />
+            </Box>
+          </VStack>
+        </ModalBody>
+        <ModalFooter>
+          <HStack spacing={3}>
+            <Button variant="outline" onClick={onClose} isDisabled={saving}>Cancel</Button>
+            <Button variant="brand" onClick={save} isLoading={saving} loadingText="Saving…">Save</Button>
+          </HStack>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
   );
 }
 

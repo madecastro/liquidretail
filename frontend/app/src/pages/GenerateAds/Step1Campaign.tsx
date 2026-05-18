@@ -26,6 +26,7 @@ type Campaign = {
   productSetIds: string[];
   adSetCount:   number;
   adCount:      number;
+  isExpired?:   boolean;
 };
 
 type Props = {
@@ -128,17 +129,21 @@ function CampaignRow({ campaign, selected }: { campaign: Campaign; selected: boo
   return (
     <Box
       borderWidth="1px"
-      borderColor={selected ? 'rsViolet.400' : 'brand.border'}
-      bg={selected ? 'rsViolet.50' : 'brand.surface'}
+      borderColor={selected ? 'rsViolet.400' : campaign.isExpired ? 'red.200' : 'brand.border'}
+      bg={selected ? 'rsViolet.50' : campaign.isExpired ? 'red.50' : 'brand.surface'}
       borderRadius="md"
       p={3}
+      opacity={campaign.isExpired ? 0.7 : 1}
     >
-      <Radio value={campaign.id}>
+      <Radio value={campaign.id} isDisabled={campaign.isExpired}>
         <HStack spacing={2} wrap="wrap">
           <Text fontSize="sm" fontWeight="700" color="brand.ink">{campaign.name}</Text>
           <Badge fontSize="9px" colorScheme="purple" variant="subtle">{platformLabel}</Badge>
           {campaign.status && (
             <Badge fontSize="9px" colorScheme={statusColor} variant="subtle">{campaign.status}</Badge>
+          )}
+          {campaign.isExpired && (
+            <Badge fontSize="9px" colorScheme="red" variant="solid">Expired</Badge>
           )}
           {campaign.objective && (
             <Badge fontSize="9px" colorScheme="gray" variant="outline">{campaign.objective}</Badge>

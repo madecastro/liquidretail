@@ -54,6 +54,8 @@ type Campaign = {
   matchedProductIds?: string[];
   productSetIds?: string[];
   promotionalDetails?: PromotionalDetails | null;
+  // Derived server-side from promotionalDetails.endsAt or schedule.end.
+  isExpired?:    boolean;
 };
 
 type ProductRow = {
@@ -125,11 +127,12 @@ export function CampaignDetailPage() {
         apiJson<{ pinnedProducts: { id: string }[]; pinnedMedia: { id: string }[]; campaign?: Campaign }>(`/api/campaigns/${id}`)
           .catch(() => ({ pinnedProducts: [], pinnedMedia: [], campaign: undefined as Campaign | undefined }))
       ]);
-      // Stamp promotionalDetails onto the campaign from the detail
-      // response — /products doesn't project it.
+      // Stamp promotionalDetails + isExpired onto the campaign from the
+      // detail response — /products doesn't project either field.
       const fullCampaign: Campaign = {
         ...productsRes.campaign,
-        promotionalDetails: (detailRes.campaign?.promotionalDetails ?? null) as PromotionalDetails | null
+        promotionalDetails: (detailRes.campaign?.promotionalDetails ?? null) as PromotionalDetails | null,
+        isExpired:          detailRes.campaign?.isExpired ?? false
       };
       setCampaign(fullCampaign);
       setProducts(productsRes.products || []);
@@ -239,10 +242,30 @@ export function CampaignDetailPage() {
               )}
               <Text fontSize="xs" color="brand.muted" mt={1}>{campaign.externalId}</Text>
             </Box>
-            <Button variant="brand" onClick={() => launchWizard()}>Generate Ads</Button>
+            <Button
+              variant="brand"
+              onClick={() => launchWizard()}
+              isDisabled={!!campaign.isExpired}
+              title={campaign.isExpired ? 'This campaign has ended' : undefined}
+            >
+              Generate Ads
+            </Button>
           </HStack>
         </CardBody>
       </Card>
+
+      {campaign.isExpired && (
+        <Card variant="outline" bg="red.50" borderColor="red.200">
+          <CardBody py={3}>
+            <HStack spacing={3} align="center">
+              <Badge colorScheme="red" variant="solid">Expired</Badge>
+              <Text fontSize="sm" color="brand.ink">
+                This campaign has ended ({formatDate(campaign.promotionalDetails?.endsAt)}). Extend the end date below or create a new campaign to generate more ads.
+              </Text>
+            </HStack>
+          </CardBody>
+        </Card>
+      )}
 
       {campaign.kind === 'promotional' && (
         <PromotionalDetailsCard
@@ -265,7 +288,12 @@ export function CampaignDetailPage() {
                   {pinnedMediaIds.length} media — items added to this campaign that aren't on any rendered ad yet.
                 </Text>
               </Box>
-              <Button variant="brand" size="sm" onClick={() => launchWizard({ onlyPinned: true })}>
+              <Button
+                variant="brand"
+                size="sm"
+                onClick={() => launchWizard({ onlyPinned: true })}
+                isDisabled={!!campaign.isExpired}
+              >
                 Generate from pinned
               </Button>
             </HStack>

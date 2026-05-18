@@ -52,6 +52,9 @@ type Campaign = {
   renderedAdCount:   number;      // in-app rendered creatives for this campaign
   insights:      CampaignInsights | null;
   lastSyncedAt:  string | null;
+  // Derived server-side from promotionalDetails.endsAt or schedule.end.
+  // True when the campaign's end date has passed.
+  isExpired?:    boolean;
 };
 
 // Compose the tooltip body when ad-readiness blocks a button. Lists
@@ -281,6 +284,9 @@ function CampaignRow({ campaign: c, gateDisabled, gateTip }: { campaign: Campaig
               {c.status && (
                 <Badge fontSize="9px" colorScheme={statusColor} variant="subtle">{c.status}</Badge>
               )}
+              {c.isExpired && (
+                <Badge fontSize="9px" colorScheme="red" variant="solid">Expired</Badge>
+              )}
               {c.objective && (
                 <Badge fontSize="9px" colorScheme="gray" variant="outline">{c.objective}</Badge>
               )}
@@ -326,8 +332,15 @@ function CampaignRow({ campaign: c, gateDisabled, gateTip }: { campaign: Campaig
             </HStack>
             {c.insights && <InsightsRow insights={c.insights} fallbackCurrency={c.budget?.currency || null} />}
           </Box>
-          <Tooltip label={gateTip} isDisabled={!gateDisabled} hasArrow whiteSpace="pre-line">
-            {gateDisabled
+          <Tooltip
+            label={c.isExpired
+              ? 'This campaign has ended. Extend the end date or create a new campaign to generate more ads.'
+              : gateTip}
+            isDisabled={!gateDisabled && !c.isExpired}
+            hasArrow
+            whiteSpace="pre-line"
+          >
+            {gateDisabled || c.isExpired
               ? <Button variant="brand" size="sm" flexShrink={0} isDisabled>Generate Ads</Button>
               : (
                 <Button

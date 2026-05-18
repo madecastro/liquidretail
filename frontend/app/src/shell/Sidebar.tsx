@@ -84,13 +84,15 @@ export function Sidebar({ stepStatuses }: Props) {
 
 function BrandMark() {
   return (
-    <Flex align="center" gap={3}>
-      <Image src="/reach-social-logo.png" alt="Reach Social" w="36px" h="36px" />
-      <Box>
-        <Text fontWeight="800" color="brand.ink" lineHeight="1.1">Reach Social</Text>
-        <Text fontSize="xs" color="brand.muted">AI creative pipeline</Text>
-      </Box>
-    </Flex>
+    <NavLink to="/home" style={{ textDecoration: 'none' }}>
+      <Flex align="center" gap={3} _hover={{ opacity: 0.85 }} cursor="pointer">
+        <Image src="/reach-social-logo.png" alt="Reach Social" w="36px" h="36px" />
+        <Box>
+          <Text fontWeight="800" color="brand.ink" lineHeight="1.1">Reach Social</Text>
+          <Text fontSize="xs" color="brand.muted">AI creative pipeline</Text>
+        </Box>
+      </Flex>
+    </NavLink>
   );
 }
 

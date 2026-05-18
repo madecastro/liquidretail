@@ -203,7 +203,11 @@ export function ConnectPage() {
         body: JSON.stringify({})
       });
       toast({ title: 'Onboarding done — kicking off background syncs', status: 'success', duration: 3000 });
-      navigate('/brand', { replace: true });
+      // Land on /home so the operator sees the welcome dashboard with
+      // the onboarding status panel watching the auto-triggered
+      // catalog / posts / detect runs land. /brand stays one click
+      // away via the Home page's "Review brand details" card.
+      navigate('/home', { replace: true });
     } catch (e) {
       toast({ title: 'Continue failed', description: e instanceof Error ? e.message : String(e), status: 'error', duration: 5000 });
     } finally {

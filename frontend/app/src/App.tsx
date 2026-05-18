@@ -9,6 +9,7 @@ import { WorkspacePage } from './pages/Onboarding/WorkspacePage';
 import { BrandPage as OnboardingBrandPage } from './pages/Onboarding/BrandPage';
 import { ConnectPage } from './pages/Onboarding/ConnectPage';
 import { BrandPage } from './pages/Brand';
+import { HomePage } from './pages/Home';
 import { UploadPage } from './pages/Upload';
 import { DetectReviewPage } from './pages/DetectReview';
 import { CampaignsPage } from './pages/Campaigns';
@@ -30,6 +31,7 @@ export function App() {
         <BrowserRouter>
           <Routes>
             <Route element={<PipelineShell />}>
+              <Route path="/home"           element={<RequireAuth><HomePage /></RequireAuth>} />
               <Route path="/brand"          element={<RequireAuth><BrandPage /></RequireAuth>} />
               <Route path="/campaigns"      element={<RequireAuth><CampaignsPage /></RequireAuth>} />
               <Route path="/campaigns/:id"  element={<RequireAuth><CampaignDetailPage /></RequireAuth>} />
@@ -73,7 +75,7 @@ function RootRedirect() {
   const auth = useAuth();
   if (auth.status === 'loading') return null;
   if (auth.status === 'unauthenticated') return <Navigate to="/landing" replace />;
-  return <Navigate to="/brand" replace />;
+  return <Navigate to="/home" replace />;
 }
 
 function RequireAuth({ children }: { children: React.ReactNode }) {

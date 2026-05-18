@@ -23,14 +23,15 @@ import {
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter,
   ModalCloseButton, FormControl, FormLabel, FormHelperText, Input, Select,
   Textarea, Button, ButtonGroup, HStack, VStack, Text, useToast,
-  SimpleGrid, Divider
+  SimpleGrid, Divider, Image, Box
 } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { apiJson } from '../../auth/apiFetch';
+import { useBrand } from '../../brand/BrandContext';
 
 type CampaignKind = 'brand' | 'product' | 'promotional';
 
-type DiscountType = 'percent' | 'amount' | 'bogo' | 'bundle' | 'gift' | 'free_shipping';
+type DiscountType = 'percent' | 'amount' | 'bogo' | 'bundle' | 'gift' | 'free_shipping' | 'raffle';
 
 type PromotionalDetails = {
   discountType?:  DiscountType | '';
@@ -41,6 +42,22 @@ type PromotionalDetails = {
   endsAt?:        string;
   headline?:      string;
   notes?:         string;
+  // Raffle / sweepstakes fields — populated only when discountType='raffle'.
+  // entriesPerDollar is editable post-create from the CampaignDetail page;
+  // prize media is picked at create time from the brand's Media library.
+  raffleEntriesPerDollar?: number | null;
+  rafflePrize?:            string;
+  rafflePrizeMediaId?:     string | null;
+  raffleDrawDate?:         string;     // yyyy-mm-dd; defaults to endsAt server-side if absent
+};
+
+// Lightweight summary of the selected prize media, kept in state so we
+// can render a thumbnail next to the picker button without re-fetching.
+type PrizePreview = {
+  id:       string;
+  fileType: 'image' | 'video';
+  thumbUrl: string;
+  label:    string | null;
 };
 
 type CreatedCampaign = {
@@ -67,6 +84,8 @@ export function NewCampaignModal({ isOpen, onClose }: { isOpen: boolean; onClose
   const [name, setName] = useState('');
   const [kind, setKind] = useState<CampaignKind>('product');
   const [promo, setPromo] = useState<PromotionalDetails>({});
+  const [prizePreview, setPrizePreview] = useState<PrizePreview | null>(null);
+  const [prizePickerOpen, setPrizePickerOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   // Reset on close.
@@ -75,6 +94,8 @@ export function NewCampaignModal({ isOpen, onClose }: { isOpen: boolean; onClose
       setName('');
       setKind('product');
       setPromo({});
+      setPrizePreview(null);
+      setPrizePickerOpen(false);
       setSubmitting(false);
     }
   }, [isOpen]);
@@ -96,6 +117,17 @@ export function NewCampaignModal({ isOpen, onClose }: { isOpen: boolean; onClose
     if (promo.endsAt)                out.endsAt        = promo.endsAt;
     if (promo.headline?.trim())      out.headline      = promo.headline.trim();
     if (promo.notes?.trim())         out.notes         = promo.notes.trim();
+    // Raffle fields — only included when discountType is 'raffle' so
+    // a stale raffleEntriesPerDollar value doesn't tag along after the
+    // operator flips back to percent/amount.
+    if (promo.discountType === 'raffle') {
+      if (promo.raffleEntriesPerDollar != null && !Number.isNaN(promo.raffleEntriesPerDollar)) {
+        out.raffleEntriesPerDollar = promo.raffleEntriesPerDollar;
+      }
+      if (promo.rafflePrize?.trim())     out.rafflePrize        = promo.rafflePrize.trim();
+      if (promo.rafflePrizeMediaId)      out.rafflePrizeMediaId = promo.rafflePrizeMediaId;
+      if (promo.raffleDrawDate)          out.raffleDrawDate     = promo.raffleDrawDate;
+    }
     return Object.keys(out).length ? out : null;
   }
 
@@ -213,27 +245,131 @@ export function NewCampaignModal({ isOpen, onClose }: { isOpen: boolean; onClose
                       <option value="bundle">Bundle savings</option>
                       <option value="gift">Free gift</option>
                       <option value="free_shipping">Free shipping</option>
+                      <option value="raffle">Raffle / Sweepstakes</option>
                     </Select>
                   </FormControl>
-                  <FormControl>
-                    <FormLabel fontSize="sm">Value</FormLabel>
-                    <Input
-                      type="number"
-                      placeholder={promo.discountType === 'percent' ? '20' : promo.discountType === 'amount' ? '5' : ''}
-                      value={promo.discountValue ?? ''}
-                      onChange={e => {
-                        const n = e.target.value === '' ? null : Number(e.target.value);
-                        setPromo(p => ({ ...p, discountValue: n }));
-                      }}
-                      isDisabled={submitting || !promo.discountType || promo.discountType === 'bogo' || promo.discountType === 'bundle' || promo.discountType === 'gift' || promo.discountType === 'free_shipping'}
-                    />
-                    <FormHelperText fontSize="11px" color="brand.muted">
-                      {promo.discountType === 'percent' ? '20 = 20% off' :
-                       promo.discountType === 'amount'  ? '5 = $5 off' :
-                       'Set a numeric value when offer type is percent or dollar amount.'}
-                    </FormHelperText>
-                  </FormControl>
+                  {promo.discountType === 'raffle' ? (
+                    <FormControl>
+                      <FormLabel fontSize="sm">Entries per dollar</FormLabel>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        placeholder="5"
+                        value={promo.raffleEntriesPerDollar ?? ''}
+                        onChange={e => {
+                          const n = e.target.value === '' ? null : Number(e.target.value);
+                          setPromo(p => ({ ...p, raffleEntriesPerDollar: n }));
+                        }}
+                        isDisabled={submitting}
+                      />
+                      <FormHelperText fontSize="11px" color="brand.muted">
+                        5 = 5 entries per $1. A purchase always earns at least 1 entry. Editable later from the campaign detail page.
+                      </FormHelperText>
+                    </FormControl>
+                  ) : (
+                    <FormControl>
+                      <FormLabel fontSize="sm">Value</FormLabel>
+                      <Input
+                        type="number"
+                        placeholder={promo.discountType === 'percent' ? '20' : promo.discountType === 'amount' ? '5' : ''}
+                        value={promo.discountValue ?? ''}
+                        onChange={e => {
+                          const n = e.target.value === '' ? null : Number(e.target.value);
+                          setPromo(p => ({ ...p, discountValue: n }));
+                        }}
+                        isDisabled={submitting || !promo.discountType || promo.discountType === 'bogo' || promo.discountType === 'bundle' || promo.discountType === 'gift' || promo.discountType === 'free_shipping'}
+                      />
+                      <FormHelperText fontSize="11px" color="brand.muted">
+                        {promo.discountType === 'percent' ? '20 = 20% off' :
+                         promo.discountType === 'amount'  ? '5 = $5 off' :
+                         'Set a numeric value when offer type is percent or dollar amount.'}
+                      </FormHelperText>
+                    </FormControl>
+                  )}
                 </SimpleGrid>
+
+                {/* Raffle-specific block — only shows for sweepstakes
+                    campaigns. Prize description + prize media picker
+                    live here. Drawing date sits alongside endsAt below
+                    (operators can also reuse endsAt as the draw date). */}
+                {promo.discountType === 'raffle' && (
+                  <>
+                    <FormControl>
+                      <FormLabel fontSize="sm">Prize</FormLabel>
+                      <Input
+                        value={promo.rafflePrize || ''}
+                        onChange={e => setPromo(p => ({ ...p, rafflePrize: e.target.value }))}
+                        placeholder="$500 Italian getaway"
+                        isDisabled={submitting}
+                      />
+                      <FormHelperText fontSize="11px" color="brand.muted">
+                        What's being raffled. The headline LLM frames the ad around this.
+                      </FormHelperText>
+                    </FormControl>
+
+                    <FormControl>
+                      <FormLabel fontSize="sm">Prize media</FormLabel>
+                      <HStack spacing={3} align="center">
+                        {prizePreview ? (
+                          <HStack
+                            bg="brand.surface"
+                            borderWidth="1px"
+                            borderColor="brand.border"
+                            borderRadius="md"
+                            p={1}
+                            spacing={2}
+                          >
+                            <Image
+                              src={prizePreview.thumbUrl}
+                              alt={prizePreview.label || 'Prize'}
+                              w="48px" h="48px" objectFit="cover" borderRadius="sm"
+                            />
+                            <Text fontSize="xs" color="brand.muted" noOfLines={1} maxW="200px">
+                              {prizePreview.label || `Media ${prizePreview.id.slice(-6)}`}
+                            </Text>
+                            <Button
+                              size="xs"
+                              variant="ghost"
+                              onClick={() => {
+                                setPrizePreview(null);
+                                setPromo(p => ({ ...p, rafflePrizeMediaId: null }));
+                              }}
+                              isDisabled={submitting}
+                            >
+                              ✕
+                            </Button>
+                          </HStack>
+                        ) : (
+                          <Text fontSize="xs" color="brand.muted">No prize media selected yet.</Text>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setPrizePickerOpen(true)}
+                          isDisabled={submitting}
+                        >
+                          {prizePreview ? 'Change' : 'Pick from media library'}
+                        </Button>
+                      </HStack>
+                      <FormHelperText fontSize="11px" color="brand.muted">
+                        The prize visual — usually a reel/post/carousel the brand has on social. This becomes the hero of every raffle ad.
+                      </FormHelperText>
+                    </FormControl>
+
+                    <FormControl>
+                      <FormLabel fontSize="sm">Drawing date (optional)</FormLabel>
+                      <Input
+                        type="date"
+                        value={promo.raffleDrawDate || ''}
+                        onChange={e => setPromo(p => ({ ...p, raffleDrawDate: e.target.value }))}
+                        isDisabled={submitting}
+                      />
+                      <FormHelperText fontSize="11px" color="brand.muted">
+                        Defaults to the campaign end date if you leave this blank. Set separately when the campaign runs past the drawing.
+                      </FormHelperText>
+                    </FormControl>
+                  </>
+                )}
 
                 <FormControl>
                   <FormLabel fontSize="sm">Promo code (optional)</FormLabel>
@@ -320,6 +456,110 @@ export function NewCampaignModal({ isOpen, onClose }: { isOpen: boolean; onClose
             </Button>
           </HStack>
         </ModalFooter>
+      </ModalContent>
+
+      <PrizeMediaPicker
+        isOpen={prizePickerOpen}
+        onClose={() => setPrizePickerOpen(false)}
+        onSelect={(preview) => {
+          setPrizePreview(preview);
+          setPromo(p => ({ ...p, rafflePrizeMediaId: preview.id }));
+          setPrizePickerOpen(false);
+        }}
+      />
+    </Modal>
+  );
+}
+
+// Prize media picker — small nested modal that browses the brand's
+// Media library and returns a single selection. Filters to image +
+// video media; excludes catalog-product (those are SKU shots, not
+// brand stories).
+type MediaLibRow = {
+  id?:        string;
+  mediaId?:   string;
+  fileType:   'image' | 'video';
+  fileUrl:    string;
+  creatorHandle?:       string | null;
+  primarySubjectLabel?: string | null;
+};
+function PrizeMediaPicker({ isOpen, onClose, onSelect }: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSelect: (preview: PrizePreview) => void;
+}) {
+  const { activeBrand } = useBrand();
+  const brandId = activeBrand?.id || null;
+  const [rows, setRows]       = useState<MediaLibRow[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen || !brandId) return;
+    let cancelled = false;
+    setLoading(true);
+    apiJson<{ media: MediaLibRow[] }>(`/api/media?brandId=${encodeURIComponent(brandId)}&limit=100`)
+      .then(res => { if (!cancelled) setRows(res.media || []); })
+      .catch(() => { if (!cancelled) setRows([]); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [isOpen, brandId]);
+
+  function thumbFor(m: MediaLibRow): string {
+    if (m.fileType === 'video' && m.fileUrl.includes('/video/upload/')) {
+      return m.fileUrl
+        .replace('/video/upload/', '/video/upload/so_0/')
+        .replace(/\.(mp4|mov|webm|m4v)(\?.*)?$/i, '.jpg$2');
+    }
+    return m.fileUrl;
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} size="3xl">
+      <ModalOverlay />
+      <ModalContent>
+        <ModalHeader>Pick prize media</ModalHeader>
+        <ModalCloseButton />
+        <ModalBody pb={6}>
+          {loading ? (
+            <Text fontSize="sm" color="brand.muted" py={4} textAlign="center">Loading media…</Text>
+          ) : rows.length === 0 ? (
+            <Text fontSize="sm" color="brand.muted" py={4} textAlign="center">
+              No media in this brand's library yet. Connect Instagram or upload manually first.
+            </Text>
+          ) : (
+            <SimpleGrid columns={{ base: 2, sm: 3, md: 4 }} spacing={3}>
+              {rows.map(m => {
+                const id = m.mediaId || m.id || '';
+                const label = m.primarySubjectLabel || m.creatorHandle || `Media ${id.slice(-6)}`;
+                const thumb = thumbFor(m);
+                return (
+                  <Box
+                    key={id}
+                    as="button"
+                    onClick={() => onSelect({ id, fileType: m.fileType, thumbUrl: thumb, label })}
+                    borderWidth="2px"
+                    borderColor="brand.border"
+                    borderRadius="md"
+                    overflow="hidden"
+                    textAlign="left"
+                    _hover={{ borderColor: 'rsViolet.400', transform: 'translateY(-1px)' }}
+                    transition="all 120ms"
+                  >
+                    <Box w="100%" bg="gray.100" style={{ aspectRatio: '1 / 1' }}>
+                      <Image src={thumb} alt={label} w="100%" h="100%" objectFit="cover" />
+                    </Box>
+                    <Box p={2}>
+                      <Text fontSize="11px" fontWeight="700" color="brand.ink" noOfLines={1}>{label}</Text>
+                      <Text fontSize="9px" color="brand.muted" textTransform="uppercase" letterSpacing="0.04em">
+                        {m.fileType}
+                      </Text>
+                    </Box>
+                  </Box>
+                );
+              })}
+            </SimpleGrid>
+          )}
+        </ModalBody>
       </ModalContent>
     </Modal>
   );

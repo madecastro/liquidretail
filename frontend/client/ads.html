@@ -764,7 +764,8 @@
        zone_scaler { font: 1.6 } produces 0.56em rendered. */
     .tp-zone.kind-product_card.style-with_thumbnail {
       background: var(--tp-style-card-bg, #1A1A1A);
-      color: var(--brand-text-on-primary, #ffffff);
+      /* Same card-bg-derived contrast token as quote_card. */
+      color: var(--tp-style-card-text-color, var(--brand-text-on-primary, #ffffff));
       font-family: var(--tp-style-font-family-body, Inter, system-ui, sans-serif);
       border-left: 3px solid var(--tp-style-accent-border-color, var(--brand-accent, #FF6B35));
       border-radius: 6px;
@@ -773,7 +774,10 @@
       grid-template-columns: auto 1fr;
       align-items: center;
       column-gap: 0.8em;
-      font-size: calc(0.35em * var(--tp-zone-scale, 1));
+      /* Font scales with rect.h so the extended product_meta zones
+         (post-badge-row removal) produce proportionally bigger name +
+         price text. Same baseline + clamp as quote_card. */
+      font-size: clamp(0.35em, calc(var(--tp-zone-rect-h-px, 300) * 0.00187em * var(--tp-zone-scale, 1)), 1.4em);
       line-height: 1.25;
     }
     .tp-zone.kind-product_card.style-with_thumbnail .tp-product-card-thumb {
@@ -796,7 +800,10 @@
     .tp-zone.kind-product_card.style-with_thumbnail .tp-product-card-name {
       font-size: 1em;
       font-weight: 700;
-      color: var(--tp-style-panel-text-color, #FFFFFF);
+      /* Inherit the card's auto-derived contrast color so the name
+         reads against the actual card_bg (not the panel bg, which
+         the card may not sit on). */
+      color: inherit;
       letter-spacing: 0.01em;
     }
     .tp-zone.kind-product_card.style-with_thumbnail .tp-product-card-price {
@@ -1118,7 +1125,11 @@
        per reference. Background draws from --tp-style-card-bg (palette-led). */
     .tp-zone.kind-quote_card.style-with_author_photo {
       background: var(--tp-style-card-bg, #1A1A1A);
-      color: var(--brand-text-on-primary, #ffffff);
+      /* Contrast computed against the ACTUAL card_bg (added to the
+         autoPairs list in templatePreview). Falls through to the
+         primary-contrast token only when style_bindings.card_bg
+         couldn't resolve — that's the legacy path. */
+      color: var(--tp-style-card-text-color, var(--brand-text-on-primary, #ffffff));
       font-family: var(--tp-style-font-family-body, Inter, system-ui, sans-serif);
       border-left: 3px solid var(--tp-style-accent-border-color, var(--brand-accent, #FF6B35));
       border-radius: 6px;
@@ -1138,11 +1149,16 @@
          scales the parent font-size down. */
       row-gap: 0.7em;
       position: relative;
-      /* font-size multiplied by --tp-zone-scale (canvas zone_scalers
-         font factor). The 3.3em glyph / 0.78em author-name / 0.7em
-         placeholder-letter / 0.65em verified-tag descendants are
-         em-relative so they scale together with the parent. */
-      font-size: calc(0.35em * var(--tp-zone-scale, 1)); line-height: 1.3;
+      /* Font-size scales with the zone's actual rect.h (canvas
+         normalized px) so the text grows when the schema extends
+         the card. Baseline of 300px → 0.56em (matches the prior
+         calc(0.35em * 1.6) for square testimonial_spotlight 1:1).
+         clamp() keeps tiny strip variants legible (min) and stops
+         giant cards from blowing out (max). The 3.3em glyph /
+         0.78em author-name / etc descendants stay em-relative so
+         they scale together with the parent. */
+      font-size: clamp(0.35em, calc(var(--tp-zone-rect-h-px, 300) * 0.00187em * var(--tp-zone-scale, 1)), 1.4em);
+      line-height: 1.3;
     }
     .tp-zone.kind-quote_card.style-with_author_photo .tp-quote-glyph {
       color: var(--tp-style-open-quote-glyph-color, var(--brand-accent, #FF6B35));

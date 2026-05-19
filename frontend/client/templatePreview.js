@@ -966,6 +966,14 @@
       // already happened above on rect.h.
       const { font: fontScale } = zoneScaleFor(zone);
       if (fontScale !== 1) el.style.setProperty('--tp-zone-scale', String(fontScale));
+      // Expose the zone's rect.h in canvas coords as a CSS var so
+      // height-responsive rules (e.g., quote_card font-size) can
+      // scale text proportionally to the actual slot. Zones that
+      // were extended via schema edits (badge_row removal + card
+      // growth) get a bigger value and the text grows with the box
+      // — fixed-em rules would otherwise leave a small centered
+      // sliver of text in a now-much-larger card.
+      el.style.setProperty('--tp-zone-rect-h-px', String(zone.rect.h));
       // Don't clip the radius for landscape variants — the new layout
       // uses radius up to 24px on cards, which the prior 18px cap broke.
       if (typeof zone.radius === 'number') el.style.borderRadius = `${zone.radius}px`;
@@ -1119,7 +1127,15 @@
       // panel_text_color drives panel-attached secondary text (eyebrow,
       // badges, anything sitting directly on the panel without its own
       // bg). White on dark panels, dark on light panels.
-      ['panel_bg',      'panel_text_color']
+      ['panel_bg',      'panel_text_color'],
+      // card_text_color is the WCAG-derived foreground for any text
+      // sitting INSIDE a quote_card / product_card surface. The card's
+      // bg comes from style_bindings.card_bg (palette-led, often
+      // unrelated to brand.primary) so the previous fall-through to
+      // --brand-text-on-primary frequently picked the wrong contrast
+      // (e.g., near-white text on a light-tan card). Now the contrast
+      // is computed against the actual card bg.
+      ['card_bg',       'card_text_color']
     ];
     for (const [bgKey, textKey] of autoPairs) {
       const bg = bindings[bgKey];

@@ -55,6 +55,11 @@ export function BrandProvider({ children }: { children: ReactNode }) {
       setMemberships([]);
       return;
     }
+    // Skip /api/me hydration on the invite-accept route — a brand-new
+    // invitee has no advertiser yet, /api/me would 403 NO_ADVERTISER,
+    // and apiFetch would yank them to /onboarding before they get a
+    // chance to accept the invitation.
+    if (window.location.pathname.startsWith('/invite/')) return;
     void hydrate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth.status]);

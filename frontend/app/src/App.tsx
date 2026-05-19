@@ -20,6 +20,7 @@ import { MediaLibraryPage } from './pages/MediaLibrary';
 import { CatalogBrowserPage } from './pages/CatalogBrowser';
 import { SettingsPage } from './pages/Settings';
 import { TeamPage } from './pages/Team';
+import { InvitePage } from './pages/Invite';
 
 // Reorg: primary nav is Brand / Campaigns / Ads. Upload + Detect retired
 // from the sidebar but their routes remain so deep links keep working
@@ -60,6 +61,12 @@ export function App() {
             <Route path="/onboarding/workspace" element={<WorkspacePage />} />
             <Route path="/onboarding/brand"     element={<RequireAuth><OnboardingBrandPage /></RequireAuth>} />
             <Route path="/onboarding/connect"   element={<RequireAuth><ConnectPage /></RequireAuth>} />
+            {/* Invitation accept — public route. Anonymous invitees
+                can preview before signing in; authed users hit POST
+                accept and bounce to /home. No RequireAuth wrapper,
+                no PipelineShell (no nav/sidebar makes sense for an
+                unauth'd visitor). */}
+            <Route path="/invite/:token"        element={<InvitePage />} />
             {/* Root redirects: unauthed → /landing, authed → /brand. */}
             <Route path="/"  element={<RootRedirect />} />
             <Route path="*"  element={<RootRedirect />} />

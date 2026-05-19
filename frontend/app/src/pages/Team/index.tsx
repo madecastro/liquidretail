@@ -121,10 +121,11 @@ export function TeamPage() {
   useEffect(() => { void refresh(); }, [refresh]);
 
   function inviteUrlFor(token: string): string {
-    // Legacy /invite.html handles the accept flow today. When we ship
-    // the SPA-native accept page (separate ticket) this becomes
-    // /invite/${token} on the same origin.
-    return `${window.location.origin}/invite.html?token=${encodeURIComponent(token)}`;
+    // SPA-native accept page. Lives on the same origin so the invitee's
+    // OAuth round-trip lands them back here (vs. the legacy invite.html
+    // which lived on the other Netlify deploy and stranded invitees in
+    // the wrong app's onboarding flow).
+    return `${window.location.origin}/invite/${encodeURIComponent(token)}`;
   }
 
   async function copyToClipboard(text: string, what = 'link') {

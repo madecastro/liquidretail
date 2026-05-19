@@ -55,7 +55,8 @@ function buildLogoutLandingUrl(): string {
 // the Router's <Navigate> children) gets a chance to mutate the URL.
 // Idempotent — runs once at import; subsequent calls are no-ops.
 if (typeof window !== 'undefined') {
-  consumeHashToken();
+  const consumed = consumeHashToken();
+  if (consumed) maybeBounceToPendingInvite();
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -108,20 +109,37 @@ export function useAuth(): AuthContextValue {
 
 // Read #token=...&user=...&email=... from the URL hash, persist into
 // localStorage, then clean the hash so a refresh doesn't re-process.
-function consumeHashToken() {
+// Returns true when a token was successfully consumed.
+function consumeHashToken(): boolean {
   const hash = window.location.hash || '';
-  if (!hash.startsWith('#')) return;
+  if (!hash.startsWith('#')) return false;
   const params = new URLSearchParams(hash.slice(1));
   const token = params.get('token');
-  if (!token) return;
+  if (!token) return false;
   localStorage.setItem('token', token);
-  // The legacy auth.js also stashed name + email for the invitation
-  // flow's email-bound check. Replicating here so /invite.html keeps
-  // working when invoked from the SPA.
   const name = params.get('user');
   const email = params.get('email');
   if (name)  localStorage.setItem('user_name', name);
   if (email) localStorage.setItem('user_email', email);
   // Remove the hash so a refresh doesn't replay.
   window.history.replaceState({}, '', window.location.pathname + window.location.search);
+  return true;
+}
+
+// Resume a pending invite accept when the user has just returned from
+// the OAuth round-trip. /invite/:token stashes `pending_invite_token`
+// before redirecting to /auth/google; the callback drops the JWT on
+// the SPA root with #token=… (because the redirect allowlist strips
+// paths), so without this hop the SPA boots straight into BrandContext
+// hydration, /api/me returns 403 NO_ADVERTISER (brand-new invitee has
+// no workspace yet), and apiFetch yanks them to /onboarding — where
+// they create their own workspace instead of joining the one they were
+// invited to.
+function maybeBounceToPendingInvite() {
+  const pending = localStorage.getItem('pending_invite_token');
+  if (!pending) return;
+  // Already on the invite page? Leave it alone — the InvitePage
+  // component handles the accept itself once it sees the auth flip.
+  if (window.location.pathname.startsWith('/invite/')) return;
+  window.location.replace(`/invite/${encodeURIComponent(pending)}`);
 }

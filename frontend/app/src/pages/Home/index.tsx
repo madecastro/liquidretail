@@ -18,6 +18,7 @@ import { PageHeader } from '../../shell/PageHeader';
 import { useBrand } from '../../brand/BrandContext';
 import { useAdReadiness, type AdReadiness } from '../../brand/useAdReadiness';
 import { OnboardingStatusPanel } from '../Brand/OnboardingStatusPanel';
+import { TokenDebugCard } from './TokenDebugCard';
 
 // Compose the tooltip body when ad-readiness blocks a card. Same
 // shape the Campaigns page uses — leads with the reason, then the
@@ -69,6 +70,8 @@ export function HomePage() {
           disabledTip={gateTip}
         />
       </SimpleGrid>
+
+      <TokenDebugCard />
     </VStack>
   );
 }

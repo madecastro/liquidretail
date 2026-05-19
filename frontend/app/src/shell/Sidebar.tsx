@@ -4,6 +4,7 @@ import { STEPS, SECONDARY_NAV, type StepStatus } from '../routes';
 import { rsGradient } from '../theme/reachSocialTheme';
 import { useAuth } from '../auth/AuthContext';
 import { BrandPicker } from './BrandPicker';
+import { useDetectReviewCount } from '../brand/useDetectReviewCount';
 
 // Fixed 240px left sidebar — Reach Social mark at top, four pipeline
 // steps as nav links with status badges, sign-out at the bottom
@@ -15,6 +16,11 @@ type Props = {
 
 export function Sidebar({ stepStatuses }: Props) {
   const auth = useAuth();
+  // Pending-detect-drafts count drives the red badge on the Detect
+  // Review nav item — gives operators a quick "you have N items to
+  // review" signal without needing to click in. Polls every 30s,
+  // pauses on tab hide.
+  const detectReviewCount = useDetectReviewCount();
   return (
     <Flex
       as="aside"
@@ -52,11 +58,16 @@ export function Sidebar({ stepStatuses }: Props) {
       <Box mt="auto">
         <Divider my={4} />
         <VStack as="nav" align="stretch" spacing={0.5}>
-          {SECONDARY_NAV.map(item => (
-            <NavLink key={item.path} to={item.path} style={{ textDecoration: 'none' }}>
-              {({ isActive }) => <SecondaryNavItem label={item.label} isActive={isActive} />}
-            </NavLink>
-          ))}
+          {SECONDARY_NAV.map(item => {
+            // Detect Review gets a pending-count badge so operators see
+            // "you have N items to review" without entering the page.
+            const badgeCount = item.path === '/detect' ? detectReviewCount : 0;
+            return (
+              <NavLink key={item.path} to={item.path} style={{ textDecoration: 'none' }}>
+                {({ isActive }) => <SecondaryNavItem label={item.label} isActive={isActive} badgeCount={badgeCount} />}
+              </NavLink>
+            );
+          })}
         </VStack>
       </Box>
 
@@ -151,10 +162,11 @@ function NavItem({
   );
 }
 
-function SecondaryNavItem({ label, isActive }: { label: string; isActive: boolean }) {
+function SecondaryNavItem({ label, isActive, badgeCount = 0 }: { label: string; isActive: boolean; badgeCount?: number }) {
   return (
     <Flex
       align="center"
+      justify="space-between"
       px={3}
       py={2}
       borderRadius="md"
@@ -170,6 +182,19 @@ function SecondaryNavItem({ label, isActive }: { label: string; isActive: boolea
       >
         {label}
       </Text>
+      {badgeCount > 0 && (
+        <Badge
+          variant="solid"
+          colorScheme="red"
+          fontSize="9px"
+          borderRadius="full"
+          px={1.5}
+          minW="18px"
+          textAlign="center"
+        >
+          {badgeCount > 99 ? '99+' : badgeCount}
+        </Badge>
+      )}
     </Flex>
   );
 }

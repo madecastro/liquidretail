@@ -8,6 +8,10 @@ export type User = {
   email:        string;
   name:         string;
   photo?:       string | null;
+  // Role on the JWT-resolved active workspace. Populated by /api/me;
+  // surfaced here so UI gates have a fallback when membership-by-
+  // advertiser lookup is still hydrating.
+  role?:        'owner' | 'admin' | 'editor' | 'viewer' | null;
 };
 
 export type Membership = {

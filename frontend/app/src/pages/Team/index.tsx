@@ -48,17 +48,45 @@ type PendingInvitation = {
 
 export function TeamPage() {
   const toast = useToast();
-  const { memberships, activeAdvertiserId } = useBrand();
+  const { memberships, activeAdvertiserId, loading: brandLoading } = useBrand();
   const auth = useAuth();
 
-  const activeMembership = useMemo(
-    () => memberships.find(m => m.advertiserId === activeAdvertiserId) || null,
-    [memberships, activeAdvertiserId]
-  );
+  // Resolve the operator's role on the active workspace. Three sources
+  // checked in order of trust:
+  //   1. exact match by advertiserId — the precise membership row
+  //   2. single-workspace fallback — when activeAdvertiserId hasn't
+  //      hydrated yet but the user has exactly one membership, pick
+  //      it (covers the just-signed-in / localStorage-empty edge case
+  //      that triggers a transient "signed in as unknown" banner)
+  //   3. JWT role from /api/me — present on auth.user.role when the
+  //      auth-resolved active workspace was set server-side
+  const activeMembership = useMemo(() => {
+    if (!memberships?.length) return null;
+    const byAdvertiser = activeAdvertiserId
+      ? memberships.find(m => String(m.advertiserId) === String(activeAdvertiserId))
+      : null;
+    if (byAdvertiser) return byAdvertiser;
+    if (memberships.length === 1) return memberships[0];
+    return null;
+  }, [memberships, activeAdvertiserId]);
+
+  // Resolution still in flight when BrandContext is hydrating (initial
+  // page load before /api/me lands). Treat that as a non-final state
+  // so the "unknown role" banner doesn't flash misleadingly.
+  const resolutionInFlight = brandLoading || (memberships?.length === 0 && auth.status === 'authenticated');
+
+  // Fall back to the JWT-encoded role when no membership row matched —
+  // /api/me populates auth.user.role with the user's role on whichever
+  // workspace requireAuth resolved as active. Covers single-workspace
+  // users whose hydration race hasn't completed yet.
+  const jwtRole = (auth.status === 'authenticated' ? auth.user.role : null) as
+    'owner' | 'admin' | 'editor' | 'viewer' | undefined | null;
+  const resolvedRole = activeMembership?.role || jwtRole || null;
+
   // UI write-gate: backend gates independently; this is just to keep
   // controls out of operators' faces when they have no business
   // touching them.
-  const canManage = activeMembership?.role === 'owner' || activeMembership?.role === 'admin';
+  const canManage = resolvedRole === 'owner' || resolvedRole === 'admin';
 
   const [members, setMembers]         = useState<Member[]>([]);
   const [invitations, setInvitations] = useState<PendingInvitation[]>([]);
@@ -208,11 +236,11 @@ export function TeamPage() {
         description="Manage who has access to this workspace. Members can see every brand under the workspace; per-brand restrictions land later."
       />
 
-      {!canManage && (
+      {!canManage && !resolutionInFlight && (
         <Card variant="outline" bg="orange.50" borderColor="orange.200">
           <CardBody py={3}>
             <Text fontSize="sm" color="brand.ink">
-              You're signed in as <Badge variant="subtle">{activeMembership?.role || 'unknown'}</Badge> on this workspace. Only owners and admins can invite, change roles, or revoke access.
+              You're signed in as <Badge variant="subtle">{resolvedRole || 'unknown'}</Badge> on this workspace. Only owners and admins can invite, change roles, or revoke access.
             </Text>
           </CardBody>
         </Card>

@@ -2493,6 +2493,77 @@
           `<div class="tp-metric"><strong>${escapeHtml(String(m.value || ''))}</strong><span>${escapeHtml(String(m.label || ''))}</span></div>`
         ).join('');
       }
+      case 'comment_card': {
+        // Social comment surface — distinct from quote_card (which
+        // renders product / brand REVIEWS). Reads from ugc.top_comments[]
+        // populated server-side from the Comment collection at
+        // loadContext time. zone.slot can override the binding path
+        // for an unusual mapping; the default is the first comment.
+        const path     = zone.slot || 'ugc.top_comments';
+        const list     = tpGet(input, path);
+        const comments = Array.isArray(list) ? list : (list ? [list] : []);
+        if (!comments.length) return `<div class="tp-placeholder">comments</div>`;
+        const c = comments[0];
+        const text     = String(c?.text || '').trim();
+        const author   = String(c?.author_username || c?.authorUsername || '').trim();
+        const likes    = Number(c?.like_count ?? c?.likeCount ?? 0);
+        if (!text) return `<div class="tp-placeholder">comments</div>`;
+
+        // Style switch — IG-ish for images, TikTok-ish for videos.
+        // Style is also overridable via zone.style_variant when the
+        // canvas spec wants a fixed choice. media.fileType lives on
+        // the ugc block as `post_type` today (IMAGE / VIDEO /
+        // CAROUSEL_ALBUM); fall back to the kind attribute / 'ig'.
+        const postType = String(tpGet(input, 'ugc.post_type') || '').toUpperCase();
+        const isVideo  = postType === 'VIDEO' || postType === 'REEL';
+        const styleVariant = zone.style_variant
+          || (isVideo ? 'tiktok' : 'ig');
+
+        const formatLikes = (n) => {
+          if (!Number.isFinite(n) || n <= 0) return '';
+          if (n < 1000) return String(n);
+          if (n < 1_000_000) return `${(n / 1000).toFixed(n < 10000 ? 1 : 0)}K`;
+          return `${(n / 1_000_000).toFixed(1)}M`;
+        };
+        const initial = (author || 'U').charAt(0).toUpperCase();
+        const likeBit = formatLikes(likes);
+
+        if (styleVariant === 'tiktok') {
+          // TikTok-style: rounded card; avatar circle + handle row on
+          // top, comment text below; heart pill on the right with
+          // a vertical orientation.
+          return (
+            `<div class="tp-comment-tiktok">` +
+              `<div class="tp-comment-tiktok-body">` +
+                `<div class="tp-comment-avatar tp-comment-avatar-tiktok">${escapeHtml(initial)}</div>` +
+                `<div class="tp-comment-text-col">` +
+                  (author ? `<div class="tp-comment-handle">${escapeHtml(author)}</div>` : '') +
+                  `<div class="tp-comment-text">${escapeHtml(text)}</div>` +
+                `</div>` +
+              `</div>` +
+              (likeBit
+                ? `<div class="tp-comment-heart-col"><span class="tp-comment-heart">♥</span><span class="tp-comment-heart-count">${escapeHtml(likeBit)}</span></div>`
+                : '') +
+            `</div>`
+          );
+        }
+        // IG-style (default): avatar circle + @handle inline, text
+        // wraps below, heart + count on a third line. Reads more like
+        // an Instagram comment row.
+        return (
+          `<div class="tp-comment-ig">` +
+            `<div class="tp-comment-avatar tp-comment-avatar-ig">${escapeHtml(initial)}</div>` +
+            `<div class="tp-comment-body-ig">` +
+              (author
+                ? `<span class="tp-comment-handle-ig">${escapeHtml(author)}</span> <span class="tp-comment-text">${escapeHtml(text)}</span>`
+                : `<span class="tp-comment-text">${escapeHtml(text)}</span>`) +
+              (likeBit
+                ? `<div class="tp-comment-meta-ig"><span class="tp-comment-heart">♥</span> ${escapeHtml(likeBit)} likes</div>`
+                : '') +
+            `</div>` +
+          `</div>`
+        );
+      }
       case 'review_stack': {
         let quotes = tpGet(input, 'social_proof.secondary_quotes') || [];
         if (!quotes.length) {

@@ -38,6 +38,7 @@ export const SECONDARY_NAV: readonly SecondaryNavItem[] = [
   { path: '/catalog',       label: 'Product Catalog' },
   { path: '/detect',        label: 'Detect Review' },
   { path: '/media-library', label: 'Media Library' },
+  { path: '/team',          label: 'Team' },
   { path: '/settings',      label: 'Settings' }
 ] as const;
 

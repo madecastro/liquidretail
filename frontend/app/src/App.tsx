@@ -19,6 +19,7 @@ import { GenerateAdsWizard } from './pages/GenerateAds';
 import { MediaLibraryPage } from './pages/MediaLibrary';
 import { CatalogBrowserPage } from './pages/CatalogBrowser';
 import { SettingsPage } from './pages/Settings';
+import { TeamPage } from './pages/Team';
 
 // Reorg: primary nav is Brand / Campaigns / Ads. Upload + Detect retired
 // from the sidebar but their routes remain so deep links keep working
@@ -46,6 +47,7 @@ export function App() {
               <Route path="/media-library"  element={<RequireAuth><MediaLibraryPage /></RequireAuth>} />
               <Route path="/catalog"        element={<RequireAuth><CatalogBrowserPage /></RequireAuth>} />
               <Route path="/settings"       element={<RequireAuth><SettingsPage /></RequireAuth>} />
+              <Route path="/team"           element={<RequireAuth><TeamPage /></RequireAuth>} />
             </Route>
             {/* Public marketing landing — no app shell, no auth gate. */}
             <Route path="/landing" element={<LandingPage />} />

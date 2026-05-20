@@ -258,7 +258,16 @@ export type DetectResult = {
   judge?:            unknown;
   extendedCrops?:    Record<string, unknown[]>;
   productMatchesAll?: DetectMatch[];
-  mediaClassification?: { detectSummary?: { outcome?: DetectOutcome } } | null;
+  mediaClassification?: {
+    detectSummary?: { outcome?: DetectOutcome };
+    socialPostType?: 'catalog_product' | 'ugc' | 'unknown' | null;
+    contentNature?: 'evergreen' | 'promotional' | 'announcement' | 'unknown' | null;
+    contentNatureConfidence?: number | null;
+    contentNatureReason?: string | null;
+    shotType?: 'lifestyle' | 'on_model' | 'product_only' | 'flat_lay' | 'detail' | 'packaging' | 'unknown' | null;
+    shotTypeConfidence?: number | null;
+    shotTypeReason?: string | null;
+  } | null;
   overlayZones?:     Record<string, OverlayZoneVariant[]>;
   mediaSource?:      Record<string, unknown>;
   // Phase A-0 derived display fields

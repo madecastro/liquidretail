@@ -29,11 +29,134 @@ export function SummaryTab({ row, detect }: Props) {
   return (
     <VStack align="stretch" spacing={4}>
       <AISummaryCard detect={detect} />
+      <ClassificationCard detect={detect} />
       <DetectedProductsCard detect={detect} />
       <SceneAndSubjectsCard detect={detect} />
       <TechnicalInsightsCard detect={detect} />
       <RawDataCard detect={detect} />
     </VStack>
+  );
+}
+
+// ── Content Classification ────────────────────────────────────────
+// Surfaces the two-axis classification from subjectTextService:
+//   contentNature — ad-suitability gate used by the cartesian
+//                   (evergreen / promotional / announcement / unknown)
+//   shotType      — photographic style, used to pick heroes
+//                   (lifestyle / on_model / product_only / flat_lay /
+//                    detail / packaging / unknown)
+// socialPostType (catalog_product vs ugc) is also surfaced for context.
+
+const NATURE_TONE: Record<string, { bg: string; fg: string; label: string }> = {
+  evergreen:    { bg: 'rgba(16,185,129,0.10)', fg: '#047857', label: 'Evergreen' },
+  promotional:  { bg: 'rgba(217,119,6,0.10)',  fg: '#B45309', label: 'Promotional' },
+  announcement: { bg: 'rgba(59,130,246,0.10)', fg: '#1D4ED8', label: 'Announcement' },
+  unknown:      { bg: 'rgba(100,116,139,0.10)', fg: '#475569', label: 'Unknown' }
+};
+
+const SHOT_LABEL: Record<string, string> = {
+  lifestyle:    'Lifestyle',
+  on_model:     'On Model',
+  product_only: 'Product Only',
+  flat_lay:     'Flat Lay',
+  detail:       'Detail',
+  packaging:    'Packaging',
+  unknown:      'Unknown'
+};
+
+const POST_LABEL: Record<string, string> = {
+  catalog_product: 'Catalog Product',
+  ugc:             'UGC',
+  unknown:         'Unknown'
+};
+
+function ClassificationCard({ detect }: { detect: DetectResult | null }) {
+  const c = detect?.mediaClassification || null;
+  const nature = c?.contentNature || null;
+  const shot   = c?.shotType || null;
+  const post   = c?.socialPostType || null;
+
+  if (!nature && !shot && !post) {
+    return (
+      <Card variant="outline">
+        <CardBody>
+          <Heading size="xs" mb={2}>Content Classification</Heading>
+          <Text fontSize="xs" color="brand.muted">
+            Not yet classified. Re-run detect to populate content nature and shot type.
+          </Text>
+        </CardBody>
+      </Card>
+    );
+  }
+
+  const natureTone = NATURE_TONE[nature || 'unknown'];
+
+  return (
+    <Card variant="outline">
+      <CardBody>
+        <Heading size="xs" mb={3}>Content Classification</Heading>
+        <VStack align="stretch" spacing={3}>
+          {/* Source */}
+          {post && (
+            <HStack justify="space-between" align="center">
+              <Text fontSize="xs" color="brand.muted">Source</Text>
+              <Badge fontSize="9px" variant="subtle" colorScheme="gray" px={2} py={0.5} borderRadius="md">
+                {POST_LABEL[post] || post}
+              </Badge>
+            </HStack>
+          )}
+
+          {/* Content nature */}
+          {nature && (
+            <Box>
+              <HStack justify="space-between" align="center" mb={1}>
+                <Text fontSize="xs" color="brand.muted">Content Nature</Text>
+                <HStack spacing={2}>
+                  <Badge fontSize="9px" variant="subtle" px={2} py={0.5} borderRadius="md"
+                         style={{ background: natureTone.bg, color: natureTone.fg }}>
+                    {natureTone.label}
+                  </Badge>
+                  {typeof c?.contentNatureConfidence === 'number' && (
+                    <Text fontSize="10px" color="brand.muted">
+                      {Math.round((c.contentNatureConfidence ?? 0) * 100)}%
+                    </Text>
+                  )}
+                </HStack>
+              </HStack>
+              {c?.contentNatureReason && (
+                <Text fontSize="10px" color="brand.muted" lineHeight="1.4">
+                  {c.contentNatureReason}
+                </Text>
+              )}
+            </Box>
+          )}
+
+          {/* Shot type */}
+          {shot && (
+            <Box>
+              <HStack justify="space-between" align="center" mb={1}>
+                <Text fontSize="xs" color="brand.muted">Shot Type</Text>
+                <HStack spacing={2}>
+                  <Badge fontSize="9px" variant="subtle" colorScheme="purple" px={2} py={0.5} borderRadius="md">
+                    {SHOT_LABEL[shot] || shot}
+                  </Badge>
+                  {typeof c?.shotTypeConfidence === 'number' && (
+                    <Text fontSize="10px" color="brand.muted">
+                      {Math.round((c.shotTypeConfidence ?? 0) * 100)}%
+                    </Text>
+                  )}
+                </HStack>
+              </HStack>
+              {c?.shotTypeReason && (
+                <Text fontSize="10px" color="brand.muted" lineHeight="1.4">
+                  {c.shotTypeReason}
+                </Text>
+              )}
+            </Box>
+          )}
+        </VStack>
+      </CardBody>
+    </Card>
   );
 }
 

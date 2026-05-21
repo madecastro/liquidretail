@@ -781,7 +781,15 @@
       line-height: 1.25;
     }
     .tp-zone.kind-product_card.style-with_thumbnail .tp-product-card-thumb {
-      width: 4em; height: 4em;
+      /* Cap the thumbnail at a percentage of zone height in addition
+         to the em sizing so it can't dominate short zones (e.g. 9:16
+         product_card is 528x477 — at the 1.6x zone scaler the em-sized
+         image would consume the column and force the meta text into
+         the same visual column, looking "image low + text cutoff").
+         The min() picks whichever is smaller: a comfortable em size
+         OR 60% of the zone height. */
+      width:  min(4em, calc(var(--tp-zone-rect-h-px, 300) * 0.60px));
+      height: min(4em, calc(var(--tp-zone-rect-h-px, 300) * 0.60px));
       object-fit: cover;
       border-radius: 4px;
       align-self: center;
@@ -829,8 +837,12 @@
     }
     .tp-zone.kind-product_card.style-with_thumbnail.tp-zone-stack-vertical .tp-product-card-thumb,
     .tp-zone.kind-product_card.style-with_thumbnail.tp-zone-stack-vertical .tp-product-card-thumb-placeholder {
-      width: 5.5em;
-      height: 5.5em;
+      /* Stacked layout — cap at 35% of zone height so the name + price
+         block below has at least 65% to render in. Was 5.5em fixed,
+         which on long product names left no headroom for 3 lines of
+         text + price + padding. */
+      width:  min(5.5em, calc(var(--tp-zone-rect-h-px, 300) * 0.35px));
+      height: min(5.5em, calc(var(--tp-zone-rect-h-px, 300) * 0.35px));
     }
     .tp-zone.kind-product_card.style-with_thumbnail.tp-zone-stack-vertical .tp-product-card-meta {
       width: 100%;

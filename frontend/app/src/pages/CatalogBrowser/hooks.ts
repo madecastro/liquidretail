@@ -43,6 +43,12 @@ export function useCatalogList(initialFilters: ListFilters = {}) {
     if (filters.inStock)      p.set('inStock', '1');
     if (filters.hasReviews)   p.set('hasReviews', '1');
     if (filters.showVariants) p.set('showVariants', '1');
+    // Default to excluding drafts (draft=0) so the catalog browser
+    // doesn't mix unapproved detect-identified rows in with the
+    // synced catalog. The "Drafts only" source option flips this:
+    // it sends source=draft which the backend treats as draft=true
+    // across all sources, so we omit the draft filter here.
+    if (filters.source !== 'draft') p.set('draft', '0');
     return p.toString();
   }, [brandId, filters]);
 

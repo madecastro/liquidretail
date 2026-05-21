@@ -228,7 +228,7 @@ export function Step2Picker({ value, onChange }: Props) {
     if (!value.productIds.length) { setRelatedMedia([]); return; }
     Promise.all(
       value.productIds.slice(0, 5).map(seedId =>
-        apiJson<{ matches: { mediaId: string; matchTier: MatchTier | null; outcomeReasoning: string | null; winner: string | null; matchSource: string | null; catalogCombinedScore: number | null; media: MediaRow }[] }>(`/api/catalog/${seedId}/matches`)
+        apiJson<{ matches: { mediaId: string; matchTier: MatchTier | null; outcomeReasoning: string | null; winner: string | null; matchSource: string | null; catalogCombinedScore: number | null; media: MediaRow }[] }>(`/api/catalog/${seedId}/matches?adEligible=1`)
           .then(r => (r.matches || []).map(x => ({
             ...x.media,
             id: x.mediaId,

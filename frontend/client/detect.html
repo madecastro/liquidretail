@@ -1592,8 +1592,25 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ mediaId: state.mediaId, quality })
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Generation failed');
+        // Read the body as text first so we can surface useful diagnostics
+        // when the response is empty / truncated / not-JSON (e.g. Render's
+        // 100s edge timeout drops the connection mid-flight for the 9
+        // parallel gpt-image-1 calls — the browser then sees a closed
+        // socket with no body and res.json() throws "Unexpected end of
+        // JSON input" with no context).
+        const text = await res.text();
+        let data;
+        try {
+          data = text ? JSON.parse(text) : null;
+        } catch (parseErr) {
+          throw new Error(`Server returned non-JSON (HTTP ${res.status}): ${text.slice(0, 200) || '(empty body)'}`);
+        }
+        if (!res.ok) {
+          throw new Error((data && data.error) || `HTTP ${res.status}${text ? ' — ' + text.slice(0, 200) : ' with empty body'}`);
+        }
+        if (!data) {
+          throw new Error(`HTTP ${res.status} with empty body (likely upstream timeout — 9× gpt-image-1 parallel can exceed the proxy limit)`);
+        }
         ALS_STATE.session = data;
         const ok = data.references.filter(r => r.status === 'ok').length;
         const secs = ((Date.now() - started) / 1000).toFixed(1);

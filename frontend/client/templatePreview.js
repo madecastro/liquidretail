@@ -954,7 +954,19 @@
       const isWhiteHeadline = zone.style_variant === 'display_script'
         && /^#?ffffff$/i.test(String(TP_STATE.lastStyleBindings?.headline_text_color || '#FFFFFF'));
       const solidCls = isWhiteHeadline ? ' solid-headline' : '';
-      el.className = `tp-zone kind-${zone.kind}${variantCls}${solidCls}`;
+      // Aspect-driven layout hint — when a zone is taller than (or
+      // equal to) it is wide, content lays out vertically by default.
+      // Today only product_card consumes this class to switch from
+      // image-left/text-right to image-top/text-bottom (the 1:1 split-
+      // screen product_meta zone is ~420x478 — squeezing image + name +
+      // price into the right column of a near-square card truncates the
+      // name; stacking gives the name the full width of the card).
+      // 9:16 and 4:5 variants stay horizontal because their product_meta
+      // zones are wider than tall.
+      const aspectCls = (zone.rect && zone.rect.w > 0 && zone.rect.h > 0 && zone.rect.w <= zone.rect.h)
+        ? ' tp-zone-stack-vertical'
+        : '';
+      el.className = `tp-zone kind-${zone.kind}${variantCls}${solidCls}${aspectCls}`;
       el.style.left   = `${(zone.rect.x / w * 100).toFixed(2)}%`;
       el.style.top    = `${(zone.rect.y / h * 100).toFixed(2)}%`;
       el.style.width  = `${(zone.rect.w / w * 100).toFixed(2)}%`;

@@ -813,6 +813,37 @@
       letter-spacing: 0.02em;
     }
 
+    /* Stacked variant — used when the zone is square or taller than it
+       is wide (1:1 ugc_split_screen product_meta). Image goes on top,
+       name + price fill the full width below. Without this the name
+       gets squeezed into a narrow side column and truncates ("Art Pa$"
+       instead of "Artisan Pasta $17.10"). 9:16 and 4:5 zones are wider
+       than tall and stay horizontal via the default rule above. */
+    .tp-zone.kind-product_card.style-with_thumbnail.tp-zone-stack-vertical {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto 1fr;
+      justify-items: center;
+      row-gap: 0.55em;
+      column-gap: 0;
+      text-align: center;
+    }
+    .tp-zone.kind-product_card.style-with_thumbnail.tp-zone-stack-vertical .tp-product-card-thumb,
+    .tp-zone.kind-product_card.style-with_thumbnail.tp-zone-stack-vertical .tp-product-card-thumb-placeholder {
+      width: 5.5em;
+      height: 5.5em;
+    }
+    .tp-zone.kind-product_card.style-with_thumbnail.tp-zone-stack-vertical .tp-product-card-meta {
+      width: 100%;
+      align-items: center;
+      text-align: center;
+    }
+    .tp-zone.kind-product_card.style-with_thumbnail.tp-zone-stack-vertical .tp-product-card-name {
+      /* Allow more lines in stacked layout — the name now has the full
+         card width, so 3 lines reads as a clean header rather than a
+         squished side-column block. */
+      -webkit-line-clamp: 3 !important;
+    }
+
     /* Quote cards bind to brand.secondary_color (per
        style_bindings.card_bg) with a brand-accent accent bar on the
        left. --brand-text-on-secondary is the readable foreground

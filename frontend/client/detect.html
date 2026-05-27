@@ -1551,7 +1551,9 @@
   const ALS_STATE = {
     lastMediaId: null,
     loading: false,
-    session: null            // { references: [...] }
+    session: null,           // { references: [...] }
+    sessionId: null,         // background-job id; cleared between runs
+    pollTimer: null          // setTimeout handle for the poll loop
   };
 
   function renderAiLayoutStudio() {
@@ -1586,40 +1588,72 @@
       grid.innerHTML = '<div class="als-loading">⏳ gpt-image-1 is drawing 9 layout references in parallel…</div>';
 
       const started = Date.now();
+      // Clear any prior polling loop so a re-click doesn't double up.
+      if (ALS_STATE.pollTimer) { clearTimeout(ALS_STATE.pollTimer); ALS_STATE.pollTimer = null; }
       try {
+        // 1. Kick off the background job. Server returns 202 with a
+        // sessionId in well under a second — well inside Netlify's
+        // 26s proxy timeout.
         const res = await fetch('/api/ai-layouts/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ mediaId: state.mediaId, quality })
         });
-        // Read the body as text first so we can surface useful diagnostics
-        // when the response is empty / truncated / not-JSON (e.g. Render's
-        // 100s edge timeout drops the connection mid-flight for the 9
-        // parallel gpt-image-1 calls — the browser then sees a closed
-        // socket with no body and res.json() throws "Unexpected end of
-        // JSON input" with no context).
         const text = await res.text();
-        let data;
-        try {
-          data = text ? JSON.parse(text) : null;
-        } catch (parseErr) {
-          throw new Error(`Server returned non-JSON (HTTP ${res.status}): ${text.slice(0, 200) || '(empty body)'}`);
+        let kickoff;
+        try { kickoff = text ? JSON.parse(text) : null; }
+        catch (e) { throw new Error(`Server returned non-JSON (HTTP ${res.status}): ${text.slice(0, 200) || '(empty body)'}`); }
+        if (!res.ok || !kickoff || !kickoff.sessionId) {
+          throw new Error((kickoff && kickoff.error) || `HTTP ${res.status} starting session`);
         }
-        if (!res.ok) {
-          throw new Error((data && data.error) || `HTTP ${res.status}${text ? ' — ' + text.slice(0, 200) : ' with empty body'}`);
-        }
-        if (!data) {
-          throw new Error(`HTTP ${res.status} with empty body (likely upstream timeout — 9× gpt-image-1 parallel can exceed the proxy limit)`);
-        }
-        ALS_STATE.session = data;
-        const ok = data.references.filter(r => r.status === 'ok').length;
-        const secs = ((Date.now() - started) / 1000).toFixed(1);
-        statusEl.textContent = `${ok}/${data.references.length} references ready in ${secs}s · brand=${data.brandName || '—'} · product=${data.productName || '—'}`;
-        drawAlsGrid(data);
+        ALS_STATE.sessionId = kickoff.sessionId;
+        const totalCombos = kickoff.totalCombos || 9;
+
+        // 2. Poll loop. Re-renders the grid as references arrive so
+        // the operator sees images appear one at a time rather than
+        // waiting blind for a 60-90s monolithic response.
+        const pollOnce = async () => {
+          const sid = ALS_STATE.sessionId;
+          if (!sid) return; // cancelled
+          const pres = await fetch(`/api/ai-layouts/session/${encodeURIComponent(sid)}`);
+          const ptext = await pres.text();
+          let pdata;
+          try { pdata = ptext ? JSON.parse(ptext) : null; }
+          catch (e) { throw new Error(`Poll returned non-JSON (HTTP ${pres.status}): ${ptext.slice(0, 200) || '(empty body)'}`); }
+          if (!pres.ok || !pdata) {
+            throw new Error((pdata && pdata.error) || `HTTP ${pres.status} polling session`);
+          }
+
+          ALS_STATE.session = pdata;
+          const refs = pdata.references || [];
+          const ok = refs.filter(r => r.status === 'ok').length;
+          const done = refs.length;
+          const secs = ((Date.now() - started) / 1000).toFixed(1);
+          const brandBit   = pdata.brandName   ? ` · brand=${pdata.brandName}`   : '';
+          const productBit = pdata.productName ? ` · product=${pdata.productName}` : '';
+          const statusLabel = pdata.status === 'completed'
+            ? `${ok}/${done} references ready in ${secs}s${brandBit}${productBit}`
+            : pdata.status === 'failed'
+              ? `Failed: ${pdata.error || 'unknown error'}`
+              : `${done}/${totalCombos} generated · ${secs}s elapsed${brandBit}${productBit}`;
+          statusEl.textContent = statusLabel;
+          drawAlsGrid(pdata);
+
+          if (pdata.status === 'completed' || pdata.status === 'failed') {
+            ALS_STATE.loading = false;
+            btn.disabled = false;
+            ALS_STATE.pollTimer = null;
+            return;
+          }
+          ALS_STATE.pollTimer = setTimeout(pollOnce, 3000);
+        };
+
+        // Wait briefly so the worker has a chance to stamp brandName
+        // and at least transition to 'running' before the first poll.
+        ALS_STATE.pollTimer = setTimeout(pollOnce, 1000);
       } catch (err) {
         grid.innerHTML = '';
         statusEl.innerHTML = `<span style="color:#f87171">Error: ${escapeHtml(err.message)}</span>`;
-      } finally {
         ALS_STATE.loading = false;
         btn.disabled = false;
       }

@@ -46,6 +46,13 @@ type ProductRow = {
   price?:    number | null;
   currency?: string | null;
   brand?:    string | null;
+  // Catalog-side imagery refs. URLs are the raw source-CDN strings;
+  // *MediaId fields point at the wrapped catalog-product Media docs.
+  // Used by the brand-kind unified ribbon to render alt tiles and
+  // wire (productId, altMediaId) exclusions.
+  additionalImages?:        string[];
+  imageMediaId?:            string | null;
+  additionalImageMediaIds?: string[];
 } & Partial<MatchEvidence> & {
   // Set on tiles surfaced from /api/media/:id/related-products. Used
   // as the "seed" when constructing the exclusion key for an X click.
@@ -74,10 +81,16 @@ function pairingKey(productId: string | null, mediaId: string): string {
 // Catalog-imagery row shape — hero + alt URLs for a CatalogProduct.
 // Shared between the picker and the brand-unified view, so declared
 // at module scope rather than inside the component.
+//
+// imageMediaId is the catalog-product Media doc ID (when materialized
+// by catalogProductDetectService); used to key (productId, altMediaId)
+// exclusions so the operator can opt an alt out of the cartesian
+// without dropping its product.
 type CatalogImageRow = {
   productId:    string;
   productTitle: string | null;
   imageUrl:     string;
+  imageMediaId: string | null;
   role:         'hero' | 'alt';
   altIndex?:    number;
 };
@@ -390,15 +403,36 @@ export function Step2Picker({ value, onChange }: Props) {
     if (!expansionSeedProductIds.length) { setCatalogImagery([]); return; }
     Promise.all(
       expansionSeedProductIds.slice(0, 5).map(pid =>
-        apiJson<{ product: { id: string; title: string | null; imageUrl: string | null; additionalImages: string[] } }>(`/api/catalog/${pid}`)
+        apiJson<{ product: {
+          id: string;
+          title: string | null;
+          imageUrl: string | null;
+          additionalImages: string[];
+          imageMediaId: string | null;
+          additionalImageMediaIds: string[];
+        } }>(`/api/catalog/${pid}`)
           .then(r => {
             const out: CatalogImageRow[] = [];
             const title = r.product?.title || null;
+            const altIds = r.product?.additionalImageMediaIds || [];
             if (r.product?.imageUrl) {
-              out.push({ productId: pid, productTitle: title, imageUrl: r.product.imageUrl, role: 'hero' });
+              out.push({
+                productId: pid,
+                productTitle: title,
+                imageUrl: r.product.imageUrl,
+                imageMediaId: r.product.imageMediaId || null,
+                role: 'hero'
+              });
             }
             (r.product?.additionalImages || []).forEach((url, i) => {
-              if (url) out.push({ productId: pid, productTitle: title, imageUrl: url, role: 'alt', altIndex: i + 1 });
+              if (url) out.push({
+                productId: pid,
+                productTitle: title,
+                imageUrl: url,
+                imageMediaId: altIds[i] || null,
+                role: 'alt',
+                altIndex: i + 1
+              });
             });
             return out;
           })
@@ -1093,17 +1127,45 @@ function BrandUnifiedView(props: BrandUnifiedViewProps) {
     loadingP, loadingM, includeCategoryMatched, includeBrandMatched, onTierToggle, anyPicks
   } = props;
 
-  // Main ribbon: products (as hero tiles) interleaved with UGC. Products
-  // first by matchCount desc (the catalog list endpoint already sorts
-  // by matchCount), then UGC by source position.
-  const mainTiles: UnifiedTile[] = [
-    ...products.map<UnifiedTile>(p => ({ kind: 'product', product: p })),
-    ...media.map<UnifiedTile>(m => ({ kind: 'media', media: m }))
-  ];
+  // Main ribbon: every available tile across the brand —
+  //   product hero      → ProductTile (toggles value.productIds)
+  //   product alts      → CatalogAltTile (auto-fanout; click toggles
+  //                       a (productId, altMediaId) exclusion so the
+  //                       operator can opt-out specific alts without
+  //                       dropping the product)
+  //   UGC media         → MediaTile (toggles value.mediaIds)
+  // Products are emitted as a hero + N alt block per row, then all
+  // UGC follows. Operator scrolls horizontally to browse the full set.
+  const mainTiles: UnifiedTile[] = [];
+  for (const p of products) {
+    mainTiles.push({ kind: 'product', product: p });
+    const altUrls = p.additionalImages || [];
+    const altMediaIds = p.additionalImageMediaIds || [];
+    for (let i = 0; i < altUrls.length; i++) {
+      if (!altUrls[i]) continue;
+      mainTiles.push({
+        kind: 'catalog_alt',
+        img: {
+          productId:    p.id,
+          productTitle: p.title,
+          imageUrl:     altUrls[i],
+          imageMediaId: altMediaIds[i] || null,
+          role:         'alt',
+          altIndex:     i + 1
+        }
+      });
+    }
+  }
+  for (const m of media) {
+    mainTiles.push({ kind: 'media', media: m });
+  }
 
-  // Recommended ribbon: discovered products from picked media + matched
-  // UGC for effective products + (gated) category-matched + brand-matched
-  // + catalog alts as informational image-only tiles.
+  // Recommended ribbon: media related to operator picks. Includes
+  // discovered products from picked media + matched UGC for effective
+  // products + (gated) category-matched + brand-matched. Catalog alts
+  // are NOT duplicated here under brand-kind (they're already in the
+  // main ribbon).
+  void catalogImagery; // referenced only by product-kind flow; kept on the props signature for symmetry
   const recommendedTiles: UnifiedTile[] = [];
   const seenProductIds = new Set<string>();
   const seenMediaIds = new Set<string>();
@@ -1131,21 +1193,12 @@ function BrandUnifiedView(props: BrandUnifiedViewProps) {
       recommendedTiles.push({ kind: 'media', media: m });
     }
   }
-  // Catalog alts fold in at the end as informational tiles — they
-  // auto-fan-out as product_image seeds whenever their parent product
-  // is in scope (operator-picked or media-derived). Drop the hero
-  // tiles here (the hero is already pickable via the main ribbon's
-  // product tile).
-  for (const img of catalogImagery) {
-    if (img.role === 'hero') continue;
-    recommendedTiles.push({ kind: 'catalog_alt', img });
-  }
 
   return (
     <>
       <SectionHeader
         title="Media"
-        subtitle="Catalog imagery and social posts mixed. Pick any tile — the cartesian routes catalog tiles as product_image variants and social tiles as ugc variants."
+        subtitle="Catalog imagery (hero + alts) and social posts. Pick any tile to feature — alts fan out automatically alongside their hero; click an alt to opt it out."
       />
       <UnifiedRibbon
         tiles={mainTiles}
@@ -1162,8 +1215,8 @@ function BrandUnifiedView(props: BrandUnifiedViewProps) {
       {anyPicks && (
         <>
           <SectionHeader
-            title={`Recommended for your selection (${recommendedTiles.length})`}
-            subtitle="Related products, matched social posts, and catalog alts that pair with what you've picked. Catalog alts fan out automatically; click any other tile to add it."
+            title={`Media related to your selection (${recommendedTiles.length})`}
+            subtitle="Other products and posts that pair with what you've picked. Click any tile to add or remove it."
             tone="muted"
           />
           {recommendedTiles.length === 0 ? (
@@ -1307,11 +1360,37 @@ function UnifiedRibbon(props: UnifiedRibbonProps) {
               </Box>
             );
           }
-          // catalog_alt — informational, no toggle
+          // catalog_alt — auto-fanout default, click toggles exclusion.
+          // Selected look (purple border) means "will fan out when its
+          // parent product is in scope". Excluded look (dimmed +
+          // strikethrough) means the operator opted this alt out via
+          // a (productId, altMediaId) excludedPairings entry. Alts
+          // with no Media doc id (legacy catalog row without the
+          // wrapper materialized) render as informational and can't
+          // be toggled.
           const img = t.img;
+          const altKey = img.imageMediaId
+            ? pairingKey(img.productId, img.imageMediaId)
+            : null;
+          const altExcluded = altKey ? excludedSet.has(altKey) : false;
+          const altClickable = !!img.imageMediaId;
           return (
             <Box key={`alt-${img.productId}-${img.altIndex || 0}-${idx}`} flexShrink={0}>
-              <Box position="relative" w="120px" h="120px" borderRadius="md" overflow="hidden" bg="gray.100" borderWidth="2px" borderColor="brand.border">
+              <Box
+                as={altClickable ? 'button' : 'div'}
+                onClick={altClickable ? () => toggleExclude(img.productId, img.imageMediaId!) : undefined}
+                position="relative"
+                w="120px" h="120px"
+                borderRadius="md"
+                overflow="hidden"
+                bg="gray.100"
+                borderWidth="2px"
+                borderColor={altExcluded ? 'brand.border' : 'rsViolet.400'}
+                opacity={altExcluded ? 0.45 : 1}
+                cursor={altClickable ? 'pointer' : 'default'}
+                transition="all 120ms"
+                title={altExcluded ? 'Click to re-include this alt' : 'Click to exclude this alt'}
+              >
                 <img
                   src={img.imageUrl}
                   alt={`${img.productTitle || 'product'} alt ${img.altIndex || ''}`}
@@ -1320,17 +1399,22 @@ function UnifiedRibbon(props: UnifiedRibbonProps) {
                 />
                 <Badge
                   position="absolute" top="4px" left="4px"
-                  fontSize="9px" colorScheme="purple" variant="solid"
+                  fontSize="9px"
+                  colorScheme={altExcluded ? 'gray' : 'purple'}
+                  variant="solid"
                 >
                   ALT {img.altIndex}
                 </Badge>
                 <Box
                   position="absolute" bottom="0" left="0" right="0"
-                  bg="blackAlpha.700" color="white"
+                  bg={altExcluded ? 'blackAlpha.600' : 'rsViolet.500'}
+                  color="white"
                   px={1.5} py={1}
                   fontSize="9px" fontWeight="700"
+                  textAlign="center"
+                  letterSpacing="0.04em"
                 >
-                  AUTO
+                  {altExcluded ? 'EXCLUDED' : 'AUTO'}
                 </Box>
               </Box>
             </Box>

@@ -64,6 +64,17 @@ const STEPS: Array<{ key: WizardStepKey; label: string; description: string }> =
   { key: 'generate', label: 'Generate', description: 'Review & render' }
 ];
 
+// Brand-kind campaigns frame Step 2 as a media-first selection (one
+// unified ribbon mixing catalog imagery + UGC). Override the visible
+// label + description without changing the URL slug 'products' so
+// back/forward + deep links stay stable.
+function stepsForKind(kind: string | null): typeof STEPS {
+  if (kind !== 'brand') return STEPS;
+  return STEPS.map(s => s.key === 'products'
+    ? { ...s, label: 'Media', description: 'Select Media — catalog imagery and social posts' }
+    : s);
+}
+
 function stepIndex(k: WizardStepKey): number {
   return STEPS.findIndex(s => s.key === k);
 }
@@ -152,6 +163,10 @@ export function GenerateAdsWizard() {
     });
 
   // Step → can-proceed gate. Each step decides what it requires; the
+  // Kind-aware step labels for the Stepper + Next button. The
+  // underlying STEPS keys / URL slugs stay stable.
+  const displayedSteps = useMemo(() => stepsForKind(selections.campaignKind), [selections.campaignKind]);
+
   // wizard footer reads this to enable/disable Next.
   const canProceed = useMemo(() => {
     if (step === 'campaign') return !!selections.campaignId;
@@ -175,7 +190,7 @@ export function GenerateAdsWizard() {
         description="Pick a campaign, choose products, set templates + CTA, and render. Each step locks in your selection before moving on."
       />
 
-      <Stepper current={step} />
+      <Stepper current={step} steps={displayedSteps} />
 
       <Box>
         {step === 'campaign' && <Step1Campaign value={selections} onChange={update} />}
@@ -194,7 +209,7 @@ export function GenerateAdsWizard() {
           )}
           {step !== 'generate' ? (
             <Button onClick={next} variant="brand" size="sm" isDisabled={!canProceed}>
-              Next: {STEPS[stepIndex(step) + 1]?.label}
+              Next: {displayedSteps[stepIndex(step) + 1]?.label}
             </Button>
           ) : null}
         </HStack>
@@ -203,7 +218,7 @@ export function GenerateAdsWizard() {
   );
 }
 
-function Stepper({ current }: { current: WizardStepKey }) {
+function Stepper({ current, steps }: { current: WizardStepKey; steps: typeof STEPS }) {
   const idx = stepIndex(current);
   return (
     <Flex
@@ -217,7 +232,7 @@ function Stepper({ current }: { current: WizardStepKey }) {
       align="center"
       wrap="wrap"
     >
-      {STEPS.map((s, i) => {
+      {steps.map((s, i) => {
         const status = i < idx ? 'done' : i === idx ? 'active' : 'pending';
         return (
           <HStack key={s.key} spacing={2} flex={1} minW="180px">

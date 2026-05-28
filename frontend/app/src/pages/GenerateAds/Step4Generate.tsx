@@ -67,7 +67,9 @@ export function Step4Generate({ value }: Props) {
           templateIds: value.templateIds,
           cta:         { text: value.ctaText, url: value.ctaUrl },
           urlParams:   value.urlParams,
-          excludePairings
+          excludePairings,
+          includeCategoryMatched: value.includeCategoryMatched,
+          includeBrandMatched:    value.includeBrandMatched
           // refresh:true was a smoke-test workaround for the bug where
           // dedupe-hit ads kept their original campaignRunId and made
           // /ads?campaignRunId=X come back empty. Resolved by #111

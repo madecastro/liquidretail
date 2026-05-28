@@ -48,6 +48,13 @@ export type WizardSelections = {
   // backend can drop the matching tuples from the cartesian.
   // brand_match exclusions use productId='null' (no specific SKU).
   excludedPairings: string[];
+  // Product-kind tier toggles. Default false — product campaigns
+  // only seed strict product_match UGC unless the operator clicks
+  // the "Include category-matched" / "Include brand-matched" expand
+  // buttons in Step 2. Plumbed through Step 4 into the
+  // POST /api/ads/generate body where seedsFromProduct consumes them.
+  includeCategoryMatched: boolean;
+  includeBrandMatched:    boolean;
 };
 
 const STEPS: Array<{ key: WizardStepKey; label: string; description: string }> = [
@@ -84,7 +91,9 @@ export function GenerateAdsWizard() {
     ctaText:      '',
     ctaUrl:       '',
     urlParams:    '',
-    excludedPairings: []
+    excludedPairings: [],
+    includeCategoryMatched: false,
+    includeBrandMatched:    false
   });
 
   // Keep ?campaignId / ?mediaIds / ?productIds clean once we've
@@ -129,7 +138,15 @@ export function GenerateAdsWizard() {
         && patch.campaignId !== prev.campaignId
         && !!prev.campaignId;
       if (switchingExistingCampaign) {
-        return { ...prev, ...patch, productIds: [], mediaIds: [], excludedPairings: [] };
+        return {
+          ...prev,
+          ...patch,
+          productIds: [],
+          mediaIds: [],
+          excludedPairings: [],
+          includeCategoryMatched: false,
+          includeBrandMatched: false
+        };
       }
       return { ...prev, ...patch };
     });

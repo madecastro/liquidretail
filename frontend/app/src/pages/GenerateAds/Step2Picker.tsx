@@ -17,6 +17,7 @@
 // won't proportionally produce more ads.
 
 import { useEffect, useMemo, useState } from 'react';
+import type { MouseEvent } from 'react';
 import { Box, VStack, HStack, Text, Button, Wrap, WrapItem, Image, Tooltip, Badge } from '@chakra-ui/react';
 import type { WizardSelections } from './index';
 import { StepShell } from './index';
@@ -69,6 +70,17 @@ type MediaRow = {
 function pairingKey(productId: string | null, mediaId: string): string {
   return `${productId || 'null'}|${mediaId}`;
 }
+
+// Catalog-imagery row shape — hero + alt URLs for a CatalogProduct.
+// Shared between the picker and the brand-unified view, so declared
+// at module scope rather than inside the component.
+type CatalogImageRow = {
+  productId:    string;
+  productTitle: string | null;
+  imageUrl:     string;
+  role:         'hero' | 'alt';
+  altIndex?:    number;
+};
 
 type Props = {
   value:    WizardSelections;
@@ -229,7 +241,6 @@ export function Step2Picker({ value, onChange }: Props) {
   // value.productIds.
   const isProductKind = value.campaignKind === 'product';
   const isBrandKind   = value.campaignKind === 'brand';
-  const useExpansionUI = isProductKind || isBrandKind;
   const mediaDerivedProductIds = useMemo(() => {
     if (!isBrandKind) return [] as string[];
     return relatedProducts
@@ -373,13 +384,6 @@ export function Step2Picker({ value, onChange }: Props) {
   // rail — shows hero + alts that will fan out as product_image seeds
   // in the cartesian. Operator doesn't pick from these (every catalog
   // Media seeds automatically); the rail just makes the fanout visible.
-  type CatalogImageRow = {
-    productId:  string;
-    productTitle: string | null;
-    imageUrl:   string;
-    role:       'hero' | 'alt';
-    altIndex?:  number;
-  };
   const [catalogImagery, setCatalogImagery] = useState<CatalogImageRow[]>([]);
   useEffect(() => {
     let cancelled = false;
@@ -507,149 +511,144 @@ export function Step2Picker({ value, onChange }: Props) {
           </Box>
         )}
 
-        {/* Products ribbon — always shown, but the subtitle hints that
-            it's the primary selector when the campaign is product-kind */}
-        <SectionHeader
-          title="Products"
-          subtitle={isProductKind
-            ? 'Pick one or more products — matched media and catalog imagery fan out automatically.'
-            : 'Click to feature in generated ads'}
-        />
-        <RibbonPicker
-          items={products}
-          getId={p => p.id}
-          selectedIds={productSet}
-          onToggle={toggleProduct}
-          loading={loadingP}
-          emptyHint="No products in this brand's catalog yet."
-          render={(p, selected, onClick) => (
-            <ProductTile product={p} selected={selected} onClick={onClick} />
-          )}
-        />
-
-        {/* Related products from selected media — hidden under product-
-            kind (operator picks products first there, so media-derived
-            related-products is irrelevant). */}
-        {!isProductKind && relatedProducts.length > 0 && (
-          <RelatedTierBlocks
-            heading="Products that will pair with your selected media"
-            tiers={groupByTier(relatedProducts)}
-            renderTile={(p, key) => {
-              const excluded = excludedSet.has(key);
-              return (
-                <ExcludeWrapper
-                  excluded={excluded}
-                  onExclude={() => toggleExclude(p.id, p.seedMediaId || '')}
-                  reason={p.outcomeReasoning}
-                  score={p.catalogCombinedScore}
-                  winner={p.winner}
-                  source={p.matchSource}
-                >
-                  <ProductTile product={p} selected={productSet.has(p.id)} onClick={() => toggleProduct(p.id)} />
-                </ExcludeWrapper>
-              );
-            }}
-            keyFor={(p) => pairingKey(p.id, p.seedMediaId || '')}
+        {isBrandKind ? (
+          // ── Brand-kind: collapsed two-ribbon layout ──
+          // Single "Media" ribbon mixes product hero tiles + UGC tiles
+          // (operator picks either kind interchangeably). "Recommended"
+          // ribbon below responds to picks. Catalog alts surface in
+          // the recommended ribbon as informational image-only tiles.
+          // Tier expand buttons widen what's in Recommended.
+          <BrandUnifiedView
+            products={products}
+            media={media}
+            productSet={productSet}
+            mediaSet={mediaSet}
+            excludedSet={excludedSet}
+            toggleProduct={toggleProduct}
+            toggleMedia={toggleMedia}
+            toggleExclude={toggleExclude}
+            relatedProducts={relatedProducts}
+            productMatchedRelated={productMatchedRelated}
+            categoryMatchedRelated={categoryMatchedRelated}
+            brandMatches={brandMatches}
+            catalogImagery={catalogImagery}
+            loadingP={loadingP}
+            loadingM={loadingM}
+            includeCategoryMatched={value.includeCategoryMatched}
+            includeBrandMatched={value.includeBrandMatched}
+            onTierToggle={(field, next) => onChange({ [field]: next } as Partial<WizardSelections>)}
+            anyPicks={value.productIds.length + value.mediaIds.length > 0}
           />
-        )}
-
-        {/* Catalog imagery rail — product-kind and brand-kind.
-            Informational: shows the hero + alts that will fan out as
-            product_image seeds in the cartesian. No per-tile toggle;
-            every catalog Media seeds automatically. Driven by the
-            effective seed-product set (explicit picks ∪ media-derived
-            for brand-kind). */}
-        {useExpansionUI && catalogImagery.length > 0 && (
-          <Box>
-            <SectionHeader
-              title={`Catalog imagery for selected product${expansionSeedProductIds.length === 1 ? '' : 's'} (${catalogImagery.length})`}
-              subtitle={isBrandKind && mediaDerivedProductIds.length > 0 && value.productIds.length === 0
-                ? 'Hero and alt images for products identified in your selected media — these fan out as product_image seeds automatically.'
-                : 'Hero and alt images fan out as product_image seeds automatically — these inform the cartesian.'}
-              tone="muted"
-            />
-            <Wrap spacing={3} mt={2}>
-              {catalogImagery.map((img, i) => (
-                <WrapItem key={`${img.productId}-${img.role}-${img.altIndex || 0}-${i}`}>
-                  <Box position="relative" w="84px" h="84px" borderRadius="md" overflow="hidden" bg="gray.50" border="1px solid" borderColor="brand.subtleBorder">
-                    <Image
-                      src={img.imageUrl}
-                      alt={`${img.productTitle || 'product'} ${img.role}${img.altIndex ? ' ' + img.altIndex : ''}`}
-                      objectFit="cover"
-                      w="100%"
-                      h="100%"
-                    />
-                    <Badge
-                      position="absolute"
-                      top="3px"
-                      left="3px"
-                      fontSize="9px"
-                      colorScheme={img.role === 'hero' ? 'green' : 'purple'}
-                      variant="solid"
-                    >
-                      {img.role === 'hero' ? 'HERO' : `ALT ${img.altIndex}`}
-                    </Badge>
-                  </Box>
-                </WrapItem>
-              ))}
-            </Wrap>
-          </Box>
-        )}
-
-        {/* Media ribbon — hidden under product-kind only. Brand and
-            other kinds keep the browse-everything media ribbon. */}
-        {!isProductKind && (
+        ) : (
+          // ── Product-kind and other-kinds: existing layout ──
           <>
-            <SectionHeader title="Media" subtitle="Click to feature creator content in ads" />
+            {/* Products ribbon — always shown, but the subtitle hints that
+                it's the primary selector when the campaign is product-kind */}
+            <SectionHeader
+              title="Products"
+              subtitle={isProductKind
+                ? 'Pick one or more products — matched media and catalog imagery fan out automatically.'
+                : 'Click to feature in generated ads'}
+            />
             <RibbonPicker
-              items={media}
-              getId={m => m.id}
-              selectedIds={mediaSet}
-              onToggle={toggleMedia}
-              loading={loadingM}
-              emptyHint="No media yet — connect Instagram or upload manually."
-              render={(m, selected, onClick) => (
-                <MediaTile media={m} selected={selected} onClick={onClick} />
+              items={products}
+              getId={p => p.id}
+              selectedIds={productSet}
+              onToggle={toggleProduct}
+              loading={loadingP}
+              emptyHint="No products in this brand's catalog yet."
+              render={(p, selected, onClick) => (
+                <ProductTile product={p} selected={selected} onClick={onClick} />
               )}
             />
-          </>
-        )}
 
-        {/* Related media — non-expansion kinds keep the full tier-
-            grouped view (browse everything). Product/brand kinds split
-            into tier-gated blocks below. */}
-        {!useExpansionUI && relatedMedia.length > 0 && (
-          <RelatedTierBlocks
-            heading="Posts that will pair with your selected products"
-            tiers={groupByTier(relatedMedia)}
-            renderTile={(m, key) => {
-              const excluded = excludedSet.has(key);
-              return (
-                <ExcludeWrapper
-                  excluded={excluded}
-                  onExclude={() => toggleExclude(m.seedProductId || null, m.id)}
-                  reason={m.outcomeReasoning}
-                  score={m.catalogCombinedScore}
-                  winner={m.winner}
-                  source={m.matchSource}
-                  stats={{ likes: m.likes ?? null, comments: m.comments ?? null, saves: m.saves ?? null }}
-                >
-                  <MediaTile media={m} selected={mediaSet.has(m.id)} onClick={() => toggleMedia(m.id)} />
-                </ExcludeWrapper>
-              );
-            }}
-            keyFor={(m) => pairingKey(m.seedProductId || null, m.id)}
-          />
-        )}
-
-        {useExpansionUI && expansionSeedProductIds.length > 0 && (
-          <>
-            {/* Tier 1 — product_match: always shown when a product is
-                picked (this is the strict default tier for product-kind). */}
-            {productMatchedRelated.length > 0 && (
+            {/* Related products from selected media — hidden under product-
+                kind. Brand-kind handles this in the unified view above. */}
+            {!isProductKind && relatedProducts.length > 0 && (
               <RelatedTierBlocks
-                heading="Posts matched to this product"
-                tiers={[{ tier: 'product_match', items: productMatchedRelated }]}
+                heading="Products that will pair with your selected media"
+                tiers={groupByTier(relatedProducts)}
+                renderTile={(p, key) => {
+                  const excluded = excludedSet.has(key);
+                  return (
+                    <ExcludeWrapper
+                      excluded={excluded}
+                      onExclude={() => toggleExclude(p.id, p.seedMediaId || '')}
+                      reason={p.outcomeReasoning}
+                      score={p.catalogCombinedScore}
+                      winner={p.winner}
+                      source={p.matchSource}
+                    >
+                      <ProductTile product={p} selected={productSet.has(p.id)} onClick={() => toggleProduct(p.id)} />
+                    </ExcludeWrapper>
+                  );
+                }}
+                keyFor={(p) => pairingKey(p.id, p.seedMediaId || '')}
+              />
+            )}
+
+            {/* Catalog imagery rail — product-kind only (brand-kind
+                folds this into the recommended ribbon). */}
+            {isProductKind && catalogImagery.length > 0 && (
+              <Box>
+                <SectionHeader
+                  title={`Catalog imagery for selected product${expansionSeedProductIds.length === 1 ? '' : 's'} (${catalogImagery.length})`}
+                  subtitle="Hero and alt images fan out as product_image seeds automatically — these inform the cartesian."
+                  tone="muted"
+                />
+                <Wrap spacing={3} mt={2}>
+                  {catalogImagery.map((img, i) => (
+                    <WrapItem key={`${img.productId}-${img.role}-${img.altIndex || 0}-${i}`}>
+                      <Box position="relative" w="84px" h="84px" borderRadius="md" overflow="hidden" bg="gray.50" border="1px solid" borderColor="brand.subtleBorder">
+                        <Image
+                          src={img.imageUrl}
+                          alt={`${img.productTitle || 'product'} ${img.role}${img.altIndex ? ' ' + img.altIndex : ''}`}
+                          objectFit="cover"
+                          w="100%"
+                          h="100%"
+                        />
+                        <Badge
+                          position="absolute"
+                          top="3px"
+                          left="3px"
+                          fontSize="9px"
+                          colorScheme={img.role === 'hero' ? 'green' : 'purple'}
+                          variant="solid"
+                        >
+                          {img.role === 'hero' ? 'HERO' : `ALT ${img.altIndex}`}
+                        </Badge>
+                      </Box>
+                    </WrapItem>
+                  ))}
+                </Wrap>
+              </Box>
+            )}
+
+            {/* Media ribbon — hidden under product-kind only. */}
+            {!isProductKind && (
+              <>
+                <SectionHeader title="Media" subtitle="Click to feature creator content in ads" />
+                <RibbonPicker
+                  items={media}
+                  getId={m => m.id}
+                  selectedIds={mediaSet}
+                  onToggle={toggleMedia}
+                  loading={loadingM}
+                  emptyHint="No media yet — connect Instagram or upload manually."
+                  render={(m, selected, onClick) => (
+                    <MediaTile media={m} selected={selected} onClick={onClick} />
+                  )}
+                />
+              </>
+            )}
+
+            {/* Related media — non-product kinds (promotional, unset)
+                keep the full tier-grouped view. Product-kind splits
+                into tier-gated blocks below. */}
+            {!isProductKind && relatedMedia.length > 0 && (
+              <RelatedTierBlocks
+                heading="Posts that will pair with your selected products"
+                tiers={groupByTier(relatedMedia)}
                 renderTile={(m, key) => {
                   const excluded = excludedSet.has(key);
                   return (
@@ -670,91 +669,114 @@ export function Step2Picker({ value, onChange }: Props) {
               />
             )}
 
-            {/* Tier 2 expand — category-matched. Button always shown so
-                the operator knows the lever exists even when no
-                category-matched posts are available; disabled when
-                count is 0. */}
-            <HStack spacing={3} pt={1} wrap="wrap">
-              <Button
-                size="xs"
-                variant={value.includeCategoryMatched ? 'softBrand' : 'outline'}
-                onClick={() => onChange({ includeCategoryMatched: !value.includeCategoryMatched })}
-                isDisabled={categoryMatchedRelated.length === 0 && !value.includeCategoryMatched}
-              >
-                {value.includeCategoryMatched ? '✓ ' : '+ '}
-                Include category-matched posts ({categoryMatchedRelated.length})
-              </Button>
-              <Button
-                size="xs"
-                variant={value.includeBrandMatched ? 'softBrand' : 'outline'}
-                onClick={() => onChange({ includeBrandMatched: !value.includeBrandMatched })}
-                isDisabled={brandMatches.length === 0 && !value.includeBrandMatched}
-              >
-                {value.includeBrandMatched ? '✓ ' : '+ '}
-                Include brand-matched posts ({brandMatches.length})
-              </Button>
-            </HStack>
+            {isProductKind && value.productIds.length > 0 && (
+              <>
+                {productMatchedRelated.length > 0 && (
+                  <RelatedTierBlocks
+                    heading="Posts matched to this product"
+                    tiers={[{ tier: 'product_match', items: productMatchedRelated }]}
+                    renderTile={(m, key) => {
+                      const excluded = excludedSet.has(key);
+                      return (
+                        <ExcludeWrapper
+                          excluded={excluded}
+                          onExclude={() => toggleExclude(m.seedProductId || null, m.id)}
+                          reason={m.outcomeReasoning}
+                          score={m.catalogCombinedScore}
+                          winner={m.winner}
+                          source={m.matchSource}
+                          stats={{ likes: m.likes ?? null, comments: m.comments ?? null, saves: m.saves ?? null }}
+                        >
+                          <MediaTile media={m} selected={mediaSet.has(m.id)} onClick={() => toggleMedia(m.id)} />
+                        </ExcludeWrapper>
+                      );
+                    }}
+                    keyFor={(m) => pairingKey(m.seedProductId || null, m.id)}
+                  />
+                )}
 
-            {value.includeCategoryMatched && categoryMatchedRelated.length > 0 && (
-              <RelatedTierBlocks
-                heading="Category-matched posts"
-                tiers={[{ tier: 'product_category', items: categoryMatchedRelated }]}
-                renderTile={(m, key) => {
-                  const excluded = excludedSet.has(key);
-                  return (
-                    <ExcludeWrapper
-                      excluded={excluded}
-                      onExclude={() => toggleExclude(m.seedProductId || null, m.id)}
-                      reason={m.outcomeReasoning}
-                      score={m.catalogCombinedScore}
-                      winner={m.winner}
-                      source={m.matchSource}
-                      stats={{ likes: m.likes ?? null, comments: m.comments ?? null, saves: m.saves ?? null }}
-                    >
-                      <MediaTile media={m} selected={mediaSet.has(m.id)} onClick={() => toggleMedia(m.id)} />
-                    </ExcludeWrapper>
-                  );
-                }}
-                keyFor={(m) => pairingKey(m.seedProductId || null, m.id)}
-              />
-            )}
-          </>
-        )}
-
-        {/* Brand-only posts ribbon — non-expansion kinds (promotional,
-            unset) show this always. Product/brand kinds gate it on
-            the "Include brand-matched" expand button. */}
-        {(!useExpansionUI || value.includeBrandMatched) && brandMatches.length > 0 && (
-          <Box>
-            <SectionHeader
-              title="Brand-only posts"
-              subtitle={`Posts matched to the brand without identifying a specific product. These ride along on every run unless excluded. (${brandMatches.length})`}
-              tone="muted"
-            />
-            <RibbonPicker
-              items={brandMatches}
-              getId={m => m.id}
-              selectedIds={mediaSet}
-              onToggle={toggleMedia}
-              render={(m) => {
-                const key = pairingKey(null, m.id);
-                const excluded = excludedSet.has(key);
-                return (
-                  <ExcludeWrapper
-                    excluded={excluded}
-                    onExclude={() => toggleExclude(null, m.id)}
-                    reason={m.outcomeReasoning}
-                    score={m.catalogCombinedScore}
-                    winner={m.winner}
-                    source={m.matchSource}
-                    stats={{ likes: m.likes ?? null, comments: m.comments ?? null, saves: m.saves ?? null }}
+                <HStack spacing={3} pt={1} wrap="wrap">
+                  <Button
+                    size="xs"
+                    variant={value.includeCategoryMatched ? 'softBrand' : 'outline'}
+                    onClick={() => onChange({ includeCategoryMatched: !value.includeCategoryMatched })}
+                    isDisabled={categoryMatchedRelated.length === 0 && !value.includeCategoryMatched}
                   >
-                    <MediaTile media={m} selected={mediaSet.has(m.id)} onClick={() => toggleMedia(m.id)} />
-                  </ExcludeWrapper>
-                );
-              }}
-            />
-          </Box>
+                    {value.includeCategoryMatched ? '✓ ' : '+ '}
+                    Include category-matched posts ({categoryMatchedRelated.length})
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant={value.includeBrandMatched ? 'softBrand' : 'outline'}
+                    onClick={() => onChange({ includeBrandMatched: !value.includeBrandMatched })}
+                    isDisabled={brandMatches.length === 0 && !value.includeBrandMatched}
+                  >
+                    {value.includeBrandMatched ? '✓ ' : '+ '}
+                    Include brand-matched posts ({brandMatches.length})
+                  </Button>
+                </HStack>
+
+                {value.includeCategoryMatched && categoryMatchedRelated.length > 0 && (
+                  <RelatedTierBlocks
+                    heading="Category-matched posts"
+                    tiers={[{ tier: 'product_category', items: categoryMatchedRelated }]}
+                    renderTile={(m, key) => {
+                      const excluded = excludedSet.has(key);
+                      return (
+                        <ExcludeWrapper
+                          excluded={excluded}
+                          onExclude={() => toggleExclude(m.seedProductId || null, m.id)}
+                          reason={m.outcomeReasoning}
+                          score={m.catalogCombinedScore}
+                          winner={m.winner}
+                          source={m.matchSource}
+                          stats={{ likes: m.likes ?? null, comments: m.comments ?? null, saves: m.saves ?? null }}
+                        >
+                          <MediaTile media={m} selected={mediaSet.has(m.id)} onClick={() => toggleMedia(m.id)} />
+                        </ExcludeWrapper>
+                      );
+                    }}
+                    keyFor={(m) => pairingKey(m.seedProductId || null, m.id)}
+                  />
+                )}
+              </>
+            )}
+
+            {/* Brand-only posts ribbon — non-expansion kinds always.
+                Product-kind gates on includeBrandMatched. */}
+            {(!isProductKind || value.includeBrandMatched) && brandMatches.length > 0 && (
+              <Box>
+                <SectionHeader
+                  title="Brand-only posts"
+                  subtitle={`Posts matched to the brand without identifying a specific product. These ride along on every run unless excluded. (${brandMatches.length})`}
+                  tone="muted"
+                />
+                <RibbonPicker
+                  items={brandMatches}
+                  getId={m => m.id}
+                  selectedIds={mediaSet}
+                  onToggle={toggleMedia}
+                  render={(m) => {
+                    const key = pairingKey(null, m.id);
+                    const excluded = excludedSet.has(key);
+                    return (
+                      <ExcludeWrapper
+                        excluded={excluded}
+                        onExclude={() => toggleExclude(null, m.id)}
+                        reason={m.outcomeReasoning}
+                        score={m.catalogCombinedScore}
+                        winner={m.winner}
+                        source={m.matchSource}
+                        stats={{ likes: m.likes ?? null, comments: m.comments ?? null, saves: m.saves ?? null }}
+                      >
+                        <MediaTile media={m} selected={mediaSet.has(m.id)} onClick={() => toggleMedia(m.id)} />
+                      </ExcludeWrapper>
+                    );
+                  }}
+                />
+              </Box>
+            )}
+          </>
         )}
 
         {excludedCount > 0 && (
@@ -1026,5 +1048,295 @@ function SectionHeader({ title, subtitle, tone }: { title: string; subtitle?: st
         {subtitle && <Text fontSize="11px" color="brand.muted" mt={0.5}>{subtitle}</Text>}
       </Box>
     </HStack>
+  );
+}
+
+// ── Brand-kind unified view ──────────────────────────────────────────
+// Collapses the legacy multi-section brand-campaign picker into two
+// ribbons: a Media ribbon mixing product hero tiles + UGC tiles, and
+// a Recommended ribbon below that responds to selection. Catalog alts
+// surface as informational image-only tiles inside the recommended
+// ribbon (no toggle — they fan out automatically when their product
+// is picked). Tier expand buttons widen what's pulled into recommended.
+type UnifiedTile =
+  | { kind: 'product'; product: ProductRow }
+  | { kind: 'media';   media:   MediaRow }
+  | { kind: 'catalog_alt'; img: CatalogImageRow };
+
+type BrandUnifiedViewProps = {
+  products:               ProductRow[];
+  media:                  MediaRow[];
+  productSet:             Set<string>;
+  mediaSet:               Set<string>;
+  excludedSet:            Set<string>;
+  toggleProduct:          (id: string) => void;
+  toggleMedia:            (id: string) => void;
+  toggleExclude:          (productId: string | null, mediaId: string) => void;
+  relatedProducts:        ProductRow[];
+  productMatchedRelated:  MediaRow[];
+  categoryMatchedRelated: MediaRow[];
+  brandMatches:           MediaRow[];
+  catalogImagery:         CatalogImageRow[];
+  loadingP:               boolean;
+  loadingM:               boolean;
+  includeCategoryMatched: boolean;
+  includeBrandMatched:    boolean;
+  onTierToggle:           (field: 'includeCategoryMatched' | 'includeBrandMatched', next: boolean) => void;
+  anyPicks:               boolean;
+};
+
+function BrandUnifiedView(props: BrandUnifiedViewProps) {
+  const {
+    products, media, productSet, mediaSet, excludedSet,
+    toggleProduct, toggleMedia, toggleExclude,
+    relatedProducts, productMatchedRelated, categoryMatchedRelated, brandMatches, catalogImagery,
+    loadingP, loadingM, includeCategoryMatched, includeBrandMatched, onTierToggle, anyPicks
+  } = props;
+
+  // Main ribbon: products (as hero tiles) interleaved with UGC. Products
+  // first by matchCount desc (the catalog list endpoint already sorts
+  // by matchCount), then UGC by source position.
+  const mainTiles: UnifiedTile[] = [
+    ...products.map<UnifiedTile>(p => ({ kind: 'product', product: p })),
+    ...media.map<UnifiedTile>(m => ({ kind: 'media', media: m }))
+  ];
+
+  // Recommended ribbon: discovered products from picked media + matched
+  // UGC for effective products + (gated) category-matched + brand-matched
+  // + catalog alts as informational image-only tiles.
+  const recommendedTiles: UnifiedTile[] = [];
+  const seenProductIds = new Set<string>();
+  const seenMediaIds = new Set<string>();
+  for (const p of relatedProducts) {
+    if (seenProductIds.has(p.id)) continue;
+    seenProductIds.add(p.id);
+    recommendedTiles.push({ kind: 'product', product: p });
+  }
+  for (const m of productMatchedRelated) {
+    if (seenMediaIds.has(m.id)) continue;
+    seenMediaIds.add(m.id);
+    recommendedTiles.push({ kind: 'media', media: m });
+  }
+  if (includeCategoryMatched) {
+    for (const m of categoryMatchedRelated) {
+      if (seenMediaIds.has(m.id)) continue;
+      seenMediaIds.add(m.id);
+      recommendedTiles.push({ kind: 'media', media: m });
+    }
+  }
+  if (includeBrandMatched) {
+    for (const m of brandMatches) {
+      if (seenMediaIds.has(m.id)) continue;
+      seenMediaIds.add(m.id);
+      recommendedTiles.push({ kind: 'media', media: m });
+    }
+  }
+  // Catalog alts fold in at the end as informational tiles — they
+  // auto-fan-out as product_image seeds whenever their parent product
+  // is in scope (operator-picked or media-derived). Drop the hero
+  // tiles here (the hero is already pickable via the main ribbon's
+  // product tile).
+  for (const img of catalogImagery) {
+    if (img.role === 'hero') continue;
+    recommendedTiles.push({ kind: 'catalog_alt', img });
+  }
+
+  return (
+    <>
+      <SectionHeader
+        title="Media"
+        subtitle="Catalog imagery and social posts mixed. Pick any tile — the cartesian routes catalog tiles as product_image variants and social tiles as ugc variants."
+      />
+      <UnifiedRibbon
+        tiles={mainTiles}
+        loading={loadingP || loadingM}
+        emptyHint="No products or media yet — connect a catalog or Instagram to get started."
+        productSet={productSet}
+        mediaSet={mediaSet}
+        excludedSet={excludedSet}
+        toggleProduct={toggleProduct}
+        toggleMedia={toggleMedia}
+        toggleExclude={toggleExclude}
+      />
+
+      {anyPicks && (
+        <>
+          <SectionHeader
+            title={`Recommended for your selection (${recommendedTiles.length})`}
+            subtitle="Related products, matched social posts, and catalog alts that pair with what you've picked. Catalog alts fan out automatically; click any other tile to add it."
+            tone="muted"
+          />
+          {recommendedTiles.length === 0 ? (
+            <Box h="100px" bg="gray.50" borderRadius="md" display="flex" alignItems="center" justifyContent="center">
+              <Text fontSize="xs" color="brand.muted">
+                No related items yet — try the tier expand buttons below to widen the recommendation pool.
+              </Text>
+            </Box>
+          ) : (
+            <UnifiedRibbon
+              tiles={recommendedTiles}
+              loading={false}
+              productSet={productSet}
+              mediaSet={mediaSet}
+              excludedSet={excludedSet}
+              toggleProduct={toggleProduct}
+              toggleMedia={toggleMedia}
+              toggleExclude={toggleExclude}
+            />
+          )}
+
+          <HStack spacing={3} pt={1} wrap="wrap">
+            <Button
+              size="xs"
+              variant={includeCategoryMatched ? 'softBrand' : 'outline'}
+              onClick={() => onTierToggle('includeCategoryMatched', !includeCategoryMatched)}
+              isDisabled={categoryMatchedRelated.length === 0 && !includeCategoryMatched}
+            >
+              {includeCategoryMatched ? '✓ ' : '+ '}
+              Include category-matched ({categoryMatchedRelated.length})
+            </Button>
+            <Button
+              size="xs"
+              variant={includeBrandMatched ? 'softBrand' : 'outline'}
+              onClick={() => onTierToggle('includeBrandMatched', !includeBrandMatched)}
+              isDisabled={brandMatches.length === 0 && !includeBrandMatched}
+            >
+              {includeBrandMatched ? '✓ ' : '+ '}
+              Include brand-matched ({brandMatches.length})
+            </Button>
+          </HStack>
+        </>
+      )}
+    </>
+  );
+}
+
+type UnifiedRibbonProps = {
+  tiles:         UnifiedTile[];
+  loading:       boolean;
+  emptyHint?:    string;
+  productSet:    Set<string>;
+  mediaSet:      Set<string>;
+  excludedSet:   Set<string>;
+  toggleProduct: (id: string) => void;
+  toggleMedia:   (id: string) => void;
+  toggleExclude: (productId: string | null, mediaId: string) => void;
+};
+
+function UnifiedRibbon(props: UnifiedRibbonProps) {
+  const { tiles, loading, emptyHint, productSet, mediaSet, excludedSet, toggleProduct, toggleMedia, toggleExclude } = props;
+
+  if (loading && tiles.length === 0) {
+    return (
+      <Box h="120px" bg="gray.50" borderRadius="md" display="flex" alignItems="center" justifyContent="center">
+        <Text fontSize="xs" color="brand.muted">Loading…</Text>
+      </Box>
+    );
+  }
+  if (tiles.length === 0) {
+    return (
+      <Box h="120px" bg="gray.50" borderRadius="md" display="flex" alignItems="center" justifyContent="center">
+        <Text fontSize="xs" color="brand.muted">{emptyHint || 'Nothing here yet.'}</Text>
+      </Box>
+    );
+  }
+  return (
+    <Box
+      overflowX="auto"
+      overflowY="hidden"
+      pb={2}
+      sx={{
+        '&::-webkit-scrollbar':       { height: '8px' },
+        '&::-webkit-scrollbar-thumb': { background: 'rgba(0,0,0,0.18)', borderRadius: '4px' },
+        '&::-webkit-scrollbar-track': { background: 'transparent' }
+      }}
+    >
+      <HStack spacing={3} align="stretch" minW="min-content">
+        {tiles.map((t, idx) => {
+          if (t.kind === 'product') {
+            const p = t.product;
+            const sel = productSet.has(p.id);
+            const key = pairingKey(p.id, p.seedMediaId || '');
+            const excluded = p.seedMediaId ? excludedSet.has(key) : false;
+            return (
+              <Box key={`p-${p.id}-${idx}`} flexShrink={0} position="relative" opacity={excluded ? 0.4 : 1}>
+                <ProductTile product={p} selected={sel} onClick={() => toggleProduct(p.id)} />
+                {p.seedMediaId && (
+                  <Box
+                    as="button"
+                    onClick={(e: MouseEvent) => { e.stopPropagation(); toggleExclude(p.id, p.seedMediaId || ''); }}
+                    position="absolute"
+                    top="4px"
+                    right="4px"
+                    w="18px" h="18px" borderRadius="full"
+                    bg="rgba(0,0,0,0.55)" color="white"
+                    fontSize="11px" fontWeight="800"
+                    display="flex" alignItems="center" justifyContent="center"
+                    title={excluded ? 'Re-include this pairing' : 'Exclude this pairing'}
+                  >
+                    {excluded ? '+' : '×'}
+                  </Box>
+                )}
+              </Box>
+            );
+          }
+          if (t.kind === 'media') {
+            const m = t.media;
+            const sel = mediaSet.has(m.id);
+            const key = pairingKey(m.seedProductId || null, m.id);
+            const excluded = (m.seedProductId !== undefined) ? excludedSet.has(key) : false;
+            return (
+              <Box key={`m-${m.id}-${idx}`} flexShrink={0} position="relative" opacity={excluded ? 0.4 : 1}>
+                <MediaTile media={m} selected={sel} onClick={() => toggleMedia(m.id)} />
+                {m.seedProductId !== undefined && (
+                  <Box
+                    as="button"
+                    onClick={(e: MouseEvent) => { e.stopPropagation(); toggleExclude(m.seedProductId || null, m.id); }}
+                    position="absolute"
+                    top="4px"
+                    right="4px"
+                    w="18px" h="18px" borderRadius="full"
+                    bg="rgba(0,0,0,0.55)" color="white"
+                    fontSize="11px" fontWeight="800"
+                    display="flex" alignItems="center" justifyContent="center"
+                    title={excluded ? 'Re-include this pairing' : 'Exclude this pairing'}
+                  >
+                    {excluded ? '+' : '×'}
+                  </Box>
+                )}
+              </Box>
+            );
+          }
+          // catalog_alt — informational, no toggle
+          const img = t.img;
+          return (
+            <Box key={`alt-${img.productId}-${img.altIndex || 0}-${idx}`} flexShrink={0}>
+              <Box position="relative" w="120px" h="120px" borderRadius="md" overflow="hidden" bg="gray.100" borderWidth="2px" borderColor="brand.border">
+                <img
+                  src={img.imageUrl}
+                  alt={`${img.productTitle || 'product'} alt ${img.altIndex || ''}`}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  loading="lazy"
+                />
+                <Badge
+                  position="absolute" top="4px" left="4px"
+                  fontSize="9px" colorScheme="purple" variant="solid"
+                >
+                  ALT {img.altIndex}
+                </Badge>
+                <Box
+                  position="absolute" bottom="0" left="0" right="0"
+                  bg="blackAlpha.700" color="white"
+                  px={1.5} py={1}
+                  fontSize="9px" fontWeight="700"
+                >
+                  AUTO
+                </Box>
+              </Box>
+            </Box>
+          );
+        })}
+      </HStack>
+    </Box>
   );
 }

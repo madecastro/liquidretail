@@ -223,11 +223,34 @@ export function Step2Picker({ value, onChange }: Props) {
     return () => { cancelled = true; };
   }, [value.mediaIds, value.productIds]);
 
+  // Kind detectors + effective seed-product set. Declared here so the
+  // relatedMedia useEffect below can fetch off the union (explicit
+  // picks ∪ media-derived for brand-kind) rather than just
+  // value.productIds.
+  const isProductKind = value.campaignKind === 'product';
+  const isBrandKind   = value.campaignKind === 'brand';
+  const useExpansionUI = isProductKind || isBrandKind;
+  const mediaDerivedProductIds = useMemo(() => {
+    if (!isBrandKind) return [] as string[];
+    return relatedProducts
+      .filter(p => p.matchTier === 'product_match')
+      .map(p => p.id);
+  }, [isBrandKind, relatedProducts]);
+  const expansionSeedProductIds = useMemo(() => {
+    if (!isBrandKind) return value.productIds;
+    return Array.from(new Set([...value.productIds, ...mediaDerivedProductIds]));
+  }, [isBrandKind, value.productIds, mediaDerivedProductIds]);
+
   useEffect(() => {
     let cancelled = false;
-    if (!value.productIds.length) { setRelatedMedia([]); return; }
+    // Fetch on the effective seed-product set so the brand-kind
+    // media-seed branch picks up matched posts for media-derived
+    // products (not just explicit picks). Product-kind / other kinds
+    // fall back to value.productIds via expansionSeedProductIds's
+    // own derivation.
+    if (!expansionSeedProductIds.length) { setRelatedMedia([]); return; }
     Promise.all(
-      value.productIds.slice(0, 5).map(seedId =>
+      expansionSeedProductIds.slice(0, 5).map(seedId =>
         apiJson<{ matches: { mediaId: string; matchTier: MatchTier | null; outcomeReasoning: string | null; winner: string | null; matchSource: string | null; catalogCombinedScore: number | null; media: MediaRow }[] }>(`/api/catalog/${seedId}/matches?adEligible=1`)
           .then(r => (r.matches || []).map(x => ({
             ...x.media,
@@ -259,7 +282,7 @@ export function Step2Picker({ value, onChange }: Props) {
       setRelatedMedia(flat.slice(0, 24));
     });
     return () => { cancelled = true; };
-  }, [value.productIds, value.mediaIds]);
+  }, [expansionSeedProductIds, value.mediaIds]);
 
   // Promotional context — when the active campaign is promotional,
   // surface the operator-supplied offer details as a banner above the
@@ -346,11 +369,10 @@ export function Step2Picker({ value, onChange }: Props) {
     return () => { cancelled = true; };
   }, [brandId]);
 
-  // Catalog imagery for picked products. Informational rail on the
-  // product-kind view — shows hero + alts that will fan out as
-  // product_image seeds in the cartesian. Operator doesn't pick from
-  // these (every catalog Media seeds automatically); the rail just
-  // makes the auto-fanout visible.
+  // Catalog imagery for the effective seed products. Informational
+  // rail — shows hero + alts that will fan out as product_image seeds
+  // in the cartesian. Operator doesn't pick from these (every catalog
+  // Media seeds automatically); the rail just makes the fanout visible.
   type CatalogImageRow = {
     productId:  string;
     productTitle: string | null;
@@ -361,9 +383,9 @@ export function Step2Picker({ value, onChange }: Props) {
   const [catalogImagery, setCatalogImagery] = useState<CatalogImageRow[]>([]);
   useEffect(() => {
     let cancelled = false;
-    if (!value.productIds.length) { setCatalogImagery([]); return; }
+    if (!expansionSeedProductIds.length) { setCatalogImagery([]); return; }
     Promise.all(
-      value.productIds.slice(0, 5).map(pid =>
+      expansionSeedProductIds.slice(0, 5).map(pid =>
         apiJson<{ product: { id: string; title: string | null; imageUrl: string | null; additionalImages: string[] } }>(`/api/catalog/${pid}`)
           .then(r => {
             const out: CatalogImageRow[] = [];
@@ -383,20 +405,13 @@ export function Step2Picker({ value, onChange }: Props) {
       setCatalogImagery(lists.flat());
     });
     return () => { cancelled = true; };
-  }, [value.productIds]);
+  }, [expansionSeedProductIds]);
 
   const productSet = useMemo(() => new Set(value.productIds), [value.productIds]);
   const mediaSet   = useMemo(() => new Set(value.mediaIds),   [value.mediaIds]);
   const excludedSet = useMemo(() => new Set(value.excludedPairings), [value.excludedPairings]);
 
-  // Product-kind detector — when true, Step 2 collapses to a product-
-  // first flow: only the Products ribbon + (after pick) catalog imagery,
-  // product-matched posts, and opt-in expand buttons for the looser
-  // category/brand tiers. Brand and promotional kinds keep the full
-  // browse-everything UI.
-  const isProductKind = value.campaignKind === 'product';
-
-  // Tier-grouped related media for the product-kind view. Filters the
+  // Tier-grouped related media for the expansion view. Filters the
   // single relatedMedia list by matchTier so each block can be shown
   // independently behind its expand button.
   const productMatchedRelated  = useMemo(() => relatedMedia.filter(m => m.matchTier === 'product_match'),    [relatedMedia]);
@@ -538,15 +553,19 @@ export function Step2Picker({ value, onChange }: Props) {
           />
         )}
 
-        {/* Catalog imagery rail — product-kind only. Informational:
-            shows the hero + alts that will fan out as product_image
-            seeds in the cartesian. No per-tile toggle; every catalog
-            Media seeds automatically. */}
-        {isProductKind && catalogImagery.length > 0 && (
+        {/* Catalog imagery rail — product-kind and brand-kind.
+            Informational: shows the hero + alts that will fan out as
+            product_image seeds in the cartesian. No per-tile toggle;
+            every catalog Media seeds automatically. Driven by the
+            effective seed-product set (explicit picks ∪ media-derived
+            for brand-kind). */}
+        {useExpansionUI && catalogImagery.length > 0 && (
           <Box>
             <SectionHeader
-              title={`Catalog imagery for selected product${value.productIds.length === 1 ? '' : 's'} (${catalogImagery.length})`}
-              subtitle="Hero and alt images fan out as product_image seeds automatically — these inform the cartesian."
+              title={`Catalog imagery for selected product${expansionSeedProductIds.length === 1 ? '' : 's'} (${catalogImagery.length})`}
+              subtitle={isBrandKind && mediaDerivedProductIds.length > 0 && value.productIds.length === 0
+                ? 'Hero and alt images for products identified in your selected media — these fan out as product_image seeds automatically.'
+                : 'Hero and alt images fan out as product_image seeds automatically — these inform the cartesian.'}
               tone="muted"
             />
             <Wrap spacing={3} mt={2}>
@@ -577,9 +596,8 @@ export function Step2Picker({ value, onChange }: Props) {
           </Box>
         )}
 
-        {/* Media ribbon — non-product-kind only. Product-kind hides the
-            standalone browse-everything media ribbon; matched posts
-            surface via the "Posts matched to this product" block below. */}
+        {/* Media ribbon — hidden under product-kind only. Brand and
+            other kinds keep the browse-everything media ribbon. */}
         {!isProductKind && (
           <>
             <SectionHeader title="Media" subtitle="Click to feature creator content in ads" />
@@ -597,11 +615,10 @@ export function Step2Picker({ value, onChange }: Props) {
           </>
         )}
 
-        {/* Related media — product-kind splits this into tier-gated
-            blocks: product_match always shown, category/brand behind
-            expand buttons. Non-product-kind keeps the full tier-grouped
-            view (browse everything). */}
-        {!isProductKind && relatedMedia.length > 0 && (
+        {/* Related media — non-expansion kinds keep the full tier-
+            grouped view (browse everything). Product/brand kinds split
+            into tier-gated blocks below. */}
+        {!useExpansionUI && relatedMedia.length > 0 && (
           <RelatedTierBlocks
             heading="Posts that will pair with your selected products"
             tiers={groupByTier(relatedMedia)}
@@ -625,7 +642,7 @@ export function Step2Picker({ value, onChange }: Props) {
           />
         )}
 
-        {isProductKind && value.productIds.length > 0 && (
+        {useExpansionUI && expansionSeedProductIds.length > 0 && (
           <>
             {/* Tier 1 — product_match: always shown when a product is
                 picked (this is the strict default tier for product-kind). */}
@@ -704,10 +721,10 @@ export function Step2Picker({ value, onChange }: Props) {
           </>
         )}
 
-        {/* Brand-only posts ribbon — non-product-kind shows always.
-            Product-kind shows only when the operator has opted in via
-            the "Include brand-matched" expand button above. */}
-        {(!isProductKind || value.includeBrandMatched) && brandMatches.length > 0 && (
+        {/* Brand-only posts ribbon — non-expansion kinds (promotional,
+            unset) show this always. Product/brand kinds gate it on
+            the "Include brand-matched" expand button. */}
+        {(!useExpansionUI || value.includeBrandMatched) && brandMatches.length > 0 && (
           <Box>
             <SectionHeader
               title="Brand-only posts"

@@ -2861,4 +2861,17 @@
 // Re-expose the entry point so host pages can call it from their own flow
 // (detect: after detection completes; ads: after a media is picked).
 window.renderTemplatePreview = renderTemplatePreview;
+
+// Public entry point for the AI canvas spec preview page. Sets the
+// minimum TP_STATE the renderer needs (input + canvas + resolved
+// style bindings), then draws onto the supplied stage element.
+// Used by ai-spec-preview.html — no template/registry round-trip.
+window.tpRenderAiSpec = function (stage, input, canvasSpec, resolvedBindings) {
+  TP_STATE.lastInput          = input || null;
+  TP_STATE.lastCanvas         = canvasSpec || null;
+  TP_STATE.lastStyleBindings  = resolvedBindings || {};
+  TP_STATE.lastMediaId        = (input && input.media_id) || null;
+  if (!stage || !canvasSpec) return;
+  drawTpCanvas(stage, input || {}, canvasSpec);
+};
 })();

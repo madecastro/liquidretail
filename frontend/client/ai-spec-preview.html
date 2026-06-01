@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Canvas Spec Preview</title>
+  <script src="auth.js"></script>
+  <link rel="preconnect" href="https://res.cloudinary.com" />
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: #0a0a0a;
+      color: #f5f5f5;
+      min-height: 100vh;
+    }
+    header {
+      background: #111;
+      padding: 14px 22px;
+      border-bottom: 1px solid #1f1f1f;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    header h1 {
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin: 0;
+      color: #888;
+      font-weight: 700;
+    }
+    .meta-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: #1c1c1c;
+      border: 1px solid #2a2a2a;
+      font-size: 11px;
+      color: #cfcfcf;
+    }
+    .meta-chip strong { color: #fafafa; font-weight: 700; }
+    main {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 24px;
+      display: grid;
+      grid-template-columns: minmax(320px, 1fr) minmax(420px, 1.4fr);
+      gap: 24px;
+      align-items: start;
+    }
+    @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
+    .panel {
+      background: #131313;
+      border: 1px solid #1f1f1f;
+      border-radius: 10px;
+      padding: 18px;
+    }
+    .panel h2 {
+      margin: 0 0 12px 0;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #888;
+      font-weight: 700;
+    }
+    .stage-wrap {
+      background: #fff;
+      border-radius: 6px;
+      padding: 0;
+      overflow: hidden;
+    }
+    .tp-stage {
+      position: relative;
+      width: 100%;
+      max-width: 600px;
+      margin: 0 auto;
+      display: block;
+    }
+    pre.json {
+      background: #0a0a0a;
+      border: 1px solid #222;
+      border-radius: 6px;
+      padding: 10px 12px;
+      color: #d6d6d6;
+      max-height: 360px;
+      overflow: auto;
+      font-size: 11px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .meta-row + .meta-row { margin-top: 6px; }
+    .warnings {
+      background: rgba(255, 184, 0, 0.08);
+      border: 1px solid rgba(255, 184, 0, 0.25);
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-size: 12px;
+    }
+    .warnings strong { color: #ffcc55; }
+    .warnings ul { margin: 6px 0 0 16px; padding: 0; color: #f0d695; }
+    .error {
+      background: rgba(220, 38, 38, 0.12);
+      border: 1px solid rgba(220, 38, 38, 0.4);
+      color: #fca5a5;
+      padding: 14px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+    }
+    .helper {
+      font-size: 11px;
+      color: #777;
+      margin-top: 6px;
+    }
+    a, a:visited { color: #8aa6ff; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>AI Canvas Spec Preview</h1>
+    <span id="metaTemplate" class="meta-chip"></span>
+    <span id="metaStyle"    class="meta-chip"></span>
+    <span id="metaRatio"    class="meta-chip"></span>
+    <span id="metaCreated"  class="meta-chip"></span>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h2>Render</h2>
+      <div class="stage-wrap"><div id="tpStage" class="tp-stage"></div></div>
+      <p class="helper">Drawn via the same templatePreview.js renderer the hand-authored templates use. Stage scales to the canvas spec's reported aspect ratio.</p>
+      <div id="warningsBlock"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Rationale</h2>
+      <p id="rationale" class="helper" style="color:#cfcfcf;font-size:12px;line-height:1.5;"></p>
+
+      <h2 style="margin-top:18px;">Elements</h2>
+      <div class="meta-row"><strong>Used:</strong> <span id="elementsUsed"></span></div>
+      <div class="meta-row"><strong>Skipped:</strong> <span id="elementsSkipped"></span></div>
+
+      <h2 style="margin-top:18px;">Canvas Spec (JSON)</h2>
+      <pre id="specJson" class="json"></pre>
+
+      <h2 style="margin-top:18px;">Resolved Style Bindings</h2>
+      <pre id="bindingsJson" class="json"></pre>
+    </section>
+  </main>
+
+  <script>
+    // auth.js sets window.fetch to auto-inject the Bearer token + brand/advertiser
+    // headers, so plain fetch works here.
+    window.state = window.state || {};
+    window.escapeHtml = function (s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    };
+
+    async function boot() {
+      const params = new URLSearchParams(window.location.search);
+      const id = params.get('id');
+      if (!id) {
+        document.querySelector('main').innerHTML = '<div class="error">Missing ?id=&lt;artifactId&gt; in URL.</div>';
+        return;
+      }
+
+      let data;
+      try {
+        const res = await fetch('/api/ai-layouts/spec/by-artifact/' + encodeURIComponent(id));
+        const text = await res.text();
+        try { data = text ? JSON.parse(text) : null; }
+        catch (e) { throw new Error('Non-JSON response (HTTP ' + res.status + '): ' + text.slice(0, 200)); }
+        if (!res.ok) throw new Error((data && data.error) || 'HTTP ' + res.status);
+      } catch (err) {
+        document.querySelector('main').innerHTML = '<div class="error">Failed to load artifact: ' + window.escapeHtml(err.message) + '</div>';
+        return;
+      }
+
+      // Meta chips
+      const m = (id, val) => document.getElementById(id).innerHTML = val ? '<strong>' + window.escapeHtml(String(val)) + '</strong>' : '';
+      document.getElementById('metaTemplate').innerHTML = 'template <strong>' + window.escapeHtml(data.template || '') + '</strong>';
+      document.getElementById('metaStyle').innerHTML    = 'style <strong>' + window.escapeHtml(data.creativeStyle || '') + '</strong>';
+      document.getElementById('metaRatio').innerHTML    = 'ratio <strong>' + window.escapeHtml(data.aspectRatio || '') + '</strong>';
+      document.getElementById('metaCreated').innerHTML  = data.createdAt ? 'generated <strong>' + new Date(data.createdAt).toLocaleString() + '</strong>' : '';
+
+      // Rationale + elements
+      document.getElementById('rationale').textContent = data.rationale || '(no rationale)';
+      document.getElementById('elementsUsed').textContent    = (data.elementsUsed || []).join(', ') || '—';
+      document.getElementById('elementsSkipped').textContent = (data.elementsSkipped || []).join(', ') || '—';
+
+      // JSON blocks
+      document.getElementById('specJson').textContent     = JSON.stringify(data.spec, null, 2);
+      document.getElementById('bindingsJson').textContent = JSON.stringify(data.resolvedBindings || {}, null, 2);
+
+      // Warnings
+      if ((data.validationWarnings || []).length) {
+        const block = document.getElementById('warningsBlock');
+        block.innerHTML = '<div class="warnings"><strong>Validator warnings (' + data.validationWarnings.length + ')</strong><ul>' +
+          data.validationWarnings.map(w => '<li>' + window.escapeHtml(w) + '</li>').join('') +
+          '</ul></div>';
+      }
+
+      // Render
+      const stage = document.getElementById('tpStage');
+      if (typeof window.tpRenderAiSpec === 'function') {
+        window.tpRenderAiSpec(stage, data.input || {}, data.spec, data.resolvedBindings || {});
+      } else {
+        stage.innerHTML = '<div class="error" style="margin:10px;">templatePreview.js did not expose tpRenderAiSpec. Hard refresh.</div>';
+      }
+    }
+
+    // Wait for templatePreview.js to register the global before we boot.
+    function whenReady(fn, attempts) {
+      if (typeof window.tpRenderAiSpec === 'function') { fn(); return; }
+      if (attempts > 50) { fn(); return; }   // give up — boot() will surface the error
+      setTimeout(() => whenReady(fn, attempts + 1), 50);
+    }
+    document.addEventListener('DOMContentLoaded', () => whenReady(boot, 0));
+  </script>
+
+  <link rel="stylesheet" href="ads.html" disabled />
+  <script src="templatePreview.js"></script>
+</body>
+</html>

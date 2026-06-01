@@ -357,6 +357,25 @@ export function Step2Picker({ value, onChange }: Props) {
     return () => { cancelled = true; };
   }, [value.campaignId]);
 
+  // Lifestyle-eligible media IDs for brand-kind only. The /api/brand/:id/
+  // lifestyle-eligible-media-ids endpoint returns the Set of brand
+  // Media whose shotType is in {lifestyle, on_model, unknown} OR is
+  // unset/null (the wider "brand-campaign-appropriate" net). Used to
+  // filter alt + UGC tiles in the brand-kind unified ribbon — heroes
+  // stay visible regardless (they're the entry point to product
+  // selection; if a product has only a studio hero, the operator can
+  // still pick the product, the cartesian just won't have lifestyle
+  // material for it).
+  const [lifestyleEligibleIds, setLifestyleEligibleIds] = useState<Set<string> | null>(null);
+  useEffect(() => {
+    if (!brandId || value.campaignKind !== 'brand') { setLifestyleEligibleIds(null); return; }
+    let cancelled = false;
+    apiJson<{ mediaIds: string[] }>(`/api/brand/${encodeURIComponent(brandId)}/lifestyle-eligible-media-ids`)
+      .then(r => { if (!cancelled) setLifestyleEligibleIds(new Set(r.mediaIds || [])); })
+      .catch(() => { if (!cancelled) setLifestyleEligibleIds(new Set()); });
+    return () => { cancelled = true; };
+  }, [brandId, value.campaignKind]);
+
   // Brand-wide brand_match posts. Always fetched (independent of which
   // products/media are picked) — these are the seeds that ride along
   // for any ad-generate run regardless of product selection. Operator
@@ -583,6 +602,7 @@ export function Step2Picker({ value, onChange }: Props) {
             includeBrandMatched={value.includeBrandMatched}
             onTierToggle={(field, next) => onChange({ [field]: next } as Partial<WizardSelections>)}
             anyPicks={value.productIds.length + value.mediaIds.length > 0}
+            lifestyleEligibleIds={lifestyleEligibleIds}
           />
         ) : isProductKind ? (
           // ── Product-kind: hero ribbon + unified Media Related section ──
@@ -1301,6 +1321,12 @@ type BrandUnifiedViewProps = {
   includeBrandMatched:    boolean;
   onTierToggle:           (field: 'includeCategoryMatched' | 'includeBrandMatched', next: boolean) => void;
   anyPicks:               boolean;
+  // Set of Media IDs eligible for brand campaigns (shotType ∈
+  // {lifestyle, on_model, unknown} or unset). null while the fetch
+  // is in flight — treat as "include everything" to avoid flashing
+  // an empty ribbon on mount. Applied to alts + UGC; heroes pass
+  // through unfiltered.
+  lifestyleEligibleIds:   Set<string> | null;
 };
 
 function BrandUnifiedView(props: BrandUnifiedViewProps) {
@@ -1308,8 +1334,24 @@ function BrandUnifiedView(props: BrandUnifiedViewProps) {
     products, media, productSet, mediaSet, excludedSet,
     toggleProduct, toggleMedia, toggleExclude,
     relatedProducts, productMatchedRelated, categoryMatchedRelated, brandMatches, catalogImagery,
-    loadingP, loadingM, includeCategoryMatched, includeBrandMatched, onTierToggle, anyPicks
+    loadingP, loadingM, includeCategoryMatched, includeBrandMatched, onTierToggle, anyPicks,
+    lifestyleEligibleIds
   } = props;
+
+  // Lifestyle filter helpers. While the eligible-ID set is loading
+  // (null) we let everything through to avoid an empty-ribbon flash;
+  // once loaded, alts + UGC must be in the set, but legacy alts with
+  // no Media wrapper (imageMediaId === null) get included as well so
+  // pre-classifier catalog rows aren't silently hidden.
+  const altLifestyleOk = (altMediaId: string | null) => {
+    if (!lifestyleEligibleIds) return true;
+    if (!altMediaId) return true;
+    return lifestyleEligibleIds.has(altMediaId);
+  };
+  const mediaLifestyleOk = (mediaId: string) => {
+    if (!lifestyleEligibleIds) return true;
+    return lifestyleEligibleIds.has(mediaId);
+  };
 
   // Main ribbon: every available tile across the brand —
   //   product hero      → ProductTile (toggles value.productIds)
@@ -1327,6 +1369,8 @@ function BrandUnifiedView(props: BrandUnifiedViewProps) {
     const altMediaIds = p.additionalImageMediaIds || [];
     for (let i = 0; i < altUrls.length; i++) {
       if (!altUrls[i]) continue;
+      const altMediaId = altMediaIds[i] || null;
+      if (!altLifestyleOk(altMediaId)) continue;
       mainTiles.push({
         kind: 'catalog_alt',
         img: {
@@ -1335,7 +1379,7 @@ function BrandUnifiedView(props: BrandUnifiedViewProps) {
           productSource:       p.source || null,
           productLastSyncedAt: p.lastSyncedAt || null,
           imageUrl:            altUrls[i],
-          imageMediaId:        altMediaIds[i] || null,
+          imageMediaId:        altMediaId,
           role:                'alt',
           altIndex:            i + 1
         }
@@ -1343,6 +1387,7 @@ function BrandUnifiedView(props: BrandUnifiedViewProps) {
     }
   }
   for (const m of media) {
+    if (!mediaLifestyleOk(m.id)) continue;
     mainTiles.push({ kind: 'media', media: m });
   }
 
@@ -1362,12 +1407,14 @@ function BrandUnifiedView(props: BrandUnifiedViewProps) {
   }
   for (const m of productMatchedRelated) {
     if (seenMediaIds.has(m.id)) continue;
+    if (!mediaLifestyleOk(m.id)) continue;
     seenMediaIds.add(m.id);
     recommendedTiles.push({ kind: 'media', media: m });
   }
   if (includeCategoryMatched) {
     for (const m of categoryMatchedRelated) {
       if (seenMediaIds.has(m.id)) continue;
+      if (!mediaLifestyleOk(m.id)) continue;
       seenMediaIds.add(m.id);
       recommendedTiles.push({ kind: 'media', media: m });
     }
@@ -1375,6 +1422,7 @@ function BrandUnifiedView(props: BrandUnifiedViewProps) {
   if (includeBrandMatched) {
     for (const m of brandMatches) {
       if (seenMediaIds.has(m.id)) continue;
+      if (!mediaLifestyleOk(m.id)) continue;
       seenMediaIds.add(m.id);
       recommendedTiles.push({ kind: 'media', media: m });
     }

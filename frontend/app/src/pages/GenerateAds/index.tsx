@@ -107,13 +107,17 @@ export function GenerateAdsWizard() {
     includeBrandMatched:    false
   });
 
-  // Keep ?campaignId / ?mediaIds / ?productIds clean once we've
-  // absorbed them into state — saves stale params leaking into the
-  // next step's URL on back/forward.
+  // Clean up one-shot deep-link params (mediaIds / productIds) once
+  // we've absorbed them into state — those were carried in from the
+  // Media Library / Catalog Browser "Generate Ads" buttons and shouldn't
+  // re-trigger on back/forward. campaignId DOES stay in the URL —
+  // it's the wizard's session anchor, so refreshing on any step keeps
+  // the campaign context (and lets Step 2 hydrate the campaignKind
+  // before rendering the picker, instead of falling through to the
+  // legacy "other kinds" layout on a kindless re-init).
   useEffect(() => {
-    if (initialCampaignId || initialMediaIds.length || initialProductIds.length) {
+    if (initialMediaIds.length || initialProductIds.length) {
       const next = new URLSearchParams(params);
-      next.delete('campaignId');
       next.delete('mediaIds');
       next.delete('productIds');
       next.set('step', step);
@@ -125,6 +129,10 @@ export function GenerateAdsWizard() {
   const goTo = (k: WizardStepKey) => {
     const next = new URLSearchParams(params);
     next.set('step', k);
+    // Keep campaignId in the URL on every step navigation so a refresh
+    // on Step 2/3/4 re-hydrates the wizard with the right campaign
+    // context (and the right Step 2 layout via campaignKind).
+    if (selections.campaignId) next.set('campaignId', selections.campaignId);
     setParams(next, { replace: false });
   };
   const back = () => {

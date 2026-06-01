@@ -21,8 +21,9 @@ type TemplateOption = {
   emphasis:     string;
   description:  string;
   ratios:       string[];
-  schematic:    'spotlight' | 'split' | 'testimonial-overlay' | 'product-overlay';
+  schematic:    'spotlight' | 'split' | 'testimonial-overlay' | 'product-overlay' | 'ai';
   disabled?:    boolean;
+  isAi?:        boolean;
 };
 
 // V1 ships 1:1, 9:16, 16:9 — other ratios are filtered server-side.
@@ -70,6 +71,19 @@ const TEMPLATES: TemplateOption[] = [
     ratios: SHIPPING_RATIOS,
     schematic: 'product-overlay',
     disabled: true
+  },
+  // Phase 1c AI template. Backend's aiTemplateRegistry restricts to
+  // 1:1 only on the first cut — the cartesian intersects template
+  // ratios with SHIPPING_RATIOS so picking this still produces 1:1
+  // ads regardless of what other templates the operator picks.
+  {
+    id: 'ai_brand_led',
+    label: 'AI: Brand-led',
+    emphasis: 'AI-generated',
+    description: 'LLM-designed layout. Brand colors, logo, and hero media dominate; product card + CTA support.',
+    ratios: ['1:1'],
+    schematic: 'ai',
+    isAi: true
   }
 ];
 
@@ -227,6 +241,7 @@ function Schematic({ kind }: { kind: TemplateOption['schematic'] }) {
         {kind === 'split' && <SplitSchematic p={PALETTE} />}
         {kind === 'testimonial-overlay' && <TestimonialOverlaySchematic p={PALETTE} />}
         {kind === 'product-overlay' && <ProductOverlaySchematic p={PALETTE} />}
+        {kind === 'ai' && <AiSchematic p={PALETTE} />}
       </svg>
     </Box>
   );
@@ -236,6 +251,39 @@ type Pal = {
   bg: string; media: string; panel: string; panelEdge: string;
   text: string; cta: string; overlay: string; overlayEdge: string;
 };
+
+// AI-generated layout — no fixed zone arrangement. Schematic shows a
+// "?" inside a panel with a sparkle motif to convey "designed at
+// render time" rather than predicting a specific composition.
+function AiSchematic({ p }: { p: Pal }) {
+  return (
+    <g>
+      {/* dashed-border canvas frame */}
+      <rect x="4" y="10" width="92" height="80" rx="3"
+        fill={p.bg}
+        stroke={p.cta}
+        strokeWidth="0.8"
+        strokeDasharray="2 1.5"
+      />
+      {/* gradient hero-suggestion stripe */}
+      <rect x="10" y="16" width="80" height="34" rx="2" fill={p.media} opacity="0.85" />
+      {/* sparkle */}
+      <g transform="translate(50, 33)" fill={p.cta}>
+        <polygon points="0,-7 1.6,-1.6 7,0 1.6,1.6 0,7 -1.6,1.6 -7,0 -1.6,-1.6" />
+        <circle cx="13" cy="-9" r="1.4" />
+        <circle cx="-12" cy="10" r="1.2" />
+      </g>
+      {/* copy bars (sketch — actual zones come from LLM) */}
+      <rect x="10" y="56" width="60" height="3" rx="1" fill={p.text} />
+      <rect x="10" y="62" width="42" height="3" rx="1" fill={p.text} opacity="0.7" />
+      {/* AI label chip */}
+      <rect x="10" y="74" width="20" height="9" rx="2" fill={p.cta} />
+      <text x="20" y="80.2" fontSize="5" fontWeight="800" textAnchor="middle" fill="#fff" fontFamily="-apple-system, system-ui, sans-serif">AI</text>
+      {/* cta pill */}
+      <rect x="68" y="74" width="22" height="9" rx="4.5" fill={p.cta} />
+    </g>
+  );
+}
 
 // Quote-first editorial: support media on the left, panel with quote
 // card + CTA on the right.

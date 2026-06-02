@@ -105,6 +105,43 @@
     }
     .warnings strong { color: #ffcc55; }
     .warnings ul { margin: 6px 0 0 16px; padding: 0; color: #f0d695; }
+    table.zones {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+      color: #cfcfcf;
+    }
+    table.zones th, table.zones td {
+      padding: 6px 8px;
+      border-bottom: 1px solid #1f1f1f;
+      text-align: left;
+      vertical-align: top;
+      font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    }
+    table.zones th {
+      color: #888;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-size: 10px;
+      background: #0e0e0e;
+    }
+    table.zones td.poly { color: #ffcc55; }
+    table.zones td.text-kind { color: #8aa6ff; }
+    table.zones td.media-kind { color: #88e0a0; }
+    table.zones td.panel-kind { color: #d488ff; }
+    table.zones .rect-overlap-warn { background: rgba(255, 80, 80, 0.10); }
+    button.toggle-btn {
+      background: #1c1c1c;
+      border: 1px solid #2a2a2a;
+      color: #cfcfcf;
+      font-size: 11px;
+      padding: 6px 12px;
+      border-radius: 5px;
+      cursor: pointer;
+      letter-spacing: 0.04em;
+    }
+    button.toggle-btn:hover { background: #232323; border-color: #3a3a3a; }
     .error {
       background: rgba(220, 38, 38, 0.12);
       border: 1px solid rgba(220, 38, 38, 0.4);
@@ -145,6 +182,13 @@
       <h2 style="margin-top:18px;">Elements</h2>
       <div class="meta-row"><strong>Used:</strong> <span id="elementsUsed"></span></div>
       <div class="meta-row"><strong>Skipped:</strong> <span id="elementsSkipped"></span></div>
+
+      <h2 style="margin-top:18px;display:flex;align-items:center;justify-content:space-between;">
+        Zone Breakdown
+        <button id="toggleZones" class="toggle-btn" type="button">show</button>
+      </h2>
+      <p class="helper">Per-zone view of what the LLM emitted — layer order, rect, slot, style_variant, clipPolygon. Look here when the render shows mystery shapes, overlapping text, or zones in the wrong stacking order.</p>
+      <div id="zonesBlock" style="display:none;overflow:auto;"></div>
 
       <h2 style="margin-top:18px;">Canvas Spec (JSON)</h2>
       <pre id="specJson" class="json"></pre>
@@ -201,6 +245,16 @@
       document.getElementById('specJson').textContent     = JSON.stringify(data.spec, null, 2);
       document.getElementById('bindingsJson').textContent = JSON.stringify(data.resolvedBindings || {}, null, 2);
 
+      // Per-zone debug table
+      renderZoneBreakdown(data.spec);
+      const toggleBtn = document.getElementById('toggleZones');
+      const zonesBlock = document.getElementById('zonesBlock');
+      toggleBtn.addEventListener('click', () => {
+        const showing = zonesBlock.style.display !== 'none';
+        zonesBlock.style.display = showing ? 'none' : 'block';
+        toggleBtn.textContent = showing ? 'show' : 'hide';
+      });
+
       // Warnings
       if ((data.validationWarnings || []).length) {
         const block = document.getElementById('warningsBlock');
@@ -216,6 +270,72 @@
       } else {
         stage.innerHTML = '<div class="error" style="margin:10px;">templatePreview.js did not expose tpRenderAiSpec. Hard refresh.</div>';
       }
+    }
+
+    // Build a sorted-by-layer table of zones with the fields most useful
+    // for diagnosing weird renders (overlapping text, mystery polygon
+    // shapes, wrong z-order). Flags rect overlaps inside the same layer.
+    function renderZoneBreakdown(spec) {
+      const block = document.getElementById('zonesBlock');
+      if (!spec || !Array.isArray(spec.zones) || !spec.zones.length) {
+        block.innerHTML = '<p class="helper">No zones in spec.</p>';
+        return;
+      }
+      const zones = spec.zones.slice().sort((a, b) => (a.layer || 0) - (b.layer || 0));
+      // Pairwise rect-overlap check (n is small so O(n^2) is fine).
+      const overlapIds = new Set();
+      for (let i = 0; i < zones.length; i++) {
+        for (let j = i + 1; j < zones.length; j++) {
+          if (rectsOverlap(zones[i].rect, zones[j].rect)) {
+            overlapIds.add(zones[i].id);
+            overlapIds.add(zones[j].id);
+          }
+        }
+      }
+      const fmtRect = (r) => r ? `${r.x},${r.y} ${r.w}×${r.h}` : '—';
+      const fmtSlot = (s) => Array.isArray(s) ? s.join(' / ') : (s || '—');
+      const fmtPoly = (p) => Array.isArray(p) && p.length ? `${p.length} pts` : '—';
+      const kindClass = (k) => {
+        if (['headline', 'text', 'eyebrow_rules', 'cta', 'quote_card', 'product_card', 'proof_bar', 'badge_row'].includes(k)) return 'text-kind';
+        if (k === 'media' || k === 'support_media') return 'media-kind';
+        if (k === 'panel') return 'panel-kind';
+        return '';
+      };
+      const rows = zones.map(z => {
+        const overlap = overlapIds.has(z.id) ? ' rect-overlap-warn' : '';
+        const polyClass = (Array.isArray(z.clipPolygon) && z.clipPolygon.length) ? 'poly' : '';
+        return `<tr class="${overlap}">
+          <td>${z.layer ?? '—'}</td>
+          <td><strong style="color:#fafafa;">${window.escapeHtml(z.id || '')}</strong></td>
+          <td class="${kindClass(z.kind)}">${window.escapeHtml(z.kind || '')}</td>
+          <td>${window.escapeHtml(fmtRect(z.rect))}</td>
+          <td>${window.escapeHtml(fmtSlot(z.slot))}</td>
+          <td>${window.escapeHtml(z.style_variant || '—')}</td>
+          <td>${z.max_lines ?? '—'}</td>
+          <td>${window.escapeHtml(z.fit || '—')}</td>
+          <td>${z.radius ?? '—'}</td>
+          <td class="${polyClass}">${fmtPoly(z.clipPolygon)}</td>
+        </tr>`;
+      }).join('');
+      block.innerHTML = `
+        <table class="zones">
+          <thead>
+            <tr>
+              <th>layer</th><th>id</th><th>kind</th><th>rect (x,y w×h)</th>
+              <th>slot</th><th>variant</th><th>lines</th><th>fit</th><th>r</th><th>clip</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+        ${overlapIds.size ? `<p class="helper" style="color:#ffcc55;margin-top:8px;">⚠ ${overlapIds.size} zone(s) have overlapping rects with at least one other zone (highlighted). Combined with bad layer order, this is the usual cause of "mystery shapes" or text getting covered.</p>` : ''}
+      `;
+    }
+
+    function rectsOverlap(a, b) {
+      if (!a || !b) return false;
+      const ax2 = a.x + a.w, ay2 = a.y + a.h;
+      const bx2 = b.x + b.w, by2 = b.y + b.h;
+      return !(ax2 <= b.x || bx2 <= a.x || ay2 <= b.y || by2 <= a.y);
     }
 
     // Wait for templatePreview.js to register the global before we boot.

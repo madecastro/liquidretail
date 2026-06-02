@@ -193,6 +193,10 @@
       <h2 style="margin-top:18px;">Canvas Spec (JSON)</h2>
       <pre id="specJson" class="json"></pre>
 
+      <h2 style="margin-top:18px;">Hierarchy Spec <span style="font-size:9px;color:#888;letter-spacing:0;text-transform:none;">(shadow — strategy + layout intent, no rects)</span></h2>
+      <p class="helper">Higher-level "design intent" pass — the vocabulary the LLM picks here gets formalized into enums + a constraint solver in a later slice. Renderer ignores this today.</p>
+      <pre id="hierarchyJson" class="json"></pre>
+
       <h2 style="margin-top:18px;">Resolved Style Bindings</h2>
       <pre id="bindingsJson" class="json"></pre>
     </section>
@@ -242,8 +246,11 @@
       document.getElementById('elementsSkipped').textContent = (data.elementsSkipped || []).join(', ') || '—';
 
       // JSON blocks
-      document.getElementById('specJson').textContent     = JSON.stringify(data.spec, null, 2);
-      document.getElementById('bindingsJson').textContent = JSON.stringify(data.resolvedBindings || {}, null, 2);
+      document.getElementById('specJson').textContent      = JSON.stringify(data.spec, null, 2);
+      document.getElementById('hierarchyJson').textContent = data.hierarchySpec
+        ? JSON.stringify(data.hierarchySpec, null, 2)
+        : '(not present — older spec, or generated before 2.3.0)';
+      document.getElementById('bindingsJson').textContent  = JSON.stringify(data.resolvedBindings || {}, null, 2);
 
       // Per-zone debug table
       renderZoneBreakdown(data.spec);

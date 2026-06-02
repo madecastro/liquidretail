@@ -72,15 +72,52 @@ const TEMPLATES: TemplateOption[] = [
     schematic: 'product-overlay',
     disabled: true
   },
-  // Phase 1c AI template. Backend's aiTemplateRegistry restricts to
-  // 1:1 only on the first cut — the cartesian intersects template
-  // ratios with SHIPPING_RATIOS so picking this still produces 1:1
-  // ads regardless of what other templates the operator picks.
+  // AI templates — each maps 1:1 to a creativeStyle in the backend's
+  // CREATIVE_STYLES map. Operator picks one or more; the cartesian
+  // fans across them so a 3-style pick on 4 media = 12 ads in 3
+  // creative directions instead of 12 ads in the safest default.
+  // 1:1 only on the first cut.
   {
     id: 'ai_brand_led',
     label: 'AI: Brand-led',
     emphasis: 'AI-generated',
-    description: 'LLM-designed layout. Brand colors, logo, and hero media dominate; product card + CTA support.',
+    description: 'Brand colors, logo, and hero media dominate; product card + CTA support.',
+    ratios: ['1:1'],
+    schematic: 'ai',
+    isAi: true
+  },
+  {
+    id: 'ai_ugc_led',
+    label: 'AI: UGC-led',
+    emphasis: 'AI-generated',
+    description: 'Full-bleed creator photo carries the ad; minimal brand chrome, creator attribution visible.',
+    ratios: ['1:1'],
+    schematic: 'ai',
+    isAi: true
+  },
+  {
+    id: 'ai_social_proof_led',
+    label: 'AI: Social Proof',
+    emphasis: 'AI-generated',
+    description: 'Real comments / ratings / engagement stats are the visual anchor.',
+    ratios: ['1:1'],
+    schematic: 'ai',
+    isAi: true
+  },
+  {
+    id: 'ai_editorial',
+    label: 'AI: Editorial',
+    emphasis: 'AI-generated',
+    description: 'Magazine-spread aesthetic — typography hero, image inset, generous whitespace.',
+    ratios: ['1:1'],
+    schematic: 'ai',
+    isAi: true
+  },
+  {
+    id: 'ai_promotional',
+    label: 'AI: Promotional',
+    emphasis: 'AI-generated',
+    description: 'Offer-first — discount or sale callout dominates with urgency cues.',
     ratios: ['1:1'],
     schematic: 'ai',
     isAi: true

@@ -990,6 +990,26 @@
       // uses radius up to 24px on cards, which the prior 18px cap broke.
       if (typeof zone.radius === 'number') el.style.borderRadius = `${zone.radius}px`;
 
+      // AI canvas spec — optional clipPolygon carves the visible region
+      // to a polygon AFTER rect placement. Points are in canvas coords
+      // (0..1000); CSS clip-path expects zone-rect-relative percentages.
+      // Server validator already enforces ≥3 points and in-canvas bounds;
+      // we defensively skip malformed entries.
+      if (Array.isArray(zone.clipPolygon) && zone.clipPolygon.length >= 3
+          && zone.rect && zone.rect.w > 0 && zone.rect.h > 0) {
+        const rx = zone.rect.x, ry = zone.rect.y, rw = zone.rect.w, rh = zone.rect.h;
+        const pts = zone.clipPolygon.map(p => {
+          const px = ((Number(p.x) - rx) / rw) * 100;
+          const py = ((Number(p.y) - ry) / rh) * 100;
+          return `${px.toFixed(2)}% ${py.toFixed(2)}%`;
+        }).join(', ');
+        el.style.clipPath = `polygon(${pts})`;
+        // border-radius + clip-path don't compose visually — the polygon
+        // wins, the rounded corners get sliced off. Null the radius so
+        // there's no half-applied look.
+        el.style.borderRadius = '0';
+      }
+
       el.innerHTML = resolveZoneContent(zone, input);
       stage.appendChild(el);
       zoneEls.push({ zone, el });

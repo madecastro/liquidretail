@@ -2560,10 +2560,13 @@
       }
       case 'media': {
         // Video-overlay render mode emits an empty transparent zone so
-        // Cloudinary's video composite shows through. The slot's geometry
-        // still drives the layout — siblings position relative to it —
-        // but no <img>/<video> is painted.
-        if (TP_VIDEO_OVERLAY_MODE) return '';
+        // Cloudinary's video composite shows through. ONLY the hero
+        // slot goes transparent — alt-crop slots (product.hero_media.crops.X)
+        // and catalog product/lifestyle images don't have a video twin,
+        // so they still need to paint as images even when the composite
+        // is active. (Multiple-media-zone AI specs would otherwise
+        // double-show the source video through every "empty" media zone.)
+        if (TP_VIDEO_OVERLAY_MODE && zone.slot === 'product.hero_media') return '';
         const media = tpGet(input, zone.slot);
         // Prefer video when the media object carries one (source Media
         // is a video); use the image as poster. Falls back to a plain

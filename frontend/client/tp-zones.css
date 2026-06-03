@@ -1,0 +1,953 @@
+/* Canvas / template-preview renderer CSS.
+ *
+ * Extracted from the inline <style> block in ads.html so both the
+ * production ad-generation page AND the standalone ai-spec-preview
+ * page can render zones consistently. The spec preview previously
+ * had <link rel="stylesheet" href="ads.html" disabled /> — disabled
+ * because ads.html is an HTML file, not a stylesheet — which meant
+ * every tp-zone got the browser's raw <div> defaults: no typography,
+ * no zone variants, broken comparison vs. production renders.
+ *
+ * EDIT THIS FILE — ads.html and ai-spec-preview.html both link here.
+ */
+
+/* ── Creative Template Preview ── */
+.tp-pickers { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 12px; }
+.tp-picker-group { display: flex; flex-direction: column; gap: 6px; }
+.tp-picker-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: #666; font-weight: 700; }
+.tp-picker-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.tp-chip {
+  font-size: 10px; font-weight: 600; padding: 4px 10px; border-radius: 999px;
+  background: #161616; border: 1px solid #2a2a2a; color: #888; cursor: pointer;
+  white-space: nowrap; transition: all 0.12s;
+}
+.tp-chip:hover { color: #ccc; border-color: #3a3a3a; }
+
+/* Conservation slider inline with debug chips — sized tight, shares
+   oz-slider base styles so the thumb/track look matches the overlay-
+   zones panel slider. */
+.tp-conservation-slider-wrap {
+  display: flex; align-items: center; gap: 8px;
+  min-width: 180px;
+}
+.tp-conservation-slider-wrap .oz-slider { width: 140px; }
+#tpConservationValue { min-width: 34px; text-align: right; font-size: 10px; }
+.tp-chip.active { background: #1f2937; border-color: #3b82f6; color: #93c5fd; }
+.tp-chip.disabled { opacity: 0.35; cursor: not-allowed; }
+.tp-chip.disabled:hover { color: #888; border-color: #2a2a2a; }
+
+.tp-stage-wrap { display: grid; grid-template-columns: minmax(0, 420px) 1fr; gap: 16px; }
+@media (max-width: 900px) { .tp-stage-wrap { grid-template-columns: 1fr; } }
+
+/* The stage's font-size is set dynamically in JS (≈ width/32) so the em
+   units below scale with the preview canvas. Brand colors flow through
+   CSS custom properties set per render. */
+/* Frame is the visible area: takes the available width, holds the
+   canvas aspect-ratio, hides anything outside (the scaled stage). */
+.tp-stage-frame {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  background: #0a0a0a;
+  border: 1px solid #262626;
+  border-radius: 12px;
+}
+/* Stage is rendered at FULL CANVAS PIXEL DIMENSIONS (e.g. 1000x1778)
+   and visually scaled down via CSS transform to fit the frame. This
+   gives WYSIWYG fidelity — text renders at production font sizes
+   (e.g. 45px headlines) so the preview matches what the renderer
+   would produce, not a degraded sub-pixel approximation. JS sets
+   width/height in px and the scale transform after each render. */
+.tp-stage {
+  --brand-primary:   #1f2937;
+  --brand-secondary: #0a0a0a;
+  --brand-accent:    #ef4444;
+  --brand-text-on:   #ffffff;
+  font-family: var(--brand-font, system-ui, -apple-system, 'Segoe UI', sans-serif);
+  position: absolute; top: 0; left: 0;
+  transform-origin: top left;
+  background: linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%);
+  border-radius: 12px; overflow: hidden;
+  font-size: 12px;
+}
+
+/* Render mode (Puppeteer screenshot path). The bootstrap script
+   in this file applies .render-mode to <body> when ?renderMode=1
+   is set. Hide every other UI element so the screenshot of
+   #tpStage clips cleanly with no chrome bleeding in. The frame
+   also needs to be at canvas size, no scale transform — Puppeteer
+   sets the viewport to the canvas dims and screenshots directly. */
+body.render-mode > * { display: none !important; }
+/* position: fixed pins the stage to the viewport (0,0) regardless
+   of ancestor positioning — `absolute` was anchoring to whichever
+   wrapper had position: relative, leaving the stage offset by
+   page padding so Puppeteer's screenshot clip got clamped at the
+   viewport edge and dropped the right + bottom of the canvas. */
+body.render-mode #tpStage,
+body.render-mode #tpStageFrame {
+  display: block !important;
+  position: fixed !important; top: 0 !important; left: 0 !important;
+  margin: 0; padding: 0; border: 0;
+  box-shadow: none;
+}
+body.render-mode #tpStage { transform: none !important; border-radius: 0 !important; }
+body.render-mode { margin: 0; padding: 0; }
+
+/* Video-overlay render mode: every layer up the chain must be
+   transparent so Puppeteer.screenshot({ omitBackground: true })
+   actually emits transparent pixels in unpainted areas (instead
+   of compositing against html/body white). */
+body.render-mode-video-overlay,
+body.render-mode-video-overlay #tpStageFrame,
+body.render-mode-video-overlay #tpStage,
+body.render-mode-video-overlay #templatePreviewPanel,
+html.render-mode-video-overlay {
+  background: transparent !important;
+}
+/* Belt-and-braces: every ancestor of #tpStage walked by
+   unhideStageAncestors gets visibility:visible forced on it,
+   which lets their backgrounds paint. Section-card / nav /
+   any other dark surfaces leak through wherever #tpStage is
+   transparent (e.g. the slot region in video-overlay mode).
+   Force-zero the bg on every direct child of body except
+   script/style — they're all hidden ancestors at this point
+   and shouldn't render anything to the screenshot. */
+body.render-mode-video-overlay > *:not(#templatePreviewPanel) {
+  background: transparent !important;
+  background-image: none !important;
+}
+
+/* And hide every element EXCEPT #tpStage's subtree. The standard
+   render-mode > * { display: none } rule hides direct body
+   children, but bootstrap re-enables those ancestors via
+   unhideStageAncestors() so #tpStage lays out — which also makes
+   the operator UI (template chips, debug panel, zone trace)
+   inside templatePreviewPanel visible again. With an opaque
+   stage background that didn't matter (the stage masked them),
+   but a transparent stage lets that chrome leak into the
+   screenshot. visibility:hidden doesn't cascade — children that
+   opt back in via visibility:visible show even when their
+   ancestor is visibility:hidden — so this hides everything,
+   then the stage subtree opts back in. */
+body.render-mode-video-overlay * { visibility: hidden !important; }
+body.render-mode-video-overlay #tpStage,
+body.render-mode-video-overlay #tpStage * { visibility: visible !important; }
+.tp-zone {
+  position: absolute; box-sizing: border-box; overflow: hidden;
+  font-family: inherit;
+}
+.tp-zone img,
+.tp-zone video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tp-zone.kind-media img { border-radius: inherit; }
+
+/* ── Promotional offer pill ─────────────────────────────────────
+   Renders on TOP of every canvas zone (zIndex 90 sits above the
+   overlay debug layer's zones but below modal chrome). Painted by
+   templatePreview.drawOfferPill when the canonical input carries
+   input.campaign.offer.label. Auto-scales via em — the stage's
+   em base is canvasW / 22 so a 1.3em pill scales the same way
+   headlines do across ratios.
+
+   Colors: bg = palette_vibrant (brand.accentColor in brand-variant
+   ads; the in-image vibrant pick in media-variant ads). Text uses
+   brand-text-on-accent which the renderer computes for WCAG
+   contrast against accent.
+
+   Per-kind classes (tp-offer-pill-raffle / -giveaway / -discount)
+   are hooks for future visual variants — V1 styles them identically. */
+.tp-offer-pill {
+  position: absolute;
+  top: 4%;
+  right: 4%;
+  z-index: 90;
+  background: var(--brand-accent, #FF6B35);
+  color: var(--brand-text-on-accent, #ffffff);
+  border-radius: 999px;
+  padding: 0.5em 0.95em;
+  font-family: var(--tp-style-font-family-headline, var(--brand-font, Inter, system-ui, sans-serif));
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.18);
+  max-width: 42%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15em;
+  transform: rotate(-2deg);
+  transform-origin: top right;
+}
+.tp-offer-pill-label   { font-size: 1.05em; }
+.tp-offer-pill-urgency {
+  font-size: 0.62em;
+  opacity: 0.95;
+  letter-spacing: 0.08em;
+}
+
+/* ── Comment card (social comments — distinct from quote_card
+   which renders REVIEWS). Two style variants picked at render
+   time by media type: IG for images, TikTok for videos. Both
+   respect the zone rect (position from canvas spec); these rules
+   just style the inner content.
+
+   Operators can override the style by setting style_variant on
+   the canvas spec ("ig" | "tiktok"). */
+.tp-zone.kind-comment_card {
+  padding: 0.5em 0.7em;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  color: var(--brand-text-on, #fff);
+  overflow: hidden;
+}
+.tp-comment-avatar {
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800;
+  color: #fff;
+  background: var(--brand-accent, #FF6B35);
+}
+.tp-comment-avatar-ig {
+  width: 1.9em; height: 1.9em;
+  border-radius: 9999px;
+  font-size: 0.85em;
+}
+.tp-comment-avatar-tiktok {
+  width: 2.2em; height: 2.2em;
+  border-radius: 9999px;
+  font-size: 0.9em;
+}
+
+/* IG style — row layout, avatar on the left, @handle inline with
+   text underneath, meta (heart + count) on its own line. Reads
+   like a single Instagram comment row. */
+.tp-comment-ig {
+  display: flex; align-items: flex-start; gap: 0.65em;
+  font-family: var(--tp-style-font-family-body, Inter, system-ui, sans-serif);
+  font-size: 0.95em;
+  line-height: 1.35;
+}
+.tp-comment-body-ig { min-width: 0; }
+.tp-comment-handle-ig {
+  font-weight: 700;
+  margin-right: 0.35em;
+}
+.tp-comment-text {
+  font-weight: 400;
+}
+.tp-comment-meta-ig {
+  margin-top: 0.4em;
+  font-size: 0.78em;
+  opacity: 0.75;
+  letter-spacing: 0.02em;
+}
+.tp-comment-heart {
+  color: #ff3040;
+  font-weight: 800;
+  margin-right: 0.15em;
+}
+
+/* TikTok style — card-shaped block with avatar + two-line header
+   (handle small + text below) and a vertical heart column on the
+   right. Reads like a comment block in TikTok's right-rail comment
+   sheet. */
+.tp-comment-tiktok {
+  display: flex; align-items: stretch;
+  gap: 0.75em;
+  font-family: var(--tp-style-font-family-body, Inter, system-ui, sans-serif);
+  font-size: 0.92em;
+  line-height: 1.3;
+}
+.tp-comment-tiktok-body {
+  flex: 1;
+  min-width: 0;
+  display: flex; align-items: flex-start; gap: 0.55em;
+}
+.tp-comment-text-col { min-width: 0; }
+.tp-comment-handle {
+  font-weight: 700;
+  font-size: 0.82em;
+  opacity: 0.85;
+  margin-bottom: 0.15em;
+}
+.tp-comment-heart-col {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 0.1em;
+  padding-left: 0.4em;
+  border-left: 1px solid rgba(255,255,255,0.12);
+}
+.tp-comment-heart-count {
+  font-size: 0.7em;
+  opacity: 0.85;
+  font-weight: 700;
+}
+
+/* Plain text zones sit directly on the stage background (headline,
+   eyebrow, product_meta). Body font fixed Inter via the
+   --tp-style-font-family-body var; the responsive brand font ONLY
+   applies to display_script via --tp-style-font-family-headline. */
+.tp-zone.kind-text {
+  color: var(--brand-text-on);
+  font-family: var(--tp-style-font-family-body, Inter, system-ui, sans-serif);
+  font-weight: 800;
+  font-size: 1.1em;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  padding: 0.2em 0;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.55);
+  display: flex; align-items: center;
+}
+/* Body description variant — kept for compatibility with any
+   remaining body_description text zones. Base 0.35em matches
+   quote_card so a { font: 1.6 } zone scaler resolves to the
+   same rendered px. */
+.tp-zone.kind-text.style-body_description {
+  font-weight: 500;
+  font-size: calc(0.35em * var(--tp-zone-scale, 1));
+  line-height: 1.3;
+  letter-spacing: 0;
+  padding: 0;
+  text-shadow: none;
+}
+
+/* Product card variant — image (left, square) + name + price
+   (stacked right). Used by ugc_split_screen in the slot that
+   mirrors testimonial_spotlight's quote_card position. Base
+   0.35em matches quote_card / body_description so the same
+   zone_scaler { font: 1.6 } produces 0.56em rendered. */
+.tp-zone.kind-product_card.style-with_thumbnail {
+  background: var(--tp-style-card-bg, #1A1A1A);
+  /* Same card-bg-derived contrast token as quote_card. */
+  color: var(--tp-style-card-text-color, var(--brand-text-on-primary, #ffffff));
+  font-family: var(--tp-style-font-family-body, Inter, system-ui, sans-serif);
+  border-left: 3px solid var(--tp-style-accent-border-color, var(--brand-accent, #FF6B35));
+  border-radius: 6px;
+  padding: max(0.9em, 10px) max(1em, 12px);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 0.8em;
+  /* Font scales with rect.h so the extended product_meta zones
+     (post-badge-row removal) produce proportionally bigger name +
+     price text. Same baseline + clamp as quote_card. */
+  font-size: clamp(0.35em, calc(var(--tp-zone-rect-h-px, 300) * 0.00187em * var(--tp-zone-scale, 1)), 1.4em);
+  line-height: 1.25;
+}
+.tp-zone.kind-product_card.style-with_thumbnail .tp-product-card-thumb {
+  /* Cap the thumbnail at a percentage of zone height in addition
+     to the em sizing so it can't dominate short zones (e.g. 9:16
+     product_card is 528x477 — at the 1.6x zone scaler the em-sized
+     image would consume the column and force the meta text into
+     the same visual column, looking "image low + text cutoff").
+     The min() picks whichever is smaller: a comfortable em size
+     OR 60% of the zone height. */
+  width:  min(4em, calc(var(--tp-zone-rect-h-px, 300) * 0.60px));
+  height: min(4em, calc(var(--tp-zone-rect-h-px, 300) * 0.60px));
+  object-fit: cover;
+  border-radius: 4px;
+  align-self: center;
+  background: rgba(255,255,255,0.06);
+}
+.tp-zone.kind-product_card.style-with_thumbnail .tp-product-card-thumb-placeholder {
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--brand-text-on-primary, #ffffff);
+  font-weight: 700; font-size: 1.4em;
+}
+.tp-zone.kind-product_card.style-with_thumbnail .tp-product-card-meta {
+  display: flex; flex-direction: column;
+  gap: 0.2em;
+  min-width: 0; /* allow line-clamp on .tp-product-card-name to work in grid */
+}
+.tp-zone.kind-product_card.style-with_thumbnail .tp-product-card-name {
+  font-size: 1em;
+  font-weight: 700;
+  /* Inherit the card's auto-derived contrast color so the name
+     reads against the actual card_bg (not the panel bg, which
+     the card may not sit on). */
+  color: inherit;
+  letter-spacing: 0.01em;
+}
+.tp-zone.kind-product_card.style-with_thumbnail .tp-product-card-price {
+  font-size: 0.95em;
+  font-weight: 700;
+  color: var(--tp-style-accent-border-color, var(--brand-accent, #FF6B35));
+  letter-spacing: 0.02em;
+}
+
+/* Stacked variant — used when the zone is square or taller than it
+   is wide (1:1 ugc_split_screen product_meta). Image goes on top,
+   name + price fill the full width below. Without this the name
+   gets squeezed into a narrow side column and truncates ("Art Pa$"
+   instead of "Artisan Pasta $17.10"). 9:16 and 4:5 zones are wider
+   than tall and stay horizontal via the default rule above. */
+.tp-zone.kind-product_card.style-with_thumbnail.tp-zone-stack-vertical {
+  grid-template-columns: 1fr;
+  grid-template-rows: auto 1fr;
+  justify-items: center;
+  row-gap: 0.55em;
+  column-gap: 0;
+  text-align: center;
+}
+.tp-zone.kind-product_card.style-with_thumbnail.tp-zone-stack-vertical .tp-product-card-thumb,
+.tp-zone.kind-product_card.style-with_thumbnail.tp-zone-stack-vertical .tp-product-card-thumb-placeholder {
+  /* Stacked layout — cap at 35% of zone height so the name + price
+     block below has at least 65% to render in. Was 5.5em fixed,
+     which on long product names left no headroom for 3 lines of
+     text + price + padding. */
+  width:  min(5.5em, calc(var(--tp-zone-rect-h-px, 300) * 0.35px));
+  height: min(5.5em, calc(var(--tp-zone-rect-h-px, 300) * 0.35px));
+}
+.tp-zone.kind-product_card.style-with_thumbnail.tp-zone-stack-vertical .tp-product-card-meta {
+  width: 100%;
+  align-items: center;
+  text-align: center;
+}
+.tp-zone.kind-product_card.style-with_thumbnail.tp-zone-stack-vertical .tp-product-card-name {
+  /* Allow more lines in stacked layout — the name now has the full
+     card width, so 3 lines reads as a clean header rather than a
+     squished side-column block. */
+  -webkit-line-clamp: 3 !important;
+}
+
+/* Quote cards bind to brand.secondary_color (per
+   style_bindings.card_bg) with a brand-accent accent bar on the
+   left. --brand-text-on-secondary is the readable foreground
+   computed by the renderer (white on dark surfaces, near-black on
+   light ones via tpReadableOn). */
+.tp-zone.kind-quote_card {
+  background: var(--brand-secondary, rgba(255,255,255,0.97));
+  color: var(--brand-text-on-secondary, #0a0a0a);
+  padding: 0.55em 0.75em 0.55em calc(0.75em + 4px);
+  font-size: 0.95em; line-height: 1.3;
+  border-radius: 8px;
+  border-left: 4px solid var(--brand-accent);
+  display: flex; flex-direction: column; justify-content: center;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+}
+
+.tp-zone.kind-cta {
+  background: var(--tp-style-cta-button-bg, var(--brand-accent));
+  /* Prefer the auto-derived readable text on the actual button bg
+     (set by applyStyleBindingsToStage when cta_button_text falls
+     through to the auto-from-brightness sentinel). Falls back to
+     --brand-text-on (computed against brand.primary) only when
+     the bg-pair derivation didn't run. */
+  color: var(--tp-style-cta-button-text, var(--brand-text-on));
+  font-family: var(--tp-style-font-family-body, Inter, system-ui, sans-serif);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 0.45em; letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+}
+
+.tp-zone.kind-logo { display: flex; align-items: center; justify-content: flex-start; }
+.tp-zone.kind-logo img { object-fit: contain; }
+
+/* Proof bar binds to brand.primary_color (per style_bindings.proof_bar_bg).
+   Falls back to a translucent black for unbranded stubs. */
+.tp-zone.kind-proof_bar {
+  background: var(--brand-primary, rgba(0,0,0,0.7));
+  color: var(--brand-text-on-primary, var(--brand-text-on));
+  padding: 0.35em 0.7em; font-size: 0.85em;
+  border-radius: 999px;
+  display: flex; align-items: center; justify-content: center; gap: 0.6em; white-space: nowrap;
+  backdrop-filter: blur(6px);
+}
+
+.tp-zone.kind-metrics_row {
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+  gap: 0.4em; color: var(--brand-text-on); font-size: 0.85em;
+}
+.tp-metric {
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 8px; padding: 0.4em; text-align: center;
+  backdrop-filter: blur(4px);
+}
+.tp-metric strong {
+  display: block; font-size: 1.6em; font-weight: 900;
+  color: var(--brand-text-on); line-height: 1;
+}
+.tp-metric span {
+  display: block; font-size: 0.75em;
+  color: rgba(255,255,255,0.72);
+  margin-top: 0.25em;
+  text-transform: uppercase; letter-spacing: 0.07em;
+}
+
+.tp-zone.kind-review_stack { display: flex; flex-direction: column; gap: 0.4em; }
+.tp-review-bubble {
+  background: var(--brand-secondary, rgba(255,255,255,0.97));
+  color: var(--brand-text-on-secondary, #0a0a0a);
+  border-radius: 8px;
+  border-left: 3px solid var(--brand-accent);
+  padding: 0.4em 0.55em 0.4em calc(0.55em + 3px);
+  font-size: 0.8em; line-height: 1.25; flex: 0 0 auto;
+  overflow: hidden;
+  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.18);
+}
+
+.tp-zone.kind-identity_row {
+  background: rgba(0,0,0,0.6); color: var(--brand-text-on);
+  padding: 0.35em 0.7em; font-size: 0.85em;
+  border-radius: 999px;
+  display: flex; align-items: center; gap: 0.5em; white-space: nowrap;
+  backdrop-filter: blur(6px);
+}
+.tp-zone.kind-identity_row .tp-handle { color: var(--brand-accent); }
+
+.tp-zone.kind-badge_row {
+  display: flex; gap: 0.4em; align-items: center; flex-wrap: wrap;
+}
+.tp-chip-mini {
+  background: var(--brand-primary, rgba(0,0,0,0.7));
+  color: var(--brand-text-on-primary, var(--brand-text-on));
+  padding: 0.25em 0.7em; border-radius: 999px;
+  font-size: 0.85em; font-weight: 600; white-space: nowrap;
+  backdrop-filter: blur(6px);
+}
+
+.tp-placeholder {
+  background: repeating-linear-gradient(45deg, rgba(255,255,255,0.04) 0 8px, transparent 8px 16px);
+  border: 1px dashed rgba(255,255,255,0.18); color: #aaa;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.75em; font-style: italic; border-radius: 6px;
+  width: 100%; height: 100%;
+}
+.tp-status {
+  background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 12px;
+  padding: 12px; font-size: 11px; color: #aaa; line-height: 1.5;
+}
+.tp-status .tp-ok { color: #34d399; font-weight: 600; }
+.tp-status .tp-bad { color: #f87171; font-weight: 600; }
+.tp-status code { font-family: 'Courier New', monospace; color: #e879f9; font-size: 10px; }
+.tp-empty { color: #555; font-size: 11px; padding: 16px; text-align: center; font-style: italic; }
+
+/* Debug-box overlay for overlay-mode preview. Dashed outline + pill
+   label over every placed element so the operator can see where the
+   placement algorithm landed each container. */
+.tp-debug-layer { position: absolute; inset: 0; pointer-events: none; z-index: 50; }
+.tp-debug-box {
+  position: absolute; box-sizing: border-box; border-radius: 4px;
+  border: 1.5px dashed;
+}
+.tp-debug-label {
+  position: absolute; top: -18px; left: 0;
+  font-size: 9px; font-weight: 700; padding: 2px 7px;
+  background: rgba(0,0,0,0.88); color: #fff;
+  border-radius: 999px; white-space: nowrap;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+.tp-debug-box.state-placed           { border-color: #34d399; }
+.tp-debug-box.state-fallback-placed  { border-color: #facc15; }
+.tp-debug-box.state-placed           .tp-debug-label { background: rgba(52,211,153,0.92); color: #0a0a0a; }
+.tp-debug-box.state-fallback-placed  .tp-debug-label { background: rgba(250,204,21,0.92); color: #0a0a0a; }
+
+/* Canvas-zone debug boxes (canonical templates) — cyan-ish tint to
+   distinguish from overlay-mode placement boxes. */
+.tp-debug-box.kind-canvas-zone       { border-color: #67e8f9; }
+.tp-debug-box.kind-canvas-zone .tp-debug-label { background: rgba(103,232,249,0.92); color: #083344; }
+
+/* ── New zone kinds for the landscape testimonial_spotlight layout ── */
+
+/* Solid surface zone — paints the right-side content panel for the
+   landscape split layout. Color comes from the resolved
+   style_bindings via --tp-style-panel-bg (set in drawTpCanvas).
+   Falls back to brand primary when the binding wasn't resolved.
+   z-index 0 so this sits behind every content zone. */
+.tp-zone.kind-panel {
+  background: var(--tp-style-panel-bg, var(--brand-primary, #0B0B0B));
+  z-index: 0;
+}
+/* Make every other zone sit above the panel layer. */
+.tp-zone:not(.kind-panel) { z-index: 1; }
+
+/* Eyebrow with bookend horizontal lines — used for the subheadline
+   in landscape testimonial_spotlight ("REAL HEAT. REAL FLAVOR. REAL
+   RESULTS."). The two .tp-rule-line spans flank the centered
+   text; both are colored with the accent palette via
+   --tp-style-accent-border-color. */
+.tp-zone.kind-eyebrow_rules {
+  display: flex; align-items: center; justify-content: center;
+  gap: 0.5em;
+  color: var(--brand-text-on-primary, #ffffff);
+  font-family: var(--tp-style-font-family-body, Inter, system-ui, sans-serif);
+  /* font-size multiplied by --tp-zone-scale so the renderer can
+     dial this whole element up/down per (template × ratio) via the
+     canvas's zone_scalers map. Inner em-relative descendants
+     cascade automatically. */
+  font-size: calc(0.28em * var(--tp-zone-scale, 1));
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.tp-zone.kind-eyebrow_rules .tp-rule-line {
+  flex: 1 1 auto; height: 1px;
+  background: var(--tp-style-accent-border-color, var(--brand-accent, #FF6B35));
+  opacity: 0.85;
+}
+/* Eyebrow text reads panel_text_color (auto-derived from panel_bg
+   luminance via the renderer's autoPairs) so it flips dark on light
+   panels. Falls back to white if the binding is missing. */
+.tp-zone.kind-eyebrow_rules .tp-eyebrow-text { flex: 0 0 auto; color: var(--tp-style-panel-text-color, #FFFFFF); }
+
+/* Display script headline — palette-gradient text used for the
+   "SOMETHING NEW IS COMING IN HOT" headline in landscape
+   testimonial_spotlight. Brand-curated font (var(--tp-style-font-family-headline))
+   wins; Knewave/Bungee fall through as the brushy display stack.
+   Base font sized for ~3 lines fitting in the 192px (16:9) /
+   180px (1.91:1) zone — auto-fit shrinks further when the
+   text is longer (4 lines hit), with a 0.40 floor below the
+   global fitAndClampZone default so the headline can collapse
+   hard if needed. Gradient blends from palette_vibrant down 30%
+   toward darker — gives the reference's flame-orange-to-deep-red
+   feel without obliterating the source color. */
+.tp-zone.kind-text.style-display_script {
+  font-family: var(--tp-style-font-family-headline, 'Knewave', 'Bungee', cursive, system-ui);
+  /* font-size multiplied by --tp-zone-scale (canvas zone_scalers
+     font factor). The 0.5em lead / 1em main inner spans are
+     em-relative so they scale together with the parent. */
+  font-size: calc(1.85em * var(--tp-zone-scale, 1));
+  line-height: 0.95;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  text-align: center;
+  background: linear-gradient(
+    180deg,
+    var(--tp-style-headline-text-color, var(--brand-accent, #FF6B35)) 0%,
+    color-mix(in srgb, var(--tp-style-headline-text-color, var(--brand-accent, #FF6B35)) 70%, #000 30%) 100%
+  );
+  -webkit-background-clip: text;
+          background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  text-shadow: none;
+  padding: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+/* Solid-color override for white-default headlines. The gradient
+   above mixes the source color with 30% black at the bottom which
+   reads as a depth effect on saturated colors (HCO flame orange)
+   but turns plain white into #B3B3B3 at the bottom — visibly
+   dimmer than the other white text on the panel. The renderer
+   adds `.solid-headline` when the resolved headline_text_color
+   fell through to #FFFFFF; this rule paints a flat white instead. */
+.tp-zone.kind-text.style-display_script.solid-headline {
+  background: none;
+  color: var(--tp-style-headline-text-color, #FFFFFF);
+  -webkit-text-fill-color: var(--tp-style-headline-text-color, #FFFFFF);
+          text-fill-color: var(--tp-style-headline-text-color, #FFFFFF);
+}
+
+/* Lead clause = 50% of main clause (per reference: SOMETHING NEW IS
+   sized half of COMING IN HOT). display:block stacks them. line-height
+   tightened on the lead so the whitespace between clauses doesn't
+   eat the headline budget. */
+.tp-zone.kind-text.style-display_script .tp-headline-lead {
+  display: block;
+  font-size: 0.5em;
+  line-height: 1.0;
+  margin-bottom: 0.05em;
+}
+.tp-zone.kind-text.style-display_script .tp-headline-main {
+  display: block;
+  font-size: 1em;
+}
+
+/* Section header — orange uppercase, rendered as a small eyebrow
+   above the body description ("BUILT FOR HEAT LOVERS"). */
+.tp-zone.kind-text.style-section_header {
+  color: var(--tp-style-section-header-color, var(--brand-accent, #FF6B35));
+  font-family: var(--tp-style-font-family-body, Inter, system-ui, sans-serif);
+  font-size: 0.28em;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-shadow: none;
+  padding: 0;
+  align-items: flex-end;
+}
+
+/* Proof bar variant — outlined pill with stars + rating + verified-
+   buyers tag. Palette-accent border around a slightly-lifted dark
+   bg (color-mix lifts panel_bg by 8% white so the bar reads as a
+   discrete element on top of the panel without a separate palette
+   slot). Body font fixed Inter — only headline gets the brand-
+   responsive font. */
+.tp-zone.kind-proof_bar.style-with_verified_buyers {
+  background: color-mix(in srgb, var(--tp-style-proof-bar-bg, #1F1F1F) 92%, #ffffff 8%);
+  color: var(--brand-text-on-primary, #ffffff);
+  font-family: var(--tp-style-font-family-body, Inter, system-ui, sans-serif);
+  border: 1px solid var(--tp-style-proof-bar-border, var(--brand-accent, #FF6B35));
+  backdrop-filter: none;
+  gap: 0.45em;
+  padding: 0.4em 0.8em;
+  /* font-size multiplied by --tp-zone-scale (canvas zone_scalers).
+     The 1.1em rating / 0.85em reviews / 1.05em stars descendants
+     are em-relative so they scale together with the parent. */
+  font-size: calc(0.28em * var(--tp-zone-scale, 1));
+  font-weight: 600;
+}
+.tp-zone.kind-proof_bar.style-with_verified_buyers .tp-proof-stars {
+  color: var(--tp-style-rating-star-color, #FFD400);
+  letter-spacing: 0.04em; font-size: 1.05em;
+}
+/* Proof_bar text reads proof_bar_text (auto-from-brightness against
+   proof_bar_bg) so it flips dark on light bars. Stars stay yellow.
+   Falls back to white if the binding is missing. */
+.tp-zone.kind-proof_bar.style-with_verified_buyers .tp-proof-rating  { color: var(--tp-style-proof-bar-text, #FFFFFF); font-weight: 800; font-size: 1.1em; }
+.tp-zone.kind-proof_bar.style-with_verified_buyers .tp-proof-reviews { color: var(--tp-style-proof-bar-text, #FFFFFF); opacity: 0.85; font-size: 0.85em; }
+.tp-zone.kind-proof_bar.style-with_verified_buyers .tp-proof-divider {
+  flex: 0 0 auto; width: 1px; height: 1.4em; background: rgba(255,255,255,0.25); margin: 0 0.3em;
+}
+.tp-zone.kind-proof_bar.style-with_verified_buyers .tp-proof-verified {
+  display: inline-flex; align-items: center; gap: 0.3em;
+  color: var(--tp-style-proof-bar-text, #FFFFFF);
+  letter-spacing: 0.06em; font-weight: 700; text-transform: uppercase;
+}
+.tp-zone.kind-proof_bar.style-with_verified_buyers .tp-proof-shield {
+  color: var(--tp-style-accent-border-color, var(--brand-accent, #FF6B35));
+  font-size: 1em;
+}
+
+/* Quote card variant — left orange accent bar + oversized open-quote
+   glyph + author photo footer. Used by landscape testimonial_spotlight
+   per reference. Background draws from --tp-style-card-bg (palette-led). */
+.tp-zone.kind-quote_card.style-with_author_photo {
+  background: var(--tp-style-card-bg, #1A1A1A);
+  /* Contrast computed against the ACTUAL card_bg (added to the
+     autoPairs list in templatePreview). Falls through to the
+     primary-contrast token only when style_bindings.card_bg
+     couldn't resolve — that's the legacy path. */
+  color: var(--tp-style-card-text-color, var(--brand-text-on-primary, #ffffff));
+  font-family: var(--tp-style-font-family-body, Inter, system-ui, sans-serif);
+  border-left: 3px solid var(--tp-style-accent-border-color, var(--brand-accent, #FF6B35));
+  border-radius: 6px;
+  /* Padding floored at absolute pixels so when fitAndClampZone
+     shrinks the zone font-size, padding doesn't collapse with
+     it — keeps the quote-text and author-row off the slot's
+     border-left accent strip + outer edges. */
+  padding: max(0.9em, 10px) max(1em, 12px);
+  box-shadow: none;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: 1fr auto;
+  column-gap: 0.6em;
+  /* row-gap is the small margin between the quote-text and the
+     author-row. Bigger than the previous 0.4em so the two
+     elements stay visually distinct even when the auto-fit pass
+     scales the parent font-size down. */
+  row-gap: 0.7em;
+  position: relative;
+  /* Font-size scales with the zone's actual rect.h (canvas
+     normalized px) so the text grows when the schema extends
+     the card. Baseline of 300px → 0.56em (matches the prior
+     calc(0.35em * 1.6) for square testimonial_spotlight 1:1).
+     clamp() keeps tiny strip variants legible (min) and stops
+     giant cards from blowing out (max). The 3.3em glyph /
+     0.78em author-name / etc descendants stay em-relative so
+     they scale together with the parent. */
+  font-size: clamp(0.35em, calc(var(--tp-zone-rect-h-px, 300) * 0.00187em * var(--tp-zone-scale, 1)), 1.4em);
+  line-height: 1.3;
+}
+.tp-zone.kind-quote_card.style-with_author_photo .tp-quote-glyph {
+  color: var(--tp-style-open-quote-glyph-color, var(--brand-accent, #FF6B35));
+  font-family: 'Times New Roman', serif;
+  font-size: 3.3em; font-weight: 900;
+  line-height: 0.7;
+  grid-row: 1; grid-column: 1;
+  margin: 0; padding: 0;
+  align-self: start;
+}
+.tp-zone.kind-quote_card.style-with_author_photo .tp-quote-text {
+  grid-row: 1; grid-column: 2;
+  font-style: italic;
+  font-weight: 500;
+  /* Inherits color from .tp-zone.kind-quote_card (which uses
+     --brand-text-on-secondary, auto-derived against the card's bg).
+     Previously hardcoded white — that broke when card bg resolved
+     light. */
+  color: inherit;
+  /* center vertically in row 1. The reflowColumnUnderQuoteCard
+     pass shrinks the slot to natural content height when the
+     quote is short, so centering doesn't usually leave visible
+     slack — when it does, it's symmetric. */
+  align-self: center;
+}
+.tp-zone.kind-quote_card.style-with_author_photo .tp-quote-author-row {
+  grid-row: 2; grid-column: 1 / span 2;
+  display: flex; align-items: center; gap: 0.5em;
+  margin-top: 0.2em;
+}
+.tp-zone.kind-quote_card.style-with_author_photo .tp-quote-avatar {
+  width: 1.8em; height: 1.8em; border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--tp-style-accent-border-color, var(--brand-accent, #FF6B35));
+}
+.tp-zone.kind-quote_card.style-with_author_photo .tp-quote-avatar-placeholder {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.12);
+  color: var(--brand-text-on-primary, #ffffff);
+  font-weight: 700; font-size: 0.7em;
+}
+.tp-zone.kind-quote_card.style-with_author_photo .tp-quote-author-meta {
+  display: flex; flex-direction: column; gap: 0.1em; line-height: 1;
+}
+.tp-zone.kind-quote_card.style-with_author_photo .tp-quote-author-name {
+  /* Inherit parent quote_card color (auto-derived against the
+     card's actual bg) instead of accent_border_color, which is
+     resolved against panel_bg and can land dark-on-dark when the
+     card sits on brand-secondary. */
+  color: inherit;
+  font-weight: 800; font-size: 0.78em; letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.tp-zone.kind-quote_card.style-with_author_photo .tp-quote-verified {
+  display: inline-block; margin-left: 0.3em;
+  color: inherit;
+  font-weight: 800;
+}
+.tp-zone.kind-quote_card.style-with_author_photo .tp-quote-verified-tag {
+  /* Inherit parent's auto-derived color and de-emphasize via
+     opacity rather than a hardcoded translucent white that fails
+     on light card bgs. */
+  color: inherit; opacity: 0.7;
+  font-size: 0.65em; letter-spacing: 0.05em;
+  text-transform: uppercase; font-weight: 600;
+}
+
+/* Badge row 'callouts' variant — icon + uppercase label pairs (no
+   chip background). Used by landscape testimonial_spotlight for the
+   BOLD FLAVOR / SERIOUS HEAT / PREMIUM INGREDIENTS / LIMITED DROP
+   row. Glyph is mapped from the badge label keyword via
+   calloutGlyphForLabel — falls back to '•'. */
+.tp-zone.kind-badge_row.style-callouts {
+  display: flex; flex-wrap: wrap;
+  align-items: center; align-content: flex-start;
+  /* Left-aligned: every row starts at the slot's left edge so
+     a partial last row doesn't appear indented relative to
+     the rows above it (justify-content: center centered each
+     row independently — visually wrong for multi-row layouts). */
+  justify-content: flex-start;
+  /* 0.3em gap between sibling badges (end of one to start of next),
+     applied as both row-gap + column-gap via the shorthand.
+     em-relative so spacing scales with parent font-size / zone scaler. */
+  gap: 0.3em;
+  overflow: hidden;
+  font-family: var(--tp-style-font-family-body, Inter, system-ui, sans-serif);
+}
+.tp-zone.kind-badge_row.style-callouts .tp-callout {
+  display: inline-flex; align-items: center; gap: 0.4em;
+  flex: 0 0 auto;
+  /* Base 0.28em matches the eyebrow_rules base — both scale via
+     --tp-zone-scale (default 2 on these templates) so the
+     effective font is 0.56em on both, keeping the badge label
+     readable at the same weight as the eyebrow. The 2.95em
+     glyph and 1em label are em-relative so they scale with
+     this base. */
+  font-size: calc(0.28em * var(--tp-zone-scale, 1));
+  font-weight: 700;
+  color: var(--tp-style-panel-text-color, #FFFFFF);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1.1;
+  /* Allow label text to wrap. Line-clamp on .tp-callout-label
+     caps each badge at 2 visible lines. The JS pass
+     (fitBadgeRow) caps the row count at maxRows. */
+  white-space: normal;
+}
+.tp-zone.kind-badge_row.style-callouts .tp-callout-glyph {
+  color: var(--tp-style-accent-border-color, var(--brand-accent, #FF6B35));
+  font-size: 2.95em; line-height: 1;
+  flex: 0 0 auto;
+}
+.tp-zone.kind-badge_row.style-callouts .tp-callout-label {
+  flex: 1 1 auto;
+  /* Cap each label at 2 visible lines — long labels wrap inside
+     the badge instead of forcing a single-line ellipsis. Pairs
+     with white-space: normal on the parent .tp-callout. The JS
+     pass (fitBadgeRow) then caps the OUTER row count at maxRows. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Restriction/keep-out overlay (from OverlayZoneArtifact analysis).
+   Solid-ish colored tint so the keep-outs are visually distinct from
+   placement containers. pointer-events: none via parent layer. */
+.tp-restriction-layer { position: absolute; inset: 0; pointer-events: none; z-index: 49; }
+.tp-restriction-box {
+  position: absolute; box-sizing: border-box; border-radius: 4px;
+  border: 1.5px dashed;
+}
+.tp-restriction-label {
+  position: absolute; top: -16px; left: 0;
+  font-size: 8px; font-weight: 700; padding: 1px 6px;
+  color: #fff; border-radius: 999px; white-space: nowrap;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+.tp-restriction-box.role-primary  { border-color: #f87171; background: rgba(248,113,113,0.10); }
+.tp-restriction-box.role-face     { border-color: #fb923c; background: rgba(251,146,60,0.10); }
+.tp-restriction-box.role-secondary{ border-color: #fde047; background: rgba(253,224,71,0.08); }
+.tp-restriction-box.role-text     { border-color: #a78bfa; background: rgba(167,139,250,0.08); }
+.tp-restriction-box.role-other    { border-color: #94a3b8; background: rgba(148,163,184,0.08); }
+.tp-restriction-box.role-primary  .tp-restriction-label { background: rgba(248,113,113,0.92); }
+.tp-restriction-box.role-face     .tp-restriction-label { background: rgba(251,146,60,0.92); color: #0a0a0a; }
+.tp-restriction-box.role-secondary.tp-restriction-box .tp-restriction-label { background: rgba(253,224,71,0.92); color: #0a0a0a; }
+.tp-restriction-box.role-text     .tp-restriction-label { background: rgba(167,139,250,0.92); }
+.tp-restriction-box.role-other    .tp-restriction-label { background: rgba(148,163,184,0.92); color: #0a0a0a; }
+
+.tp-analysis-chip {
+  position: absolute; top: 6px; left: 6px; z-index: 55;
+  font-size: 9px; font-weight: 700; padding: 2px 8px;
+  background: rgba(0,0,0,0.72); color: #fbbf24;
+  border-radius: 999px; letter-spacing: 0.04em;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* Decision trace on the right-side status panel (overlay mode only) */
+.tp-decision-section-head {
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+  color: #666; margin: 10px 0 6px;
+}
+.tp-decision-row {
+  display: grid; grid-template-columns: auto 1fr; gap: 10px;
+  padding: 8px 0; border-bottom: 1px solid #1a1a1a;
+}
+.tp-decision-row:last-child { border-bottom: none; }
+.tp-decision-chip {
+  font-size: 9px; font-weight: 700; padding: 3px 8px;
+  border-radius: 999px; text-transform: uppercase; letter-spacing: 0.06em;
+  white-space: nowrap; align-self: start; line-height: 1;
+}
+.tp-decision-chip.state-placed           { background: rgba(52,211,153,0.18); color: #34d399; }
+.tp-decision-chip.state-fallback-placed  { background: rgba(250,204,21,0.18); color: #facc15; }
+.tp-decision-chip.state-dropped          { background: rgba(148,163,184,0.22); color: #94a3b8; }
+.tp-decision-chip.state-failed-required  { background: rgba(239,68,68,0.20); color: #f87171; }
+.tp-decision-chip.state-skipped          { background: rgba(85,85,85,0.35); color: #888; }
+.tp-decision-body { font-size: 11px; color: #ccc; line-height: 1.4; }
+.tp-decision-body .tp-dec-id {
+  color: #fff; font-weight: 700; font-size: 11px;
+}
+.tp-decision-body .tp-dec-reason {
+  color: #888; margin-top: 3px;
+}
+.tp-decision-body .tp-dec-meta {
+  color: #555; font-size: 9px; margin-top: 4px;
+  font-family: 'Courier New', monospace; letter-spacing: -0.01em;
+}
+.tp-overlay-mode-row {
+  display: flex; gap: 10px; font-size: 10px; color: #888;
+  margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #1a1a1a;
+}
+.tp-overlay-mode-row strong { color: #ccc; }
+

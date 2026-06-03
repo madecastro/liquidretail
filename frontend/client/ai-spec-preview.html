@@ -69,19 +69,18 @@
       color: #888;
       font-weight: 700;
     }
+    /* Outer constraining wrapper — caps the renderer's tpStageFrame
+       width so a 1000-wide canvas doesn't blow out the panel. */
     .stage-wrap {
-      background: #fff;
-      border-radius: 6px;
-      padding: 0;
-      overflow: hidden;
-    }
-    .tp-stage {
-      position: relative;
-      width: 100%;
       max-width: 600px;
       margin: 0 auto;
-      display: block;
+      border-radius: 6px;
+      overflow: hidden;
     }
+    /* tpStageFrame + tpStage themselves are styled by tp-zones.css
+       (the shared renderer CSS). No need to override here — the page
+       previously defined .tp-stage locally because tp-zones.css wasn't
+       loaded; with the link active that's now redundant. */
     pre.json {
       background: #0a0a0a;
       border: 1px solid #222;
@@ -170,7 +169,11 @@
   <main>
     <section class="panel">
       <h2>Render</h2>
-      <div class="stage-wrap"><div id="tpStage" class="tp-stage"></div></div>
+      <div class="stage-wrap">
+        <div id="tpStageFrame" class="tp-stage-frame">
+          <div id="tpStage" class="tp-stage"></div>
+        </div>
+      </div>
       <p class="helper">Drawn via the same templatePreview.js renderer the hand-authored templates use. Stage scales to the canvas spec's reported aspect ratio.</p>
       <div id="warningsBlock"></div>
     </section>
@@ -354,7 +357,19 @@
     document.addEventListener('DOMContentLoaded', () => whenReady(boot, 0));
   </script>
 
-  <link rel="stylesheet" href="ads.html" disabled />
+  <!-- Renderer CSS — same file ads.html loads. Without this, every
+       tp-zone draws as a raw <div> with browser defaults (zero typography,
+       zero kind/style variants), and the preview's render diverges
+       wildly from production. The previous `disabled` link to ads.html
+       was a workaround for the fact that ads.html is a full HTML page,
+       not a stylesheet; tp-zones.css now holds the renderer CSS in a
+       form both pages can link to. -->
+  <link rel="stylesheet" href="tp-zones.css" />
+  <!-- Display font + UI font referenced by the renderer CSS. Without
+       these, .style-display_script falls through to `cursive` and
+       body text falls through to `system-ui`. -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Knewave&family=Bungee&display=swap" rel="stylesheet" />
   <script src="templatePreview.js"></script>
 </body>
 </html>

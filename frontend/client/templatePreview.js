@@ -1154,139 +1154,170 @@
   // --tp-style-scrim-tint. Skips 'auto-from-brightness' (sentinel
   // for renderer-computed contrast) so CSS fallback chains still
   // resolve to the brightness-derived var.
-  // ── Visual Direction (1d-e.2) ──
+  // ── Visual Direction (1d-e.2 + 1d-g) ──
   //
   // Translates the LLM's qualitative hierarchy_spec.layout.visual_direction
   // tokens (corner_radius / shadow_depth / glass_level / density /
   // visual_energy / contrast) into concrete CSS at render time.
   //
-  // This is what makes the LLM's INTENT vocabulary actually visible.
-  // Without it every ad collapses to the same paint job no matter what
-  // the spec declares — because the renderer's defaults are the only
-  // values the CSS ever sees.
-  //
   // Two-layer application:
-  //   1. Stage-level: sets --vd-radius / --vd-shadow / --vd-density CSS
-  //      vars + a compound filter (saturate × contrast) for canvas-wide
-  //      tonal shifts.
-  //   2. Per-zone (applyVdToZone): glass treatment on panel zones,
-  //      shadow on surface zones, radius fallback for zones the spec
-  //      left null.
-  //
-  // Returns the resolved values so the zone loop can use them.
-  function applyVisualDirection(stage, vd) {
-    if (!stage || !vd || typeof vd !== 'object') return null;
+  //   1. Stage-level (applyVisualDirection): sets --vd-radius / --vd-shadow
+  //      / --vd-density CSS vars + a compound filter (saturate × contrast)
+  //      for canvas-wide tonal shifts.
+  //   2. Per-zone (applyVdToZone): glass on panel zones, shadow on surface
+  //      zones, radius fallback for zones the spec left null. Zones can
+  //      carry their OWN zone.visual_direction whose non-null fields
+  //      override the stage defaults for THAT zone only (1d-g) — one
+  //      focal panel can be glass-heavy while siblings stay solid.
 
-    const out = { radiusPx: null, shadowCss: null, glass: null, densityScale: 1 };
+  // Shared token → CSS-value maps. Used by both the stage-level apply
+  // AND the per-zone override merge so a single source of truth governs
+  // what 'pill' or 'dramatic' or 'heavy' actually means.
+  const VD_RADIUS_MAP = {
+    sharp: 0, hard: 0, none: 0,
+    small: 8,
+    medium: 14, rounded: 14, soft: 14,
+    large: 24, very_rounded: 24,
+    pill: 9999
+  };
+  const VD_SHADOW_MAP = {
+    none:       'none',
+    minimal:    '0 1px 2px rgba(0,0,0,0.08)',
+    soft:       '0 4px 12px rgba(0,0,0,0.14)',
+    medium:     '0 6px 20px rgba(0,0,0,0.18)',
+    pronounced: '0 10px 28px rgba(0,0,0,0.24)',
+    dramatic:   '0 16px 44px rgba(0,0,0,0.34)'
+  };
+  const VD_GLASS_MAP = {
+    none:   { blur: '0px',  opacity: 1.0,  saturate: 1.0 },
+    light:  { blur: '10px', opacity: 0.65, saturate: 1.15 },
+    medium: { blur: '18px', opacity: 0.55, saturate: 1.25 },
+    heavy:  { blur: '28px', opacity: 0.45, saturate: 1.35 }
+  };
+  const VD_DENSITY_MAP  = { airy: 1.4, medium: 1.0, balanced: 1.0, dense: 0.75, editorial: 1.55 };
+  const VD_ENERGY_MAP   = { calm: 0.85, balanced: 1.0, high: 1.10, bold: 1.18, electric: 1.32 };
+  const VD_CONTRAST_MAP = { soft: 0.92, medium: 1.0, strong: 1.0, extreme: 1.12 };
 
-    // corner_radius: sharp / small / medium / large / pill — plus the
-    // aliases the LLM occasionally emits without prompting (none, hard,
-    // soft, rounded, very_rounded).
-    const radiusMap = {
-      sharp: 0, hard: 0, none: 0,
-      small: 8,
-      medium: 14, rounded: 14, soft: 14,
-      large: 24, very_rounded: 24,
-      pill: 9999
+  // Translate a raw visual_direction object into resolved values
+  // (numeric radius, CSS shadow string, glass triple, density scale,
+  // saturate / contrast filter parts). Used by both apply paths.
+  // Returns nulls for fields the input didn't specify so callers can
+  // tell "absent" from "set to default."
+  function translateVdTokens(vd) {
+    if (!vd || typeof vd !== 'object') return { radiusPx: null, shadowCss: null, glass: null, densityScale: null, satMult: null, conMult: null };
+    return {
+      radiusPx:     (vd.corner_radius  && VD_RADIUS_MAP[vd.corner_radius]   != null) ? VD_RADIUS_MAP[vd.corner_radius]   : null,
+      shadowCss:    (vd.shadow_depth   && VD_SHADOW_MAP[vd.shadow_depth])           ? VD_SHADOW_MAP[vd.shadow_depth]    : null,
+      glass:        (vd.glass_level    && VD_GLASS_MAP[vd.glass_level])              ? VD_GLASS_MAP[vd.glass_level]      : null,
+      densityScale: (vd.density        && VD_DENSITY_MAP[vd.density]        != null) ? VD_DENSITY_MAP[vd.density]        : null,
+      satMult:      (vd.visual_energy  && VD_ENERGY_MAP[vd.visual_energy]   != null) ? VD_ENERGY_MAP[vd.visual_energy]   : null,
+      conMult:      (vd.contrast       && VD_CONTRAST_MAP[vd.contrast]      != null) ? VD_CONTRAST_MAP[vd.contrast]      : null
     };
-    if (vd.corner_radius && radiusMap[vd.corner_radius] != null) {
-      out.radiusPx = radiusMap[vd.corner_radius];
-      stage.style.setProperty('--vd-radius', `${out.radiusPx}px`);
-    }
-
-    // shadow_depth: none / minimal / soft / medium / pronounced / dramatic
-    const shadowMap = {
-      none:       'none',
-      minimal:    '0 1px 2px rgba(0,0,0,0.08)',
-      soft:       '0 4px 12px rgba(0,0,0,0.14)',
-      medium:     '0 6px 20px rgba(0,0,0,0.18)',
-      pronounced: '0 10px 28px rgba(0,0,0,0.24)',
-      dramatic:   '0 16px 44px rgba(0,0,0,0.34)'
-    };
-    if (vd.shadow_depth && shadowMap[vd.shadow_depth]) {
-      out.shadowCss = shadowMap[vd.shadow_depth];
-      stage.style.setProperty('--vd-shadow', out.shadowCss);
-    }
-
-    // glass_level: none / light / medium / heavy — backdrop-blur +
-    // translucent surface for panels. Strength bakes into both
-    // opacity (how much underlying media reads through) and blur.
-    const glassMap = {
-      none:   { blur: '0px',  opacity: 1.0,  saturate: 1.0 },
-      light:  { blur: '10px', opacity: 0.65, saturate: 1.15 },
-      medium: { blur: '18px', opacity: 0.55, saturate: 1.25 },
-      heavy:  { blur: '28px', opacity: 0.45, saturate: 1.35 }
-    };
-    if (vd.glass_level && glassMap[vd.glass_level]) {
-      out.glass = glassMap[vd.glass_level];
-    }
-
-    // density: airy / medium / dense / editorial. Stored as a CSS var
-    // for any future zone-padding rule that wants to consume it. No
-    // current zone CSS reads --vd-density yet — variable hooks up
-    // when component CSS lands.
-    const densityMap = { airy: 1.4, medium: 1.0, balanced: 1.0, dense: 0.75, editorial: 1.55 };
-    if (vd.density && densityMap[vd.density] != null) {
-      out.densityScale = densityMap[vd.density];
-      stage.style.setProperty('--vd-density', String(out.densityScale));
-    }
-
-    // visual_energy + contrast compose into ONE stage filter so the
-    // canvas reads tonally different between calm/balanced/bold/electric
-    // even when the underlying media is identical. Applied to stage so
-    // images + text + surfaces all shift together (intentional — text
-    // saturation is a known/accepted side effect at the diagnostic stage).
-    const energyMap   = { calm: 0.85, balanced: 1.0, high: 1.10, bold: 1.18, electric: 1.32 };
-    const contrastMap = { soft: 0.92, medium: 1.0, strong: 1.0, extreme: 1.12 };
-    const sat = energyMap[vd.visual_energy];
-    const con = contrastMap[vd.contrast];
-    const parts = [];
-    if (sat != null && sat !== 1) parts.push(`saturate(${sat.toFixed(2)})`);
-    if (con != null && con !== 1) parts.push(`contrast(${con.toFixed(2)})`);
-    if (parts.length) stage.style.filter = parts.join(' ');
-
-    return out;
   }
 
-  // Per-zone application of visual_direction. Glass + shadow are
-  // surface-only (apply to panels, cards, CTAs — NOT to plain text or
-  // media zones), radius fallback is the spec-null default.
-  function applyVdToZone(el, zone, vd) {
-    if (!el || !zone || !vd) return;
+  // Stage-level apply. Sets CSS vars + compound filter on the stage
+  // element so the whole canvas inherits the visual_direction. Returns
+  // the resolved values so applyVdToZone can layer per-zone overrides
+  // on top of them.
+  function applyVisualDirection(stage, vd) {
+    if (!stage || !vd || typeof vd !== 'object') return null;
+    const t = translateVdTokens(vd);
+
+    if (t.radiusPx     != null) stage.style.setProperty('--vd-radius',  `${t.radiusPx}px`);
+    if (t.shadowCss    != null) stage.style.setProperty('--vd-shadow',  t.shadowCss);
+    if (t.densityScale != null) stage.style.setProperty('--vd-density', String(t.densityScale));
+
+    // Compose visual_energy + contrast into ONE stage filter. Applied
+    // to stage so images + text + surfaces all shift together.
+    const parts = [];
+    if (t.satMult != null && t.satMult !== 1) parts.push(`saturate(${t.satMult.toFixed(2)})`);
+    if (t.conMult != null && t.conMult !== 1) parts.push(`contrast(${t.conMult.toFixed(2)})`);
+    if (parts.length) stage.style.filter = parts.join(' ');
+
+    return t;
+  }
+
+  // Per-zone application of visual_direction. Reads zone.visual_direction
+  // when present and merges its translated values over the stage defaults
+  // (non-null wins). Glass + shadow are surface-only; radius fallback
+  // applies when the spec didn't pin zone.radius.
+  function applyVdToZone(el, zone, stageVd) {
+    if (!el || !zone) return;
+
+    // Zone-level override (1d-g). Translate independently, then merge:
+    // any non-null zone field overrides the stage value for THIS zone.
+    const zoneT = zone.visual_direction ? translateVdTokens(zone.visual_direction) : null;
+    const v = mergeVdResolved(stageVd, zoneT);
+    if (!v) return;
 
     // Radius fallback — when the spec didn't pin a radius on this zone,
-    // use the visual_direction global. Skip pill (9999) on media/text
-    // zones where it'd clip the content; only apply to surfaces.
-    if (typeof zone.radius !== 'number' && vd.radiusPx != null) {
+    // use the visual_direction value. Skip pill (9999) on non-surface
+    // zones (media/text) where it'd clip content.
+    if (typeof zone.radius !== 'number' && v.radiusPx != null) {
       const isSurface = ['panel', 'product_card', 'quote_card', 'cta', 'proof_bar', 'badge_row'].includes(zone.kind);
-      if (isSurface || vd.radiusPx < 200) {
-        el.style.borderRadius = `${vd.radiusPx}px`;
+      if (isSurface || v.radiusPx < 200) {
+        el.style.borderRadius = `${v.radiusPx}px`;
       }
     }
 
-    // Shadow — surfaces only. Plain text + media never get a box-shadow
-    // because they don't have a "card" surface to shadow.
+    // Shadow — surfaces only. Plain text + media never get a box-shadow.
     const surfaceForShadow = ['panel', 'product_card', 'quote_card', 'cta', 'proof_bar'].includes(zone.kind);
-    if (surfaceForShadow && vd.shadowCss && vd.shadowCss !== 'none') {
-      el.style.boxShadow = vd.shadowCss;
+    if (surfaceForShadow && v.shadowCss && v.shadowCss !== 'none') {
+      el.style.boxShadow = v.shadowCss;
     }
 
-    // Glass — panel zones only. Take the LLM's resolved panel_bg from
+    // Glass — panel zones only. Take the resolved panel_bg from
     // style_bindings, convert to rgba at the glass opacity, layer a
-    // backdrop-filter blur on top. Result: underlying media reads
-    // through with a frosted-glass feel.
-    if (vd.glass && zone.kind === 'panel' && vd.glass.blur !== '0px') {
+    // backdrop-filter blur on top.
+    if (v.glass && zone.kind === 'panel' && v.glass.blur !== '0px') {
       const panelBg = TP_STATE.lastStyleBindings?.panel_bg;
       if (typeof panelBg === 'string' && /^#[0-9a-f]{6}$/i.test(panelBg)) {
         const r = parseInt(panelBg.slice(1, 3), 16);
         const g = parseInt(panelBg.slice(3, 5), 16);
         const b = parseInt(panelBg.slice(5, 7), 16);
-        el.style.background = `rgba(${r}, ${g}, ${b}, ${vd.glass.opacity})`;
-        const bf = `blur(${vd.glass.blur}) saturate(${vd.glass.saturate})`;
+        el.style.background = `rgba(${r}, ${g}, ${b}, ${v.glass.opacity})`;
+        const bf = `blur(${v.glass.blur}) saturate(${v.glass.saturate})`;
         el.style.backdropFilter = bf;
         el.style.webkitBackdropFilter = bf;
       }
     }
+
+    // visual_energy + contrast at zone scope. Stage already applied
+    // them globally; the per-zone case fires only when the zone
+    // override differs. Apply the DELTA — multiplier ratios on top
+    // of the stage filter — so the zone shifts further/less without
+    // double-applying the stage value.
+    if (zoneT) {
+      const stageSat = stageVd?.satMult ?? 1;
+      const stageCon = stageVd?.conMult ?? 1;
+      const wantSat = zoneT.satMult != null;
+      const wantCon = zoneT.conMult != null;
+      if (wantSat || wantCon) {
+        const dSat = wantSat ? (zoneT.satMult / stageSat) : 1;
+        const dCon = wantCon ? (zoneT.conMult / stageCon) : 1;
+        const parts = [];
+        if (dSat !== 1) parts.push(`saturate(${dSat.toFixed(2)})`);
+        if (dCon !== 1) parts.push(`contrast(${dCon.toFixed(2)})`);
+        if (parts.length) el.style.filter = parts.join(' ');
+      }
+    }
+  }
+
+  // Merge a zone-level translated VD on top of the stage-level one.
+  // Non-null fields on the zone win; null fields fall through to stage.
+  // Either side may be null entirely (no stage VD, or no zone override).
+  function mergeVdResolved(stage, zone) {
+    if (!stage && !zone) return null;
+    if (!zone) return stage;
+    if (!stage) return zone;
+    return {
+      radiusPx:     zone.radiusPx     != null ? zone.radiusPx     : stage.radiusPx,
+      shadowCss:    zone.shadowCss    != null ? zone.shadowCss    : stage.shadowCss,
+      glass:        zone.glass        != null ? zone.glass        : stage.glass,
+      densityScale: zone.densityScale != null ? zone.densityScale : stage.densityScale,
+      satMult:      zone.satMult      != null ? zone.satMult      : stage.satMult,
+      conMult:      zone.conMult      != null ? zone.conMult      : stage.conMult
+    };
   }
 
   function applyStyleBindingsToStage(stage, bindings) {

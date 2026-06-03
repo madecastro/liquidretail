@@ -202,6 +202,20 @@
 
       <h2 style="margin-top:18px;">Resolved Style Bindings</h2>
       <pre id="bindingsJson" class="json"></pre>
+
+      <h2 style="margin-top:18px;display:flex;align-items:center;justify-content:space-between;">
+        Prompt (sent to GPT)
+        <button id="togglePrompt" class="toggle-btn" type="button">show</button>
+      </h2>
+      <p class="helper">Exact payload the LLM saw — system instructions, user message (FULL CONTEXT JSON + intent + vision-input role list), and the image URLs attached as image_url parts. Older artifacts (pre 2026-06-03) won't have this captured.</p>
+      <div id="promptBlock" style="display:none;">
+        <h3 style="font-size:10px;color:#888;letter-spacing:0.08em;text-transform:uppercase;margin:14px 0 6px;">System</h3>
+        <pre id="promptSystemJson" class="json" style="max-height:400px;"></pre>
+        <h3 style="font-size:10px;color:#888;letter-spacing:0.08em;text-transform:uppercase;margin:14px 0 6px;">User</h3>
+        <pre id="promptUserJson" class="json" style="max-height:520px;"></pre>
+        <h3 style="font-size:10px;color:#888;letter-spacing:0.08em;text-transform:uppercase;margin:14px 0 6px;">Vision Inputs (image_url parts)</h3>
+        <div id="promptImagesList"></div>
+      </div>
     </section>
   </main>
 
@@ -264,6 +278,39 @@
         zonesBlock.style.display = showing ? 'none' : 'block';
         toggleBtn.textContent = showing ? 'show' : 'hide';
       });
+
+      // Prompt blocks — populate if captured. Older artifacts return
+      // null/[] for these fields; show a hint in that case.
+      const sysEl   = document.getElementById('promptSystemJson');
+      const usrEl   = document.getElementById('promptUserJson');
+      const imgsEl  = document.getElementById('promptImagesList');
+      const hasPrompt = !!(data.promptSystem || data.promptUser);
+      sysEl.textContent  = data.promptSystem || '(not captured — pre-prompt-persistence artifact)';
+      usrEl.textContent  = data.promptUser   || '(not captured — pre-prompt-persistence artifact)';
+      if (Array.isArray(data.promptImages) && data.promptImages.length) {
+        imgsEl.innerHTML = data.promptImages.map(img => `
+          <div style="display:grid;grid-template-columns:120px 1fr;gap:10px;padding:8px 0;border-bottom:1px solid #1a1a1a;font-size:11px;align-items:center;">
+            <a href="${window.escapeHtml(img.url || '')}" target="_blank" rel="noopener" style="display:block;">
+              <img src="${window.escapeHtml(img.url || '')}" alt="${window.escapeHtml(img.role || '')}" style="width:100%;height:80px;object-fit:cover;border-radius:6px;border:1px solid #222;" />
+            </a>
+            <div>
+              <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace;color:#fafafa;font-weight:600;">${window.escapeHtml(img.role || '')}</div>
+              ${img.label ? `<div style="color:#888;font-size:10px;margin-top:2px;">${window.escapeHtml(img.label)}</div>` : ''}
+              <a href="${window.escapeHtml(img.url || '')}" target="_blank" rel="noopener" style="font-size:9px;color:#666;word-break:break-all;display:block;margin-top:4px;">${window.escapeHtml(img.url || '')}</a>
+            </div>
+          </div>
+        `).join('');
+      } else {
+        imgsEl.innerHTML = '<p class="helper">(no vision attachments)</p>';
+      }
+      const togglePromptBtn = document.getElementById('togglePrompt');
+      const promptBlock = document.getElementById('promptBlock');
+      togglePromptBtn.addEventListener('click', () => {
+        const showing = promptBlock.style.display !== 'none';
+        promptBlock.style.display = showing ? 'none' : 'block';
+        togglePromptBtn.textContent = showing ? 'show' : 'hide';
+      });
+      if (!hasPrompt) togglePromptBtn.textContent = 'show (empty)';
 
       // Warnings
       if ((data.validationWarnings || []).length) {

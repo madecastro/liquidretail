@@ -1008,6 +1008,39 @@
     // pixel width, so em units render at production sizes regardless of
     // how the stage is visually scaled afterward.
 
+    // Pre-pass — compute per-zone overlap with media zones for the
+    // panel-over-media safety guard. When a panel zone covers >60% of
+    // a media zone's area, the renderer dampens the panel's opacity
+    // to ~0.35 so the photo reads through. The pre-2026-06-04 renderer
+    // hardcoded panels to z-index 0 (always behind media), and the LLM
+    // implicitly relied on that to use "full-canvas dark panel" as a
+    // backdrop pattern. After today's z-index fix lets panels properly
+    // sit at their declared layer, that pattern blanks the photo.
+    // This guard catches it without changing the spec or re-prompting.
+    const mediaZonesForGuard = (canvas.zones || []).filter(z => (z.kind === 'media' || z.role === 'hero_media' || z.role === 'support_media') && z.rect);
+    function panelCoversMediaPct(panelZone) {
+      if (!panelZone?.rect) return 0;
+      let bestPct = 0;
+      const pArea = (panelZone.rect.w || 0) * (panelZone.rect.h || 0);
+      if (!pArea) return 0;
+      for (const m of mediaZonesForGuard) {
+        const overlap = rectIntersectArea(panelZone.rect, m.rect);
+        const mArea = (m.rect.w || 0) * (m.rect.h || 0);
+        if (!mArea) continue;
+        const pctOfMedia = overlap / mArea;
+        if (pctOfMedia > bestPct) bestPct = pctOfMedia;
+      }
+      return bestPct;
+    }
+    function rectIntersectArea(a, b) {
+      const x1 = Math.max(a.x, b.x);
+      const y1 = Math.max(a.y, b.y);
+      const x2 = Math.min(a.x + a.w, b.x + b.w);
+      const y2 = Math.min(a.y + a.h, b.y + b.h);
+      if (x2 <= x1 || y2 <= y1) return 0;
+      return (x2 - x1) * (y2 - y1);
+    }
+
     const zoneEls = [];
     for (const zone of (canvas.zones || [])) {
       const el = document.createElement('div');
@@ -1058,6 +1091,25 @@
       // (legacy V1).
       const zIdx = layerToZIndex(zone.layer);
       if (zIdx != null) el.style.zIndex = String(zIdx);
+      // Panel-over-media safety guard — when a panel zone covers >60%
+      // of a media zone, drop its opacity so the photo reads through.
+      // The pre-z-index-fix renderer hid panels behind media; the LLM
+      // implicitly relied on that. With panels properly layered, full-
+      // canvas dark panels would blank the photo. Soft cap instead of
+      // hard removal — the LLM's intent (a dark backdrop) is preserved
+      // at reduced strength.
+      if (zone.kind === 'panel' || zone.role === 'panel' || zone.role === 'scrim') {
+        const overlapPct = panelCoversMediaPct(zone);
+        if (overlapPct > 0.6) {
+          el.style.opacity = '0.35';
+          // backdrop-filter blur sweetens the soft cap visually — the
+          // dampened panel reads as a frosted overlay instead of a
+          // washed-out solid.
+          el.style.backdropFilter = 'blur(2px)';
+          el.style.webkitBackdropFilter = 'blur(2px)';
+          console.warn(`   ⚠️  panel zone "${zone.id}" covers ${Math.round(overlapPct * 100)}% of a media zone — auto-opacity 0.35 applied`);
+        }
+      }
       // Project the FONT scaler as a CSS var so the matching CSS
       // font-size rules in ads.html (eyebrow_rules / proof_bar /
       // badge_row callouts / quote_card with_author_photo) read it

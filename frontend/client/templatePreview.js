@@ -65,7 +65,7 @@
     if (TP_STATE.lastInput.placement) {
       drawOverlayCanvas(stage, TP_STATE.lastInput);
     } else if (TP_STATE.lastCanvas) {
-      drawTpCanvas(stage, TP_STATE.lastInput, TP_STATE.lastCanvas);
+      drawTpCanvas(stage, TP_STATE.lastInput, TP_STATE.lastCanvas, TP_STATE.lastResolvedLayout || null);
     }
   }
 
@@ -474,7 +474,7 @@
         // / creativeIntent / productId when Campaign.aiCreativeV2Enabled.
         const pageParams = new URLSearchParams(window.location.search);
         const fwd = new URLSearchParams();
-        for (const k of ['v2', 'campaignKind', 'creativeIntent', 'productId']) {
+        for (const k of ['v2', 'campaignKind', 'creativeIntent', 'productId', 'useResolved']) {
           const v = pageParams.get(k);
           if (v) fwd.set(k, v);
         }
@@ -532,7 +532,11 @@
       } else if (!data.canvas) {
         stage.innerHTML = '<div class="tp-empty">No canvas spec for this combo.</div>';
       } else {
-        drawTpCanvas(stage, data.input, data.canvas);
+        // Phase 5b.2 — pass resolved_layout when /by-id returned one
+        // (?useResolved=1 path). drawTpCanvas reads it for skip-removed-
+        // zones + post-fallback component_style + computed font/padding.
+        TP_STATE.lastResolvedLayout = data.resolved_layout || null;
+        drawTpCanvas(stage, data.input, data.canvas, data.resolved_layout || null);
       }
 
       if (isOverlayMode) {
@@ -888,7 +892,24 @@
     return parts.join('');
   }
 
-  function drawTpCanvas(stage, input, canvas) {
+  function drawTpCanvas(stage, input, canvas, resolvedLayout) {
+    // Phase 5b.2 — when a ResolvedLayoutArtifact is supplied, build an
+    // id → resolved zone lookup so the per-zone loop can read
+    // post-fallback component_style, skip removed zones, and apply the
+    // Resolver's pixel-accurate computed font_size_px / line_height_px /
+    // padding inline. Falls through cleanly when resolvedLayout is null
+    // (legacy path, no behavior change).
+    const resolvedZoneById = {};
+    // Accept both snake_case (/by-id contract shape) and camelCase
+    // (/by-artifact diagnostic shape) so the spec preview's A/B toggle
+    // works regardless of which endpoint produced the layout.
+    const rZones = resolvedLayout && (resolvedLayout.resolved_zones || resolvedLayout.resolvedZones);
+    if (Array.isArray(rZones)) {
+      for (const rz of rZones) {
+        if (rz?.id) resolvedZoneById[rz.id] = rz;
+      }
+    }
+    const useResolved = !!Object.keys(resolvedZoneById).length;
     // Deep-clone so per-draw mutations (zone_scalers application,
     // reflow rect adjustments) don't compound across redraws. The
     // stored TP_STATE.lastCanvas keeps the pristine spec; this local
@@ -1043,11 +1064,23 @@
 
     const zoneEls = [];
     for (const zone of (canvas.zones || [])) {
+      // Phase 5b.2 — Resolver override lookup. When the Resolver has
+      // a record for this zone, prefer its values: skip removed zones,
+      // use post-fallback component_style, apply computed font/padding.
+      const rZone = useResolved ? resolvedZoneById[zone.id] : null;
+      if (rZone?.removed) continue;   // Resolver's fallback chain exhausted → drop the zone
+      // Effective component_style — Resolver's post-fallback choice
+      // wins; spec's original style_variant is the fallback. Affects
+      // both the CSS class derivation below and the rs-* dual-class.
+      const effectiveVariant = (rZone?.component_style != null && rZone.component_style !== zone.style_variant)
+        ? rZone.component_style
+        : zone.style_variant;
+
       const el = document.createElement('div');
       // style_variant is per-zone styling pivot (e.g. quote_card with_author_photo,
       // text section_header, badge_row callouts). Renders as 'style-<variant>'
       // class so CSS can scope on '.tp-zone.kind-X.style-Y'.
-      const variantCls = zone.style_variant ? ` style-${zone.style_variant}` : '';
+      const variantCls = effectiveVariant ? ` style-${effectiveVariant}` : '';
       // When the resolved headline_text_color falls through to its white
       // default (palette was monochromatic / mono-hue / failed contrast
       // gate), tag the zone so CSS can disable the top→bottom gradient
@@ -1071,12 +1104,15 @@
         ? ' tp-zone-stack-vertical'
         : '';
       // Dual-classing — emit the Phase 0 rs-<role>-<variant> class name
-      // alongside the legacy tp-zone kind/style classes. Activates the
-      // rich rs-component-variants.css rules without removing legacy
-      // fallback CSS. Works for V1 specs (kind+style_variant → role
-      // via LEGACY_KIND_TO_ROLE) AND V2 specs (zone.role + zone.component_style
-      // direct).
-      const rsCls = rsClassFor(zone);
+      // alongside the legacy tp-zone kind/style classes. Resolver's
+      // post-fallback variant wins when present (rZone.css_class is
+      // already derived server-side via aiVocabulary.cssClassFor).
+      // Falls back to the spec's original style_variant for legacy/V1.
+      const rsCls = (rZone?.css_class) || rsClassFor({
+        ...zone,
+        component_style: effectiveVariant || zone.component_style,
+        style_variant:   effectiveVariant || zone.style_variant
+      });
       el.className = `tp-zone kind-${zone.kind}${variantCls}${solidCls}${aspectCls}${rsCls ? ' ' + rsCls : ''}`;
       el.style.left   = `${(zone.rect.x / w * 100).toFixed(2)}%`;
       el.style.top    = `${(zone.rect.y / h * 100).toFixed(2)}%`;
@@ -1117,6 +1153,29 @@
       // already happened above on rect.h.
       const { font: fontScale } = zoneScaleFor(zone);
       if (fontScale !== 1) el.style.setProperty('--tp-zone-scale', String(fontScale));
+
+      // Phase 5b.2 — apply Resolver's pixel-accurate computed values as
+      // INLINE styles. Inline wins specificity over CSS calc/clamp rules,
+      // so the Resolver effectively replaces the runtime CSS math with
+      // deterministic backend math. Only active when ?useResolved=1 (i.e.
+      // resolvedLayout was returned). Skip text-bearing components
+      // whose CSS is highly em-cascade-dependent (quote_card,
+      // product_card descendants pick font-size from parent em).
+      if (rZone?.computed) {
+        const c = rZone.computed;
+        if (typeof c.font_size_px === 'number' && c.font_size_px > 0) {
+          el.style.fontSize = `${c.font_size_px}px`;
+        }
+        if (typeof c.line_height_px === 'number' && c.line_height_px > 0) {
+          el.style.lineHeight = `${c.line_height_px}px`;
+        }
+        if (typeof c.padding_v_px === 'number' && typeof c.padding_h_px === 'number') {
+          el.style.padding = `${c.padding_v_px}px ${c.padding_h_px}px`;
+        }
+        if (typeof c.text_color === 'string' && c.text_color.startsWith('#')) {
+          el.style.color = c.text_color;
+        }
+      }
       // Expose the zone's rect.h in canvas coords as a CSS var so
       // height-responsive rules (e.g., quote_card font-size) can
       // scale text proportionally to the actual slot. Zones that
@@ -3200,12 +3259,13 @@ window.renderTemplatePreview = renderTemplatePreview;
 // minimum TP_STATE the renderer needs (input + canvas + resolved
 // style bindings), then draws onto the supplied stage element.
 // Used by ai-spec-preview.html — no template/registry round-trip.
-window.tpRenderAiSpec = function (stage, input, canvasSpec, resolvedBindings) {
+window.tpRenderAiSpec = function (stage, input, canvasSpec, resolvedBindings, resolvedLayout) {
   TP_STATE.lastInput          = input || null;
   TP_STATE.lastCanvas         = canvasSpec || null;
   TP_STATE.lastStyleBindings  = resolvedBindings || {};
+  TP_STATE.lastResolvedLayout = resolvedLayout || null;
   TP_STATE.lastMediaId        = (input && input.media_id) || null;
   if (!stage || !canvasSpec) return;
-  drawTpCanvas(stage, input || {}, canvasSpec);
+  drawTpCanvas(stage, input || {}, canvasSpec, resolvedLayout || null);
 };
 })();

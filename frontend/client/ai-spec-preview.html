@@ -168,13 +168,19 @@
 
   <main>
     <section class="panel">
-      <h2>Render</h2>
+      <h2 style="display:flex;align-items:center;justify-content:space-between;">
+        Render
+        <span style="display:inline-flex;gap:6px;align-items:center;">
+          <button id="toggleResolved" class="toggle-btn" type="button" data-mode="legacy">Legacy render</button>
+          <span class="helper" style="font-size:9px;color:#666;">click to A/B</span>
+        </span>
+      </h2>
       <div class="stage-wrap">
         <div id="tpStageFrame" class="tp-stage-frame">
           <div id="tpStage" class="tp-stage"></div>
         </div>
       </div>
-      <p class="helper">Drawn via the same templatePreview.js renderer the hand-authored templates use. Stage scales to the canvas spec's reported aspect ratio.</p>
+      <p class="helper">Drawn via the same templatePreview.js renderer the hand-authored templates use. Stage scales to the canvas spec's reported aspect ratio. Click the button above to flip between the legacy CSS-driven render and the Resolver-driven render (Phase 5b.2 — applies computed font sizes, padding, post-fallback component variants).</p>
       <div id="warningsBlock"></div>
     </section>
 
@@ -397,12 +403,35 @@
           '</ul></div>';
       }
 
-      // Render
+      // Render — Phase 5b.2 adds an A/B toggle. Legacy = canvas-spec
+      // only; Resolver = pass resolvedLayout to drawTpCanvas which
+      // applies post-fallback component_style + computed font/padding
+      // inline. Toggle re-renders without a re-fetch.
       const stage = document.getElementById('tpStage');
-      if (typeof window.tpRenderAiSpec === 'function') {
-        window.tpRenderAiSpec(stage, data.input || {}, data.spec, data.resolvedBindings || {});
-      } else {
-        stage.innerHTML = '<div class="error" style="margin:10px;">templatePreview.js did not expose tpRenderAiSpec. Hard refresh.</div>';
+      const toggleResolvedBtn = document.getElementById('toggleResolved');
+      function renderInMode(mode) {
+        if (typeof window.tpRenderAiSpec !== 'function') {
+          stage.innerHTML = '<div class="error" style="margin:10px;">templatePreview.js did not expose tpRenderAiSpec. Hard refresh.</div>';
+          return;
+        }
+        const resolved = mode === 'resolver' ? data.resolvedLayout : null;
+        window.tpRenderAiSpec(stage, data.input || {}, data.spec, data.resolvedBindings || {}, resolved);
+      }
+      renderInMode('legacy');
+      toggleResolvedBtn.addEventListener('click', () => {
+        const current = toggleResolvedBtn.dataset.mode || 'legacy';
+        const next = current === 'legacy' ? 'resolver' : 'legacy';
+        toggleResolvedBtn.dataset.mode = next;
+        toggleResolvedBtn.textContent = next === 'resolver' ? 'Resolver render' : 'Legacy render';
+        toggleResolvedBtn.style.background = next === 'resolver' ? 'rgba(52,211,153,0.18)' : '';
+        toggleResolvedBtn.style.borderColor = next === 'resolver' ? '#34d399' : '';
+        toggleResolvedBtn.style.color = next === 'resolver' ? '#34d399' : '';
+        renderInMode(next);
+      });
+      if (!data.resolvedLayout) {
+        toggleResolvedBtn.disabled = true;
+        toggleResolvedBtn.style.opacity = '0.4';
+        toggleResolvedBtn.title = 'No ResolvedLayoutArtifact yet — shadow Resolver hasn\'t fired for this canvas.';
       }
     }
 

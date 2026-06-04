@@ -204,6 +204,13 @@
       <div id="candidatesBlock" style="display:none;"></div>
 
       <h2 style="margin-top:18px;display:flex;align-items:center;justify-content:space-between;">
+        Copy Candidates <span style="font-size:9px;color:#888;letter-spacing:0;text-transform:none;font-weight:400;">(Phase 4 — style-aware)</span>
+        <button id="toggleCopyCands" class="toggle-btn" type="button">show</button>
+      </h2>
+      <p class="helper">Style-tailored copy candidates the Generator picked from. 3-5 distinct headlines / subheadlines / eyebrows / CTAs per (brand × product × creativeStyle), cached per cell. The Generator's <code>copy_picks</code> mechanism selects by index.</p>
+      <div id="copyCandsBlock" style="display:none;"></div>
+
+      <h2 style="margin-top:18px;display:flex;align-items:center;justify-content:space-between;">
         Creative Director Concepts <span style="font-size:9px;color:#888;letter-spacing:0;text-transform:none;font-weight:400;">(Phase 1 shadow)</span>
         <button id="toggleConcepts" class="toggle-btn" type="button">show</button>
       </h2>
@@ -296,6 +303,17 @@
         toggleBtn.textContent = showing ? 'show' : 'hide';
       });
 
+      // Phase 4 — Copy Candidates block
+      renderCopyCandidates(data.copyCandidates);
+      const toggleCopyBtn = document.getElementById('toggleCopyCands');
+      const copyBlock     = document.getElementById('copyCandsBlock');
+      toggleCopyBtn.addEventListener('click', () => {
+        const showing = copyBlock.style.display !== 'none';
+        copyBlock.style.display = showing ? 'none' : 'block';
+        toggleCopyBtn.textContent = showing ? 'show' : 'hide';
+      });
+      if (!data.copyCandidates) toggleCopyBtn.textContent = 'show (none yet)';
+
       // Phase 3 — Candidates & Judge block
       renderCandidates(data.multiCandidate);
       const toggleCandsBtn = document.getElementById('toggleCandidates');
@@ -368,6 +386,38 @@
       } else {
         stage.innerHTML = '<div class="error" style="margin:10px;">templatePreview.js did not expose tpRenderAiSpec. Hard refresh.</div>';
       }
+    }
+
+    // Phase 4 — render the style-aware copy candidates artifact.
+    function renderCopyCandidates(cc) {
+      const block = document.getElementById('copyCandsBlock');
+      if (!cc) {
+        block.innerHTML = '<p class="helper">(no CopyCandidatesArtifact for this (brand × product × creativeStyle) cell yet — eager derivation hasn\'t fired)</p>';
+        return;
+      }
+      const cands = cc.candidates || {};
+      const renderList = (label, arr) => {
+        if (!Array.isArray(arr) || !arr.length) return '';
+        return `
+          <div style="margin-bottom:12px;">
+            <div style="font-size:9px;color:#888;letter-spacing:0.08em;text-transform:uppercase;font-weight:700;margin-bottom:4px;">${label} <span style="color:#555;font-weight:400;">(${arr.length})</span></div>
+            <ul style="margin:0;padding-left:18px;font-size:12px;color:#cfcfcf;line-height:1.55;">
+              ${arr.map(s => `<li>${window.escapeHtml(s)}</li>`).join('')}
+            </ul>
+          </div>
+        `;
+      };
+      block.innerHTML = `
+        <div style="background:#0e0e0e;border:1px solid #1f1f1f;border-radius:6px;padding:10px 12px;margin-bottom:14px;font-size:11px;color:#888;">
+          Style: <strong style="color:#fafafa;">${window.escapeHtml(cc.creativeStyle)}</strong> ·
+          Model: ${window.escapeHtml(cc.modelId || '-')} ·
+          Generated: ${cc.createdAt ? new Date(cc.createdAt).toLocaleString() : '-'}
+        </div>
+        ${renderList('Headlines',       cands.headlines)}
+        ${renderList('Subheadlines',    cands.subheadlines)}
+        ${renderList('Eyebrows',        cands.eyebrows)}
+        ${renderList('CTA micro-copy',  cands.cta_micro_copy)}
+      `;
     }
 
     // Phase 3 — render multi-candidate + Judge result.

@@ -167,6 +167,55 @@
     return CANVAS_DIMS[ratio] || CANVAS_DIMS['1:1'];
   }
 
+  // Phase 5b helpers — z-index from spec layer + dual-classing for
+  // rs-component-variants.css activation. Both live up here so
+  // drawTpCanvas can use them inline at zone-creation time.
+
+  // Spec's `layer` field → numeric z-index. Numeric layers (Phase 0
+  // contract: 0=back .. N=front) pass through directly. String layers
+  // (legacy V1) map via this table so background-layer panels sit
+  // ABOVE media-layer media (the LLM's actual intent for "full-bleed
+  // hero + bottom panel" archetypes).
+  const LAYER_STRING_TO_Z = {
+    media:      0,
+    background: 1,   // panels above the photo, below copy
+    proof:      2,
+    copy:       3,
+    cta:        4,
+    chrome:     5    // logos / debug overlays / anything that must always sit on top
+  };
+  function layerToZIndex(layer) {
+    if (typeof layer === 'number') return layer;
+    if (typeof layer === 'string' && LAYER_STRING_TO_Z[layer] != null) return LAYER_STRING_TO_Z[layer];
+    return null;
+  }
+
+  // Legacy V1 zone.kind → Phase 0 role. Mirrors aiVocabulary.LEGACY_KIND_ALIASES.
+  // Used only for the dual-classing class-name derivation; doesn't
+  // change CSS class names emitted via the legacy tp-zone.kind-* path.
+  const LEGACY_KIND_TO_ROLE = {
+    media:         'hero_media',
+    text:          'headline',
+    quote_card:    'quote',
+    comment_card:  'comment',
+    proof_bar:     'rating',
+    badge_row:     'badges',
+    eyebrow_rules: 'eyebrow',
+    metrics_row:   'stat',
+    identity_row:  'creator',
+    review_stack:  'quote'
+  };
+
+  // Build the rs-<role>-<variant> class string for a zone. Returns ''
+  // when we can't derive both role and variant — the legacy
+  // tp-zone.kind-X.style-Y classes still apply in that case.
+  function rsClassFor(zone) {
+    const role    = zone.role || LEGACY_KIND_TO_ROLE[zone.kind] || zone.kind || '';
+    const variant = zone.component_style || zone.style_variant || '';
+    if (!role || !variant) return '';
+    return `rs-${String(role).replace(/_/g, '-')}-${String(variant).replace(/_/g, '-')}`;
+  }
+
   // Size the frame to the canvas aspect, the stage to canvas pixel
   // dimensions, set the em-base font-size relative to canvas width
   // (so production text sizes apply during DOM rendering), and apply
@@ -988,11 +1037,27 @@
       const aspectCls = (zone.rect && zone.rect.w > 0 && zone.rect.h > 0 && zone.rect.w <= zone.rect.h)
         ? ' tp-zone-stack-vertical'
         : '';
-      el.className = `tp-zone kind-${zone.kind}${variantCls}${solidCls}${aspectCls}`;
+      // Dual-classing — emit the Phase 0 rs-<role>-<variant> class name
+      // alongside the legacy tp-zone kind/style classes. Activates the
+      // rich rs-component-variants.css rules without removing legacy
+      // fallback CSS. Works for V1 specs (kind+style_variant → role
+      // via LEGACY_KIND_TO_ROLE) AND V2 specs (zone.role + zone.component_style
+      // direct).
+      const rsCls = rsClassFor(zone);
+      el.className = `tp-zone kind-${zone.kind}${variantCls}${solidCls}${aspectCls}${rsCls ? ' ' + rsCls : ''}`;
       el.style.left   = `${(zone.rect.x / w * 100).toFixed(2)}%`;
       el.style.top    = `${(zone.rect.y / h * 100).toFixed(2)}%`;
       el.style.width  = `${(zone.rect.w / w * 100).toFixed(2)}%`;
       el.style.height = `${(zone.rect.h / h * 100).toFixed(2)}%`;
+      // Z-index from the spec's layer field (overrides the legacy
+      // kind-based CSS rules where kind=panel was hardcoded to z-index 0
+      // and everything else to z-index 1). Background-layer panels can
+      // now actually sit ABOVE media-layer media, which is how the LLM
+      // intended composition like "full-bleed hero + bottom panel" to
+      // work. Numeric layer (Phase 0 contract) wins over string layer
+      // (legacy V1).
+      const zIdx = layerToZIndex(zone.layer);
+      if (zIdx != null) el.style.zIndex = String(zIdx);
       // Project the FONT scaler as a CSS var so the matching CSS
       // font-size rules in ads.html (eyebrow_rules / proof_bar /
       // badge_row callouts / quote_card with_author_photo) read it

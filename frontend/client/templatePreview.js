@@ -419,7 +419,20 @@
       const isRenderMode = !!force.layoutInputArtifactId;
       let res;
       if (isRenderMode) {
-        res = await fetch(`/api/layout-input/by-id/${encodeURIComponent(force.layoutInputArtifactId)}`);
+        // Phase 2 — forward the V2 query params from the page URL onto
+        // the /by-id fetch so routes/layout.js can dispatch through the
+        // Director-driven Generator. renderService sets v2 / campaignKind
+        // / creativeIntent / productId when Campaign.aiCreativeV2Enabled.
+        const pageParams = new URLSearchParams(window.location.search);
+        const fwd = new URLSearchParams();
+        for (const k of ['v2', 'campaignKind', 'creativeIntent', 'productId']) {
+          const v = pageParams.get(k);
+          if (v) fwd.set(k, v);
+        }
+        const qs = fwd.toString();
+        res = await fetch(
+          `/api/layout-input/by-id/${encodeURIComponent(force.layoutInputArtifactId)}${qs ? '?' + qs : ''}`
+        );
       } else {
         res = await fetch('/api/layout-input?include=canvas', {
           method: 'POST',

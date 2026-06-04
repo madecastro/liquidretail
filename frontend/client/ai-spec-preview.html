@@ -373,13 +373,22 @@
         listEl.innerHTML = '<p class="helper">(artifact has no concepts)</p>';
         return;
       }
-      listEl.innerHTML = concepts.map((c, i) => `
-        <div style="background:#131313;border:1px solid #1f1f1f;border-radius:8px;padding:12px;margin-bottom:10px;">
+      const pickedId = direction.pickedConceptId || null;
+      const consumed = !!direction.consumedByThisArtifact;
+      listEl.innerHTML = concepts.map((c, i) => {
+        const isPicked = pickedId && c.concept_id === pickedId;
+        const accent = isPicked ? 'border:2px solid #34d399;background:#0e1d18;' : 'border:1px solid #1f1f1f;';
+        const badge = isPicked
+          ? `<span style="background:#34d399;color:#062014;font-size:9px;padding:2px 8px;border-radius:999px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">${consumed ? '✓ Used by Generator' : 'Picked but not consumed (V1 ad)'}</span>`
+          : '';
+        return `
+        <div style="background:#131313;${accent}border-radius:8px;padding:12px;margin-bottom:10px;">
           <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
             <span style="font-size:9px;color:#666;letter-spacing:0.08em;text-transform:uppercase;font-weight:700;">Concept ${i + 1}</span>
             <strong style="color:#fafafa;font-size:13px;">${fmt(c.name)}</strong>
             <span class="meta-chip" style="font-size:10px;">${fmt(c.archetype)}</span>
             <span class="meta-chip" style="font-size:10px;">${fmt(c.layout_family)}</span>
+            ${badge}
           </div>
           <table class="zones" style="margin-top:6px;">
             <tbody>
@@ -392,7 +401,8 @@
           </table>
           <p style="margin-top:8px;font-size:11px;color:#cfcfcf;line-height:1.5;font-style:italic;">${fmt(c.rationale)}</p>
         </div>
-      `).join('');
+      `;
+      }).join('');
     }
 
     // Build a sorted-by-layer table of zones with the fields most useful

@@ -197,6 +197,13 @@
       <pre id="specJson" class="json"></pre>
 
       <h2 style="margin-top:18px;display:flex;align-items:center;justify-content:space-between;">
+        Candidates &amp; Judge <span style="font-size:9px;color:#888;letter-spacing:0;text-transform:none;font-weight:400;">(Phase 3)</span>
+        <button id="toggleCandidates" class="toggle-btn" type="button">show</button>
+      </h2>
+      <p class="helper">When the V2 path runs N&gt;1 candidates, all are stored on the artifact; the Judge picks the winner. This block shows the per-candidate criteria scores + the Judge's rationale. Empty for V1/single-candidate ads.</p>
+      <div id="candidatesBlock" style="display:none;"></div>
+
+      <h2 style="margin-top:18px;display:flex;align-items:center;justify-content:space-between;">
         Creative Director Concepts <span style="font-size:9px;color:#888;letter-spacing:0;text-transform:none;font-weight:400;">(Phase 1 shadow)</span>
         <button id="toggleConcepts" class="toggle-btn" type="button">show</button>
       </h2>
@@ -289,6 +296,19 @@
         toggleBtn.textContent = showing ? 'show' : 'hide';
       });
 
+      // Phase 3 — Candidates & Judge block
+      renderCandidates(data.multiCandidate);
+      const toggleCandsBtn = document.getElementById('toggleCandidates');
+      const candsBlock     = document.getElementById('candidatesBlock');
+      toggleCandsBtn.addEventListener('click', () => {
+        const showing = candsBlock.style.display !== 'none';
+        candsBlock.style.display = showing ? 'none' : 'block';
+        toggleCandsBtn.textContent = showing ? 'show' : 'hide';
+      });
+      if (!data.multiCandidate || (data.multiCandidate.candidateCount || 1) <= 1) {
+        toggleCandsBtn.textContent = 'show (single candidate)';
+      }
+
       // Phase 1 — Creative Director concepts block
       renderCreativeDirection(data.creativeDirection);
       const toggleConceptsBtn = document.getElementById('toggleConcepts');
@@ -348,6 +368,45 @@
       } else {
         stage.innerHTML = '<div class="error" style="margin:10px;">templatePreview.js did not expose tpRenderAiSpec. Hard refresh.</div>';
       }
+    }
+
+    // Phase 3 — render multi-candidate + Judge result.
+    function renderCandidates(mc) {
+      const block = document.getElementById('candidatesBlock');
+      if (!mc || (mc.candidateCount || 1) <= 1) {
+        block.innerHTML = '<p class="helper">(single candidate — no Judge invoked)</p>';
+        return;
+      }
+      const winner = mc.winnerSpecIndex ?? 0;
+      const cands = mc.candidates || [];
+      const fmt = (v) => v == null ? '<span style="color:#555;">—</span>' : window.escapeHtml(String(v));
+      const headerBits = [];
+      headerBits.push(`<strong style="color:#fafafa;">${cands.length} candidates</strong>`);
+      headerBits.push(`winner: <span style="color:#34d399;">#${winner}</span>`);
+      if (mc.judgeConfidence != null) headerBits.push(`confidence ${Number(mc.judgeConfidence).toFixed(2)}`);
+      let html = `<div style="background:#0e0e0e;border:1px solid #1f1f1f;border-radius:6px;padding:10px 12px;margin-bottom:14px;font-size:11px;color:#cfcfcf;">${headerBits.join(' · ')}</div>`;
+      if (mc.judgeRationale) {
+        html += `<div style="background:#131313;border-left:3px solid #34d399;padding:10px 14px;border-radius:0 6px 6px 0;margin-bottom:14px;font-size:12px;color:#cfcfcf;line-height:1.5;font-style:italic;">Judge: ${window.escapeHtml(mc.judgeRationale)}</div>`;
+      }
+      html += cands.map((c, i) => {
+        const isWin = i === winner;
+        const accent = isWin ? 'border:2px solid #34d399;background:#0e1d18;' : 'border:1px solid #1f1f1f;';
+        const hs = c.hierarchy_spec || {};
+        const zoneCount = Array.isArray(c.zones) ? c.zones.length : 0;
+        return `
+          <div style="background:#131313;${accent}border-radius:8px;padding:12px;margin-bottom:10px;">
+            <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;">
+              <span style="font-size:9px;color:#666;letter-spacing:0.08em;text-transform:uppercase;font-weight:700;">Candidate ${i}</span>
+              ${isWin ? `<span style="background:#34d399;color:#062014;font-size:9px;padding:2px 8px;border-radius:999px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">★ Winner</span>` : ''}
+              <span class="meta-chip" style="font-size:10px;">${fmt(hs.layout?.layout_family)}</span>
+              <span class="meta-chip" style="font-size:10px;">${fmt(hs.strategy?.social_proof_type)}</span>
+              <span class="meta-chip" style="font-size:10px;">zones: ${zoneCount}</span>
+            </div>
+            <p style="margin:8px 0 0;font-size:11px;color:#cfcfcf;line-height:1.5;font-style:italic;">${fmt(c.rationale)}</p>
+          </div>
+        `;
+      }).join('');
+      block.innerHTML = html;
     }
 
     // Phase 1 — render the Creative Director output (shadow mode).

@@ -204,6 +204,13 @@
       <div id="candidatesBlock" style="display:none;"></div>
 
       <h2 style="margin-top:18px;display:flex;align-items:center;justify-content:space-between;">
+        Resolved Layout <span style="font-size:9px;color:#888;letter-spacing:0;text-transform:none;font-weight:400;">(Phase 5a shadow)</span>
+        <button id="toggleResolved" class="toggle-btn" type="button">show</button>
+      </h2>
+      <p class="helper">What the backend Resolver produced for this canvas. Slot values, fallback chain decisions, role downgrades, validation outcomes. Renderer doesn't yet consume this — diagnostic-only through Phase 5b.</p>
+      <div id="resolvedBlock" style="display:none;"></div>
+
+      <h2 style="margin-top:18px;display:flex;align-items:center;justify-content:space-between;">
         Copy Candidates <span style="font-size:9px;color:#888;letter-spacing:0;text-transform:none;font-weight:400;">(Phase 4 — style-aware)</span>
         <button id="toggleCopyCands" class="toggle-btn" type="button">show</button>
       </h2>
@@ -303,6 +310,17 @@
         toggleBtn.textContent = showing ? 'show' : 'hide';
       });
 
+      // Phase 5a — Resolved Layout block (shadow)
+      renderResolvedLayout(data.resolvedLayout);
+      const toggleResBtn = document.getElementById('toggleResolved');
+      const resBlock     = document.getElementById('resolvedBlock');
+      toggleResBtn.addEventListener('click', () => {
+        const showing = resBlock.style.display !== 'none';
+        resBlock.style.display = showing ? 'none' : 'block';
+        toggleResBtn.textContent = showing ? 'show' : 'hide';
+      });
+      if (!data.resolvedLayout) toggleResBtn.textContent = 'show (none yet)';
+
       // Phase 4 — Copy Candidates block
       renderCopyCandidates(data.copyCandidates);
       const toggleCopyBtn = document.getElementById('toggleCopyCands');
@@ -386,6 +404,95 @@
       } else {
         stage.innerHTML = '<div class="error" style="margin:10px;">templatePreview.js did not expose tpRenderAiSpec. Hard refresh.</div>';
       }
+    }
+
+    // Phase 5a — render the ResolvedLayoutArtifact (shadow). Shows
+    // resolution status, validation outcomes, fallback decisions,
+    // per-zone resolved slots + downgraded component_styles.
+    function renderResolvedLayout(rl) {
+      const block = document.getElementById('resolvedBlock');
+      if (!rl) {
+        block.innerHTML = '<p class="helper">(no ResolvedLayoutArtifact yet — shadow Resolver hasn\'t fired for this canvas, or this is a pre-Phase-5 ad)</p>';
+        return;
+      }
+      const fmt = (v) => v == null || v === '' ? '<span style="color:#555;">—</span>' : window.escapeHtml(String(v));
+      const statusColor = { resolved: '#34d399', resolved_with_fallbacks: '#facc15', partial: '#facc15', failed: '#f87171' };
+      const sColor = statusColor[rl.resolutionStatus] || '#888';
+      const v = rl.validation || {};
+      const statusChip = (label, val) => {
+        const c = val === 'fail' ? '#f87171' : val === 'warn' || val === 'partial' ? '#facc15' : '#34d399';
+        return `<span style="background:rgba(255,255,255,0.04);border:1px solid ${c};color:${c};padding:2px 8px;border-radius:999px;font-size:9px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">${label}: ${val}</span>`;
+      };
+      let html = `
+        <div style="background:#0e0e0e;border:1px solid #1f1f1f;border-radius:6px;padding:12px;margin-bottom:14px;">
+          <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
+            <span style="font-size:9px;color:#888;letter-spacing:0.08em;text-transform:uppercase;font-weight:700;">Status</span>
+            <strong style="color:${sColor};font-size:13px;">${fmt(rl.resolutionStatus)}</strong>
+            <span style="color:#888;font-size:11px;">${rl.durationMs || 0}ms · canvas ${rl.canvas?.width}×${rl.canvas?.height}</span>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            ${statusChip('bounds',   v.bounds_check    || '-')}
+            ${statusChip('slots',    v.slot_resolution || '-')}
+            ${statusChip('overlap',  v.overlap_check   || '-')}
+            ${statusChip('contrast', v.contrast_check  || '-')}
+            ${statusChip('safe',     v.safe_area_check || '-')}
+          </div>
+        </div>
+      `;
+      if (Array.isArray(rl.fallbacksUsed) && rl.fallbacksUsed.length) {
+        html += `<div style="background:#1d1300;border:1px solid #facc15;border-radius:6px;padding:10px 12px;margin-bottom:14px;">
+          <div style="font-size:9px;color:#facc15;letter-spacing:0.08em;text-transform:uppercase;font-weight:700;margin-bottom:6px;">Fallbacks applied (${rl.fallbacksUsed.length})</div>
+          <ul style="margin:0;padding-left:18px;font-size:11px;color:#fde68a;line-height:1.5;">
+            ${rl.fallbacksUsed.map(fb => `<li><code style="color:#fde68a;">${fmt(fb.zone_id)}</code> ${fmt(fb.role)}: ${fmt(fb.from_component_style)} → ${fmt(fb.to_component_style || 'remove')} <span style="color:#a8a29e;">— ${fmt(fb.reason)}</span></li>`).join('')}
+          </ul>
+        </div>`;
+      }
+      if (Array.isArray(rl.warnings) && rl.warnings.length) {
+        html += `<div style="background:#1d0e0e;border:1px solid #f87171;border-radius:6px;padding:10px 12px;margin-bottom:14px;">
+          <div style="font-size:9px;color:#f87171;letter-spacing:0.08em;text-transform:uppercase;font-weight:700;margin-bottom:6px;">Warnings (${rl.warnings.length})</div>
+          <ul style="margin:0;padding-left:18px;font-size:11px;color:#fecaca;line-height:1.5;">
+            ${rl.warnings.map(w => `<li>[${fmt(w.severity)}] ${fmt(w.message)}${w.zone_id ? ` <code style="color:#fecaca;">(${fmt(w.zone_id)})</code>` : ''}</li>`).join('')}
+          </ul>
+        </div>`;
+      }
+      // Per-zone resolved table
+      const zones = Array.isArray(rl.resolvedZones) ? rl.resolvedZones : [];
+      if (zones.length) {
+        const slots = rl.resolvedData?.slots || {};
+        const previewSlot = (s) => {
+          if (!s) return '—';
+          const v = s.resolved_value;
+          if (v == null) return '<span style="color:#555;">null</span>';
+          if (typeof v === 'string') return window.escapeHtml(v.length > 80 ? v.slice(0, 80) + '…' : v);
+          if (Array.isArray(v))      return `[${v.length}]`;
+          if (v.text)                return window.escapeHtml(String(v.text).slice(0, 60));
+          if (v.image)               return '<span style="color:#88e0a0;">image</span>';
+          if (v.video)               return '<span style="color:#88e0a0;">video</span>';
+          return '<span style="color:#888;">obj</span>';
+        };
+        html += `
+          <table class="zones" style="margin-top:6px;">
+            <thead>
+              <tr><th>id</th><th>role</th><th>component_style</th><th>css_class</th><th>resolved</th><th>fallback?</th></tr>
+            </thead>
+            <tbody>
+              ${zones.map(z => {
+                const s = slots[z.id] || null;
+                const isFb = s && s.from_fallback != null;
+                return `<tr${z.removed ? ' style="opacity:0.4;text-decoration:line-through;"' : ''}>
+                  <td><strong>${fmt(z.id)}</strong></td>
+                  <td class="${z.role === 'panel' || z.role === 'scrim' ? 'panel-kind' : z.role === 'hero_media' ? 'media-kind' : 'text-kind'}">${fmt(z.role)}</td>
+                  <td>${fmt(z.component_style)}</td>
+                  <td style="color:#888;font-size:10px;">${fmt(z.css_class)}</td>
+                  <td>${previewSlot(s)}</td>
+                  <td>${isFb ? `<span style="color:#facc15;">${fmt(s.from_fallback)}</span>` : '<span style="color:#555;">—</span>'}</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        `;
+      }
+      block.innerHTML = html;
     }
 
     // Phase 4 — render the style-aware copy candidates artifact.

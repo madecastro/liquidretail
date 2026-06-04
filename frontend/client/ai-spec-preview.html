@@ -196,6 +196,16 @@
       <h2 style="margin-top:18px;">Canvas Spec (JSON)</h2>
       <pre id="specJson" class="json"></pre>
 
+      <h2 style="margin-top:18px;display:flex;align-items:center;justify-content:space-between;">
+        Creative Director Concepts <span style="font-size:9px;color:#888;letter-spacing:0;text-transform:none;font-weight:400;">(Phase 1 shadow)</span>
+        <button id="toggleConcepts" class="toggle-btn" type="button">show</button>
+      </h2>
+      <p class="helper">What the Creative Director would have picked for this (brand × product × campaignKind). Persisted but NOT yet consumed by the renderer. Phase 2 wires this to drive the Generator.</p>
+      <div id="conceptsBlock" style="display:none;">
+        <div id="conceptsInputSummary" style="margin-bottom:14px;"></div>
+        <div id="conceptsList"></div>
+      </div>
+
       <h2 style="margin-top:18px;">Hierarchy Spec <span style="font-size:9px;color:#888;letter-spacing:0;text-transform:none;">(shadow — strategy + layout intent, no rects)</span></h2>
       <p class="helper">Higher-level "design intent" pass — the vocabulary the LLM picks here gets formalized into enums + a constraint solver in a later slice. Renderer ignores this today.</p>
       <pre id="hierarchyJson" class="json"></pre>
@@ -279,6 +289,17 @@
         toggleBtn.textContent = showing ? 'show' : 'hide';
       });
 
+      // Phase 1 — Creative Director concepts block
+      renderCreativeDirection(data.creativeDirection);
+      const toggleConceptsBtn = document.getElementById('toggleConcepts');
+      const conceptsBlock     = document.getElementById('conceptsBlock');
+      toggleConceptsBtn.addEventListener('click', () => {
+        const showing = conceptsBlock.style.display !== 'none';
+        conceptsBlock.style.display = showing ? 'none' : 'block';
+        toggleConceptsBtn.textContent = showing ? 'show' : 'hide';
+      });
+      if (!data.creativeDirection) toggleConceptsBtn.textContent = 'show (none yet)';
+
       // Prompt blocks — populate if captured. Older artifacts return
       // null/[] for these fields; show a hint in that case.
       const sysEl   = document.getElementById('promptSystemJson');
@@ -327,6 +348,51 @@
       } else {
         stage.innerHTML = '<div class="error" style="margin:10px;">templatePreview.js did not expose tpRenderAiSpec. Hard refresh.</div>';
       }
+    }
+
+    // Phase 1 — render the Creative Director output (shadow mode).
+    // Shows the input_summary block and each concept's strategy fields.
+    function renderCreativeDirection(direction) {
+      const inputEl = document.getElementById('conceptsInputSummary');
+      const listEl  = document.getElementById('conceptsList');
+      if (!direction) {
+        inputEl.innerHTML = '';
+        listEl.innerHTML  = '<p class="helper">(no Creative Direction artifact yet — shadow run hasn\'t fired for this brand/product, or this is a pre-Phase-1 ad)</p>';
+        return;
+      }
+      const fmt = (v) => v == null || v === '' ? '<span style="color:#555;">—</span>' : window.escapeHtml(String(v));
+      const signals = direction.inputSummary || {};
+      inputEl.innerHTML = `
+        <details style="background:#0e0e0e;border:1px solid #1f1f1f;border-radius:6px;padding:8px 12px;">
+          <summary style="cursor:pointer;font-size:11px;color:#888;letter-spacing:0.04em;text-transform:uppercase;">Input Summary (signals the Director saw)</summary>
+          <pre class="json" style="margin-top:8px;max-height:240px;">${window.escapeHtml(JSON.stringify(signals, null, 2))}</pre>
+        </details>
+      `;
+      const concepts = Array.isArray(direction.concepts) ? direction.concepts : [];
+      if (!concepts.length) {
+        listEl.innerHTML = '<p class="helper">(artifact has no concepts)</p>';
+        return;
+      }
+      listEl.innerHTML = concepts.map((c, i) => `
+        <div style="background:#131313;border:1px solid #1f1f1f;border-radius:8px;padding:12px;margin-bottom:10px;">
+          <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
+            <span style="font-size:9px;color:#666;letter-spacing:0.08em;text-transform:uppercase;font-weight:700;">Concept ${i + 1}</span>
+            <strong style="color:#fafafa;font-size:13px;">${fmt(c.name)}</strong>
+            <span class="meta-chip" style="font-size:10px;">${fmt(c.archetype)}</span>
+            <span class="meta-chip" style="font-size:10px;">${fmt(c.layout_family)}</span>
+          </div>
+          <table class="zones" style="margin-top:6px;">
+            <tbody>
+              <tr><td style="color:#888;">emotional_hook</td><td>${fmt(c.emotional_hook)}</td></tr>
+              <tr><td style="color:#888;">social_proof_type</td><td>${fmt(c.social_proof_type)}</td></tr>
+              <tr><td style="color:#888;">priorities</td><td>product=${fmt(c.product_priority)} · ugc=${fmt(c.ugc_priority)} · comment=${fmt(c.comment_priority)} · stat=${fmt(c.stat_priority)}</td></tr>
+              <tr><td style="color:#888;">cta_emphasis</td><td>${fmt(c.cta_emphasis)}</td></tr>
+              <tr><td style="color:#888;">recommended_components</td><td><pre style="font-size:10px;background:#0a0a0a;padding:6px;border-radius:4px;color:#cfcfcf;margin:0;">${window.escapeHtml(JSON.stringify(c.recommended_components || {}, null, 2))}</pre></td></tr>
+            </tbody>
+          </table>
+          <p style="margin-top:8px;font-size:11px;color:#cfcfcf;line-height:1.5;font-style:italic;">${fmt(c.rationale)}</p>
+        </div>
+      `).join('');
     }
 
     // Build a sorted-by-layer table of zones with the fields most useful

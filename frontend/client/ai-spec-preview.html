@@ -473,16 +473,26 @@
         html += `
           <table class="zones" style="margin-top:6px;">
             <thead>
-              <tr><th>id</th><th>role</th><th>component_style</th><th>css_class</th><th>resolved</th><th>fallback?</th></tr>
+              <tr>
+                <th>id</th><th>role</th><th>component_style</th>
+                <th>font_px</th><th>line_px</th><th>pad v/h</th><th>max_lines</th>
+                <th>css_class</th><th>resolved</th><th>fallback?</th>
+              </tr>
             </thead>
             <tbody>
               ${zones.map(z => {
                 const s = slots[z.id] || null;
                 const isFb = s && s.from_fallback != null;
+                const c = z.computed || {};
+                const ruleColor = c.rule_source === 'default' ? '#facc15' : '#888';
                 return `<tr${z.removed ? ' style="opacity:0.4;text-decoration:line-through;"' : ''}>
                   <td><strong>${fmt(z.id)}</strong></td>
                   <td class="${z.role === 'panel' || z.role === 'scrim' ? 'panel-kind' : z.role === 'hero_media' ? 'media-kind' : 'text-kind'}">${fmt(z.role)}</td>
                   <td>${fmt(z.component_style)}</td>
+                  <td title="zone_em: ${fmt(c.zone_em)}; rule_source: ${fmt(c.rule_source)}" style="color:${ruleColor};">${c.font_size_px != null ? c.font_size_px : '—'}</td>
+                  <td style="color:#888;">${c.line_height_px != null ? c.line_height_px : '—'}</td>
+                  <td style="color:#888;font-size:10px;">${c.padding_v_px != null ? c.padding_v_px : '—'}/${c.padding_h_px != null ? c.padding_h_px : '—'}</td>
+                  <td>${fmt(c.max_lines)}</td>
                   <td style="color:#888;font-size:10px;">${fmt(z.css_class)}</td>
                   <td>${previewSlot(s)}</td>
                   <td>${isFb ? `<span style="color:#facc15;">${fmt(s.from_fallback)}</span>` : '<span style="color:#555;">—</span>'}</td>
@@ -490,6 +500,7 @@
               }).join('')}
             </tbody>
           </table>
+          <p class="helper" style="margin-top:6px;font-size:10px;">Yellow font_px cells = rule_source: default (no specific tp-zones.css rule matched the (role, component_style) pair). Tighten the Resolver's STYLE_RULES_BY_ROLE_VARIANT for those.</p>
         `;
       }
       block.innerHTML = html;

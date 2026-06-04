@@ -18,6 +18,10 @@
        shared with ai-spec-preview.html so both pages render zones
        the same way. Page-chrome styles stay inline below. -->
   <link rel="stylesheet" href="tp-zones.css" />
+  <!-- Phase 0 component-variant CSS (rs-<role>-<component_style>).
+       Sits ALONGSIDE tp-zones.css during the migration; renderer adds
+       both tp-zone classes and rs-* classes per zone. -->
+  <link rel="stylesheet" href="rs-component-variants.css" />
   <style>
     /* Default UI font for the page chrome only — scoped to body so
        .tp-stage descendants can pick up var(--brand-font). The previous

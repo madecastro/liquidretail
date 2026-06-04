@@ -412,6 +412,9 @@
        not a stylesheet; tp-zones.css now holds the renderer CSS in a
        form both pages can link to. -->
   <link rel="stylesheet" href="tp-zones.css" />
+  <!-- Phase 0 component-variant CSS (rs-<role>-<component_style>).
+       Coexists with tp-zones.css through the migration. -->
+  <link rel="stylesheet" href="rs-component-variants.css" />
   <!-- Display font + UI font referenced by the renderer CSS. Without
        these, .style-display_script falls through to `cursive` and
        body text falls through to `system-ui`. -->

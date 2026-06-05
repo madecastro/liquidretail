@@ -77,6 +77,32 @@
       border-radius: 6px;
       overflow: hidden;
     }
+    /* Side-by-side render diagnostic — two stages, same width, stacked
+       on narrow viewports. */
+    .render-pair {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+    @media (max-width: 900px) {
+      .render-pair { grid-template-columns: 1fr; }
+    }
+    .render-col .stage-wrap { max-width: 100%; }
+    .render-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .render-tag {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      padding: 3px 8px;
+      border: 1px solid;
+      border-radius: 4px;
+    }
     /* tpStageFrame + tpStage themselves are styled by tp-zones.css
        (the shared renderer CSS). No need to override here — the page
        previously defined .tp-stage locally because tp-zones.css wasn't
@@ -168,19 +194,32 @@
 
   <main>
     <section class="panel">
-      <h2 style="display:flex;align-items:center;justify-content:space-between;">
-        Render
-        <span style="display:inline-flex;gap:6px;align-items:center;">
-          <button id="toggleResolved" class="toggle-btn" type="button" data-mode="legacy">Legacy render</button>
-          <span class="helper" style="font-size:9px;color:#666;">click to A/B</span>
-        </span>
-      </h2>
-      <div class="stage-wrap">
-        <div id="tpStageFrame" class="tp-stage-frame">
-          <div id="tpStage" class="tp-stage"></div>
+      <h2>Render — side-by-side diagnostic</h2>
+      <div class="render-pair">
+        <div class="render-col">
+          <div class="render-label">
+            <span class="render-tag" style="background:rgba(138,166,255,0.18);border-color:#8aa6ff;color:#8aa6ff;">CANVAS SPEC</span>
+            <span class="helper" style="font-size:10px;">LLM output (Generator)</span>
+          </div>
+          <div class="stage-wrap">
+            <div id="tpStageFrame" class="tp-stage-frame">
+              <div id="tpStage" class="tp-stage"></div>
+            </div>
+          </div>
+        </div>
+        <div class="render-col">
+          <div class="render-label">
+            <span class="render-tag" id="resolvedTag" style="background:rgba(52,211,153,0.18);border-color:#34d399;color:#34d399;">RESOLVED LAYOUT</span>
+            <span class="helper" style="font-size:10px;">post-JS resolver (fallbacks + computed styles)</span>
+          </div>
+          <div class="stage-wrap">
+            <div id="tpStageFrameResolved" class="tp-stage-frame">
+              <div id="tpStageResolved" class="tp-stage"></div>
+            </div>
+          </div>
         </div>
       </div>
-      <p class="helper">Drawn via the same templatePreview.js renderer the hand-authored templates use. Stage scales to the canvas spec's reported aspect ratio. Click the button above to flip between the legacy CSS-driven render and the Resolver-driven render (Phase 5b.2 — applies computed font sizes, padding, post-fallback component variants).</p>
+      <p class="helper">Both panes draw via templatePreview.js. LEFT = canvasSpec only (legacy path, what the renderer does today); RIGHT = canvasSpec + ResolvedLayoutArtifact (Phase 5b.2 — post-fallback component variants, computed font/padding inline). Visual diffs between the two columns are exactly what flipping <code>RENDER_USE_RESOLVED=true</code> will change in production.</p>
       <div id="warningsBlock"></div>
 
       <h2 style="margin-top:18px;display:flex;align-items:center;justify-content:space-between;">
@@ -421,35 +460,33 @@
           '</ul></div>';
       }
 
-      // Render — Phase 5b.2 adds an A/B toggle. Legacy = canvas-spec
-      // only; Resolver = pass resolvedLayout to drawTpCanvas which
-      // applies post-fallback component_style + computed font/padding
-      // inline. Toggle re-renders without a re-fetch.
-      const stage = document.getElementById('tpStage');
-      const toggleResolvedBtn = document.getElementById('toggleResolved');
-      function renderInMode(mode) {
-        if (typeof window.tpRenderAiSpec !== 'function') {
-          stage.innerHTML = '<div class="error" style="margin:10px;">templatePreview.js did not expose tpRenderAiSpec. Hard refresh.</div>';
-          return;
+      // Render — Phase 5b.2+ shows BOTH panes simultaneously so visual
+      // diffs are obvious without clicking back and forth. LEFT pane =
+      // canvasSpec only (legacy path), RIGHT pane = canvasSpec + the
+      // ResolvedLayoutArtifact (post-fallback component variants,
+      // computed inline styles). Flipping RENDER_USE_RESOLVED=true in
+      // production swaps the headless renderer from left-pane behavior
+      // to right-pane behavior.
+      const stageLegacy   = document.getElementById('tpStage');
+      const stageResolved = document.getElementById('tpStageResolved');
+      const resolvedTag   = document.getElementById('resolvedTag');
+      if (typeof window.tpRenderAiSpec !== 'function') {
+        const msg = '<div class="error" style="margin:10px;">templatePreview.js did not expose tpRenderAiSpec. Hard refresh.</div>';
+        stageLegacy.innerHTML = msg;
+        stageResolved.innerHTML = msg;
+      } else {
+        window.tpRenderAiSpec(stageLegacy, data.input || {}, data.spec, data.resolvedBindings || {}, null);
+        if (data.resolvedLayout) {
+          window.tpRenderAiSpec(stageResolved, data.input || {}, data.spec, data.resolvedBindings || {}, data.resolvedLayout);
+        } else {
+          stageResolved.innerHTML = '<div class="helper" style="padding:20px;text-align:center;color:#666;">(no ResolvedLayoutArtifact yet — shadow Resolver hasn\'t fired for this canvas)</div>';
+          if (resolvedTag) {
+            resolvedTag.style.background = 'rgba(120,120,120,0.18)';
+            resolvedTag.style.borderColor = '#555';
+            resolvedTag.style.color = '#888';
+            resolvedTag.textContent = 'RESOLVED LAYOUT (none yet)';
+          }
         }
-        const resolved = mode === 'resolver' ? data.resolvedLayout : null;
-        window.tpRenderAiSpec(stage, data.input || {}, data.spec, data.resolvedBindings || {}, resolved);
-      }
-      renderInMode('legacy');
-      toggleResolvedBtn.addEventListener('click', () => {
-        const current = toggleResolvedBtn.dataset.mode || 'legacy';
-        const next = current === 'legacy' ? 'resolver' : 'legacy';
-        toggleResolvedBtn.dataset.mode = next;
-        toggleResolvedBtn.textContent = next === 'resolver' ? 'Resolver render' : 'Legacy render';
-        toggleResolvedBtn.style.background = next === 'resolver' ? 'rgba(52,211,153,0.18)' : '';
-        toggleResolvedBtn.style.borderColor = next === 'resolver' ? '#34d399' : '';
-        toggleResolvedBtn.style.color = next === 'resolver' ? '#34d399' : '';
-        renderInMode(next);
-      });
-      if (!data.resolvedLayout) {
-        toggleResolvedBtn.disabled = true;
-        toggleResolvedBtn.style.opacity = '0.4';
-        toggleResolvedBtn.title = 'No ResolvedLayoutArtifact yet — shadow Resolver hasn\'t fired for this canvas.';
       }
     }
 

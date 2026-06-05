@@ -543,11 +543,23 @@ export function Step2Picker({ value, onChange }: Props) {
   const totalSelected = value.productIds.length + value.mediaIds.length;
   const excludedCount = value.excludedPairings.length;
 
+  // Kind-aware step heading + helper. The inner ribbon sections used to
+  // duplicate this — operator saw two competing headlines ("Pick
+  // products + media" up top, "Pick the products to make ads for"
+  // inside). The inner SectionHeaders for the PRIMARY ribbon were
+  // dropped; this is the single source of truth.
+  const stepHeading = isBrandKind
+    ? 'Pick media for your brand ads'
+    : isProductKind
+      ? 'Pick products to make ads for'
+      : 'Pick products + media';
+  const stepHelper = isBrandKind
+    ? `Sorted by ad-fit — lifestyle, evergreen, and brand-only posts first. Tap a tile to queue it. ${totalSelected > 0 ? `${totalSelected} queued.` : ''}`
+    : isProductKind
+      ? `Each tile is one SKU. Pick as many as you want — the wizard generates ads for each. ${totalSelected > 0 ? `${totalSelected} selected.` : ''}`
+      : `Each product or media seeds creatives. The render path caps at 6 ads per run, so 1–2 picks usually fills the batch. ${totalSelected > 0 ? `${totalSelected} selected.` : ''}`;
   return (
-    <StepShell
-      heading="Pick products + media"
-      helper={`Each product or media seeds creatives. The render path caps at 6 ads per run, so 1–2 picks usually fills the batch. ${totalSelected > 0 ? `${totalSelected} selected.` : ''}`}
-    >
+    <StepShell heading={stepHeading} helper={stepHelper}>
       <VStack align="stretch" spacing={6}>
         {promoContext && <PromoContextBanner ctx={promoContext} />}
 
@@ -1090,10 +1102,7 @@ function ProductKindView(props: ProductKindViewProps) {
 
   return (
     <>
-      <SectionHeader
-        title="Pick the product(s) to make ads for"
-        subtitle="Each tile is one SKU. Pick as many as you want — the wizard generates ads for each."
-      />
+      {/* Primary ribbon — no inner header (StepShell carries it). */}
       <RibbonPicker
         items={products}
         getId={p => p.id}
@@ -1482,85 +1491,100 @@ function BrandUnifiedView(props: BrandUnifiedViewProps) {
     return lifestyleEligibleIds.has(mediaId);
   };
 
-  // Sort media by composite ad-fit so the most-pickable tiles sit at
-  // the left of the ribbon. Score weights:
-  //   - lifestyle / on_model shotType:        +30
-  //   - evergreen contentNature:              +20
-  //   - adReadiness (0–1):                    × 100
-  //   - engagement rate (0–1):                × 50
-  //   - falls back to likes+comments (capped) when engagement absent
-  // Untyped media (no classification) still score on engagement so
-  // they appear in the ribbon, just lower.
-  const sortedMedia = [...media]
-    .filter(m => mediaLifestyleOk(m.id))
-    .map(m => ({ m, score: brandAdFitScore(m) }))
-    .sort((a, b) => b.score - a.score)
-    .map(x => x.m);
-
-  // Primary ribbon: all eligible UGC + catalog imagery as a single
-  // sorted list. Operator clicks a tile to add it to their queue.
-  // Products + catalog alts come AFTER media — they're the constant
-  // brand inventory; UGC is where the variance lives. Suppressed for
-  // brand-kind: alt auto-fanout (lives in the main ribbon explicitly
-  // instead of cascading from a product pick).
-  const mainTiles: UnifiedTile[] = [];
-  for (const m of sortedMedia) {
-    mainTiles.push({ kind: 'media', media: m });
+  // Build the unified pool of tiles (UGC + brand-only posts + catalog
+  // alts + product heroes), score each, then sort the whole thing
+  // left → right. Operator sees the best ad-fit tiles first regardless
+  // of source.
+  //
+  // Score weights (see scoreTile below):
+  //   media UGC:
+  //     +30  lifestyle / on_model shotType
+  //     +25  brand_match (brand-only posts that match the brand but
+  //          no specific product — high signal for brand campaigns)
+  //     +20  evergreen contentNature
+  //     ×100 adReadiness (0–1)
+  //     ×50  engagement rate (0–1; fallback to clamped likes+comments)
+  //   catalog_alt:
+  //     +25  imageMediaId in lifestyleEligibleIds (lifestyle alt)
+  //     +15  baseline (clean studio shot, usually safe for ads)
+  //   product hero:
+  //     +10  baseline (constant brand inventory)
+  //
+  // brand_match posts get folded into the same pool so they sort
+  // alongside everything else instead of living in a separate "rec-
+  // ommended" rail.
+  type UnifiedScored = { tile: UnifiedTile; score: number };
+  const scored: UnifiedScored[] = [];
+  // UGC media + brand-only posts. Dedup by id since brand_match can
+  // overlap with the main media list.
+  const seenMediaIds = new Set<string>();
+  for (const m of media) {
+    if (!mediaLifestyleOk(m.id)) continue;
+    if (seenMediaIds.has(m.id)) continue;
+    seenMediaIds.add(m.id);
+    scored.push({ tile: { kind: 'media', media: m }, score: scoreMedia(m) });
   }
+  for (const m of brandMatches) {
+    if (!mediaLifestyleOk(m.id)) continue;
+    if (seenMediaIds.has(m.id)) continue;
+    seenMediaIds.add(m.id);
+    scored.push({ tile: { kind: 'media', media: m }, score: scoreMedia(m) });
+  }
+  // Catalog alts + product heroes.
   for (const p of products) {
-    mainTiles.push({ kind: 'product', product: p });
+    scored.push({ tile: { kind: 'product', product: p }, score: 10 });
     const altUrls = p.additionalImages || [];
     const altMediaIds = p.additionalImageMediaIds || [];
     for (let i = 0; i < altUrls.length; i++) {
       if (!altUrls[i]) continue;
       const altMediaId = altMediaIds[i] || null;
       if (!altLifestyleOk(altMediaId)) continue;
-      mainTiles.push({
-        kind: 'catalog_alt',
-        img: {
-          productId:           p.id,
-          productTitle:        p.title,
-          productSource:       p.source || null,
-          productLastSyncedAt: p.lastSyncedAt || null,
-          imageUrl:            altUrls[i],
-          imageMediaId:        altMediaId,
-          role:                'alt',
-          altIndex:            i + 1
-        }
+      const isLifestyleAlt = altMediaId && lifestyleEligibleIds?.has(altMediaId);
+      scored.push({
+        tile: {
+          kind: 'catalog_alt',
+          img: {
+            productId:           p.id,
+            productTitle:        p.title,
+            productSource:       p.source || null,
+            productLastSyncedAt: p.lastSyncedAt || null,
+            imageUrl:            altUrls[i],
+            imageMediaId:        altMediaId,
+            role:                'alt',
+            altIndex:            i + 1
+          }
+        },
+        score: 15 + (isLifestyleAlt ? 25 : 0)
       });
     }
   }
+  scored.sort((a, b) => b.score - a.score);
+  const mainTiles: UnifiedTile[] = scored.map(s => s.tile);
 
   // Subordinate ribbon — operator's queued picks. NO auto-fanout of
-  // related/matched media (per the brand-campaign UX rewrite); the
-  // queue is whatever the operator has actively selected from the
-  // primary ribbon above. Filters mainTiles down to picks.
+  // related/matched media; the queue is whatever the operator has
+  // actively selected from the primary ribbon above. Alts are now
+  // independently selectable via mediaSet (toggle their imageMediaId)
+  // so they queue exactly like UGC tiles.
   void catalogImagery;            // product-kind only — kept on props for symmetry
   void relatedProducts;           // recommendations no longer auto-surface in brand-kind subordinate
   void productMatchedRelated;
   void categoryMatchedRelated;
-  void brandMatches;
   void includeCategoryMatched;
   void includeBrandMatched;
   void onTierToggle;
   const queuedTiles = mainTiles.filter(t => {
     if (t.kind === 'product') return productSet.has(t.product.id);
     if (t.kind === 'media')   return mediaSet.has(t.media.id);
-    // catalog_alts are queued by absence-from-excludedPairings (they
-    // auto-fan out alongside their picked product); only show queued
-    // alts whose parent product is picked AND not in excludedPairings.
+    // catalog_alts are queued the same way as media — by their
+    // imageMediaId being in mediaSet (independent selection).
     const alt = t.img;
-    if (!productSet.has(alt.productId)) return false;
-    const altKey = alt.imageMediaId ? pairingKey(alt.productId, alt.imageMediaId) : null;
-    return altKey ? !excludedSet.has(altKey) : true;
+    return alt.imageMediaId ? mediaSet.has(alt.imageMediaId) : false;
   });
 
   return (
     <>
-      <SectionHeader
-        title="Pick the media for your brand ads"
-        subtitle="UGC posts and catalog photos, sorted by ad-fit (engagement, ad-readiness, lifestyle / evergreen first). Tap to add to your queue."
-      />
+      {/* Primary ribbon — no inner header (StepShell carries it). */}
       <UnifiedRibbon
         tiles={mainTiles}
         loading={loadingP || loadingM}
@@ -1596,20 +1620,20 @@ function BrandUnifiedView(props: BrandUnifiedViewProps) {
   );
 }
 
-// Composite ad-fit score used to sort the brand-kind primary ribbon
-// left → right. Higher = more pickable. Mirrors the signals the
-// rich UGC tile surfaces so the visual ranking matches the chips.
-function brandAdFitScore(m: MediaRow): number {
+// Composite ad-fit score for UGC tiles in the brand-kind primary
+// ribbon. Higher = ranks further left. Brand-only matches get an
+// explicit boost so they don't sit at the bottom of the engagement
+// sort despite being highly relevant to brand campaigns.
+function scoreMedia(m: MediaRow): number {
   let score = 0;
   const shot = String(m.shotType || '').toLowerCase();
   if (shot === 'lifestyle' || shot === 'on_model') score += 30;
+  if (m.matchTier === 'brand_match') score += 25;
   if (String(m.contentNature || '').toLowerCase() === 'evergreen') score += 20;
   if (typeof m.adReadiness === 'number') score += m.adReadiness * 100;
   if (typeof m.engagement  === 'number' && m.engagement > 0) {
     score += m.engagement * 50;
   } else {
-    // Fallback: clamp likes+comments to a 0–50 contribution so a viral
-    // outlier doesn't dominate sort across the brand.
     const totals = (m.likes ?? 0) + (m.comments ?? 0);
     score += Math.min(50, totals / 200);
   }
@@ -1698,36 +1722,33 @@ function UnifiedRibbon(props: UnifiedRibbonProps) {
               </Box>
             );
           }
-          // catalog_alt — auto-fanout default, click toggles exclusion.
-          // Selected look (purple border) means "will fan out when its
-          // parent product is in scope". Excluded look (dimmed +
-          // strikethrough) means the operator opted this alt out via
-          // a (productId, altMediaId) excludedPairings entry. Alts
-          // with no Media doc id (legacy catalog row without the
-          // wrapper materialized) render as informational and can't
-          // be toggled.
+          // catalog_alt — independently selectable. Click toggles the
+          // alt's imageMediaId into mediaSet (the same data structure
+          // UGC media tiles use), so the operator queues each alt
+          // explicitly rather than relying on auto-fanout from a
+          // product pick. Alts with no Media doc id (legacy catalog
+          // row without the wrapper materialized) render as
+          // informational and can't be toggled.
           const img = t.img;
-          const altKey = img.imageMediaId
-            ? pairingKey(img.productId, img.imageMediaId)
-            : null;
-          const altExcluded = altKey ? excludedSet.has(altKey) : false;
-          const altClickable = !!img.imageMediaId;
+          const altSelectable = !!img.imageMediaId;
+          const altSelected   = altSelectable ? mediaSet.has(img.imageMediaId!) : false;
           return (
             <Box key={`alt-${img.productId}-${img.altIndex || 0}-${idx}`} flexShrink={0}>
               <Box
-                as={altClickable ? 'button' : 'div'}
-                onClick={altClickable ? () => toggleExclude(img.productId, img.imageMediaId!) : undefined}
+                as={altSelectable ? 'button' : 'div'}
+                onClick={altSelectable ? () => toggleMedia(img.imageMediaId!) : undefined}
                 position="relative"
                 w="120px" h="120px"
                 borderRadius="md"
                 overflow="hidden"
                 bg="gray.100"
                 borderWidth="2px"
-                borderColor={altExcluded ? 'brand.border' : 'rsViolet.400'}
-                opacity={altExcluded ? 0.45 : 1}
-                cursor={altClickable ? 'pointer' : 'default'}
+                borderColor={altSelected ? 'rsViolet.400' : 'brand.border'}
+                cursor={altSelectable ? 'pointer' : 'default'}
                 transition="all 120ms"
-                title={altExcluded ? 'Click to re-include this alt' : 'Click to exclude this alt'}
+                _hover={altSelectable ? { borderColor: altSelected ? 'rsViolet.400' : 'gray.300' } : undefined}
+                boxShadow={altSelected ? '0 0 0 3px rgba(122,53,232,0.18)' : undefined}
+                title={altSelected ? 'Click to remove from queue' : 'Click to queue this alt'}
               >
                 <img
                   src={img.imageUrl}
@@ -1738,22 +1759,22 @@ function UnifiedRibbon(props: UnifiedRibbonProps) {
                 <Badge
                   position="absolute" top="4px" left="4px"
                   fontSize="9px"
-                  colorScheme={altExcluded ? 'gray' : 'purple'}
+                  colorScheme={altSelected ? 'purple' : 'gray'}
                   variant="solid"
                 >
                   ALT {img.altIndex}
                 </Badge>
-                <Box
-                  position="absolute" bottom="0" left="0" right="0"
-                  bg={altExcluded ? 'blackAlpha.600' : 'rsViolet.500'}
-                  color="white"
-                  px={1.5} py={1}
-                  fontSize="9px" fontWeight="700"
-                  textAlign="center"
-                  letterSpacing="0.04em"
-                >
-                  {altExcluded ? 'EXCLUDED' : 'AUTO'}
-                </Box>
+                {altSelected && (
+                  <Box
+                    position="absolute" top="4px" right="4px"
+                    bg="rsViolet.500" color="white"
+                    w="20px" h="20px" borderRadius="full"
+                    display="flex" alignItems="center" justifyContent="center"
+                    fontSize="11px" fontWeight="800"
+                  >
+                    ✓
+                  </Box>
+                )}
               </Box>
             </Box>
           );

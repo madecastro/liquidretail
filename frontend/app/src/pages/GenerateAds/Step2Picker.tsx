@@ -286,6 +286,12 @@ export function Step2Picker({ value, onChange }: Props) {
   // why: the classifier flagged every matched post as promotional or
   // announcement and the adEligible gate dropped them.
   const [adEligibleFilteredCount, setAdEligibleFilteredCount] = useState(0);
+  // Operator override — when true, the related-media fetch drops the
+  // adEligible=1 gate and includes classifier-blocked posts. Useful
+  // when the only matches for a product are flagged promotional but
+  // the operator still wants to use them (e.g. picking a detect-
+  // identified product whose source post is what created it).
+  const [includeFilteredPromo, setIncludeFilteredPromo] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -295,12 +301,13 @@ export function Step2Picker({ value, onChange }: Props) {
     // fall back to value.productIds via expansionSeedProductIds's
     // own derivation.
     if (!expansionSeedProductIds.length) { setRelatedMedia([]); setAdEligibleFilteredCount(0); return; }
+    const adEligibleParam = includeFilteredPromo ? '0' : '1';
     Promise.all(
       expansionSeedProductIds.slice(0, 5).map(seedId =>
         apiJson<{
           matches: { mediaId: string; matchTier: MatchTier | null; outcomeReasoning: string | null; winner: string | null; matchSource: string | null; catalogCombinedScore: number | null; media: MediaRow }[];
           filteredOutByAdEligible?: number;
-        }>(`/api/catalog/${seedId}/matches?adEligible=1`)
+        }>(`/api/catalog/${seedId}/matches?adEligible=${adEligibleParam}`)
           .then(r => ({
             seedId,
             rows: (r.matches || []).map(x => ({
@@ -338,7 +345,7 @@ export function Step2Picker({ value, onChange }: Props) {
       setRelatedMedia(flat.slice(0, 24));
     });
     return () => { cancelled = true; };
-  }, [expansionSeedProductIds, value.mediaIds]);
+  }, [expansionSeedProductIds, value.mediaIds, includeFilteredPromo]);
 
   // Promotional context — when the active campaign is promotional,
   // surface the operator-supplied offer details as a banner above the
@@ -676,6 +683,8 @@ export function Step2Picker({ value, onChange }: Props) {
             onTierToggle={(field, next) => onChange({ [field]: next } as Partial<WizardSelections>)}
             anyProductPicked={value.productIds.length > 0}
             adEligibleFilteredCount={adEligibleFilteredCount}
+            includeFilteredPromo={includeFilteredPromo}
+            onToggleFilteredPromo={() => setIncludeFilteredPromo(v => !v)}
           />
         ) : (
           // ── Other kinds (promotional, unset): existing browse-everything layout ──
@@ -1074,6 +1083,8 @@ type ProductKindViewProps = {
   onTierToggle:           (field: 'includeCategoryMatched' | 'includeBrandMatched', next: boolean) => void;
   anyProductPicked:       boolean;
   adEligibleFilteredCount: number;
+  includeFilteredPromo:   boolean;
+  onToggleFilteredPromo:  () => void;
 };
 
 function ProductKindView(props: ProductKindViewProps) {
@@ -1082,7 +1093,7 @@ function ProductKindView(props: ProductKindViewProps) {
     toggleProduct, toggleMedia, toggleExclude,
     catalogImagery, productMatchedRelated, categoryMatchedRelated, brandMatches,
     loadingP, includeCategoryMatched, includeBrandMatched, onTierToggle, anyProductPicked,
-    adEligibleFilteredCount
+    adEligibleFilteredCount, includeFilteredPromo, onToggleFilteredPromo
   } = props;
 
   // Build the unified related-tile list. Dedup is by mediaId across
@@ -1144,8 +1155,8 @@ function ProductKindView(props: ProductKindViewProps) {
           {relatedTiles.length === 0 ? (
             <Box h="100px" bg="gray.50" borderRadius="md" display="flex" alignItems="center" justifyContent="center" px={4}>
               <Text fontSize="xs" color="brand.muted" textAlign="center">
-                {adEligibleFilteredCount > 0
-                  ? `${adEligibleFilteredCount} matched post${adEligibleFilteredCount === 1 ? '' : 's'} hidden — classifier flagged ${adEligibleFilteredCount === 1 ? 'it' : 'them'} as promotional or announcement. Try the buttons below to widen the pool.`
+                {adEligibleFilteredCount > 0 && !includeFilteredPromo
+                  ? `${adEligibleFilteredCount} matched post${adEligibleFilteredCount === 1 ? '' : 's'} hidden — classifier flagged ${adEligibleFilteredCount === 1 ? 'it' : 'them'} as promotional or announcement. Use the toggle below to show ${adEligibleFilteredCount === 1 ? 'it' : 'them'} anyway.`
                   : 'Nothing related yet. Try the buttons below to widen the pool.'}
               </Text>
             </Box>
@@ -1200,6 +1211,20 @@ function ProductKindView(props: ProductKindViewProps) {
               {includeBrandMatched ? '✓ ' : '+ '}
               Add brand-only posts ({brandMatches.length})
             </Button>
+            {/* Show only when the classifier blocked at least one match
+                — irrelevant copy otherwise. Toggle re-fetches with
+                adEligible=0 so the previously-hidden posts come through. */}
+            {(adEligibleFilteredCount > 0 || includeFilteredPromo) && (
+              <Button
+                size="xs"
+                variant={includeFilteredPromo ? 'softBrand' : 'outline'}
+                onClick={onToggleFilteredPromo}
+                title="Include posts the classifier flagged promotional or announcement"
+              >
+                {includeFilteredPromo ? '✓ ' : '+ '}
+                Show promotional posts{adEligibleFilteredCount > 0 ? ` (${adEligibleFilteredCount})` : ''}
+              </Button>
+            )}
           </HStack>
         </>
       )}

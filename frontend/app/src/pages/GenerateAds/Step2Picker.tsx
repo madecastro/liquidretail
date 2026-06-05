@@ -124,12 +124,12 @@ export function Step2Picker({ value, onChange }: Props) {
     if (!brandId) return;
     let cancelled = false;
     setLoadingP(true);
-    // collapseVariants=1 — show one logical product per family in the
-    // picker ribbon (e.g. "Hot Crispy Oil - Original" once, not three
-    // times for 3-pack / 6-pack / 12-pack). The variants surface in
-    // the matched-media ribbon below after a product is picked, where
-    // the operator can deselect individual SKUs.
-    apiJson<{ products: ProductRow[] }>(`/api/catalog?brandId=${encodeURIComponent(brandId)}&limit=50&collapseVariants=1`)
+    // Show every SKU variant as its own pickable tile in the product
+    // ribbon. Sibling variants ALSO surface in the matched-media
+    // ribbon when any one of them is picked (via the variants[] field
+    // on /api/catalog/:id), where they can be deselected independently
+    // via the existing exclude-pairing mechanism.
+    apiJson<{ products: ProductRow[] }>(`/api/catalog?brandId=${encodeURIComponent(brandId)}&limit=50`)
       .then(res => { if (!cancelled) setProducts(res.products || []); })
       .finally(() => { if (!cancelled) setLoadingP(false); });
     setLoadingM(true);

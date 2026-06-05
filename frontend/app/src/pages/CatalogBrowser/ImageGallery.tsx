@@ -14,8 +14,10 @@ import { Box, HStack, VStack, Image, Text, Badge, Flex } from '@chakra-ui/react'
 import type { CatalogDetail, HeroCrops } from './types';
 
 type Props = {
-  product:    CatalogDetail;
-  heroCrops:  HeroCrops;
+  product:        CatalogDetail;
+  heroCrops:      HeroCrops;
+  altCrops:       HeroCrops[];
+  activeAltIndex: number | null;     // null = parent hero is the gallery's primary
 };
 
 type GalleryEntry = {
@@ -25,28 +27,41 @@ type GalleryEntry = {
   source?:  string;
 };
 
-export function ImageGallery({ product, heroCrops }: Props) {
+export function ImageGallery({ product, heroCrops, altCrops, activeAltIndex }: Props) {
+  // When an alt is the gallery's active item (clicked from the left
+  // rail alt-fanout), the "primary" tile becomes the alt's image and
+  // the judged crops come from altCrops[index]. Otherwise we show the
+  // parent hero + its own crops.
+  const isAltActive = activeAltIndex != null;
+  const activeAltUrl = isAltActive
+    ? (product.additionalImages?.[activeAltIndex!] || null)
+    : null;
+  const activeCrops = isAltActive
+    ? (altCrops?.[activeAltIndex!] || null)
+    : heroCrops;
+  const primaryUrl = isAltActive ? activeAltUrl : product.imageUrl;
+  const primaryLabel = isAltActive
+    ? `Alt ${activeAltIndex! + 1}`
+    : 'Catalog hero';
+
   const entries = useMemo<GalleryEntry[]>(() => {
     const out: GalleryEntry[] = [];
-    if (product.imageUrl) out.push({ url: product.imageUrl, kind: 'primary', label: 'Catalog hero' });
-    for (const u of product.additionalImages || []) {
-      if (u && u !== product.imageUrl) out.push({ url: u, kind: 'additional', label: 'Alt view' });
-    }
-    // LLM-judged ad-crop winners of the catalog hero — these are the
-    // framings the renderer will use when this product becomes a
-    // hero in an ad. Each ratio is a distinct judged crop.
-    if (heroCrops) {
+    if (primaryUrl) out.push({ url: primaryUrl, kind: 'primary', label: primaryLabel });
+    // LLM-judged ad-crop winners for whichever image is the gallery's
+    // primary (parent hero OR the selected alt). These are the framings
+    // the renderer will use when this image becomes a hero in an ad.
+    if (activeCrops) {
       for (const ratio of ['5:4', '1:1', '4:5'] as const) {
-        const url = heroCrops[ratio];
+        const url = activeCrops[ratio];
         if (url) out.push({ url, kind: 'crop', label: `Judged ${ratio} crop` });
       }
     }
     return out;
-  }, [product, heroCrops]);
+  }, [primaryUrl, primaryLabel, activeCrops]);
 
   const [activeIdx, setActiveIdx] = useState(0);
-  // Reset to first when product changes
-  useEffect(() => { setActiveIdx(0); }, [product.id]);
+  // Reset to first when the gallery's primary changes (product OR alt swap).
+  useEffect(() => { setActiveIdx(0); }, [product.id, activeAltIndex]);
 
   const active = entries[activeIdx] || null;
 

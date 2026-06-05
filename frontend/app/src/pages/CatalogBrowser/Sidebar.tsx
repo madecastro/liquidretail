@@ -3,7 +3,7 @@
 // filter row at top (search + source select + drafts toggle).
 
 import { Box, Flex, Text, Image, VStack, HStack, Badge, Button, Spinner, Input, Select, IconButton, Icon, Checkbox } from '@chakra-ui/react';
-import type { CatalogListRow } from './types';
+import type { CatalogListRow, CatalogDetailResponse } from './types';
 import { sourceTone, formatPrice, timeAgo } from './format';
 
 type Filters = {
@@ -16,22 +16,33 @@ type Filters = {
 };
 
 type Props = {
-  rows:         CatalogListRow[];
-  total:        number;
-  totalDrafts:  number;
-  loading:      boolean;
-  hasMore:      boolean;
-  selectedId:   string | null;
-  filters:      Filters;
-  categories:   string[];
-  onSelect:     (productId: string) => void;
-  onLoadMore:   () => void;
-  onFilters:    (next: Filters) => void;
+  rows:           CatalogListRow[];
+  total:          number;
+  totalDrafts:    number;
+  loading:        boolean;
+  hasMore:        boolean;
+  selectedId:     string | null;
+  filters:        Filters;
+  categories:     string[];
+  // Full detail for the currently-selected product. Drives the alt
+  // fanout — additionalImages render as subordinate cards under the
+  // parent SidebarRow. null when nothing's selected or detail's still
+  // loading; the row renders without children in that case.
+  selectedDetail: CatalogDetailResponse | null;
+  // null = parent hero is the gallery's active item; number = that
+  // additionalImages index is active. Drives the highlight on alt
+  // cards and is set by clicking one.
+  activeAltIndex: number | null;
+  onSelect:       (productId: string) => void;
+  onAltSelect:    (altIndex: number | null) => void;
+  onLoadMore:     () => void;
+  onFilters:      (next: Filters) => void;
 };
 
 export function Sidebar({
   rows, total, totalDrafts, loading, hasMore, selectedId, filters, categories,
-  onSelect, onLoadMore, onFilters
+  selectedDetail, activeAltIndex,
+  onSelect, onAltSelect, onLoadMore, onFilters
 }: Props) {
   return (
     <Flex
@@ -122,14 +133,39 @@ export function Sidebar({
           </Box>
         ) : (
           <VStack align="stretch" spacing={2}>
-            {rows.map(r => (
-              <SidebarRow
-                key={r.id}
-                row={r}
-                isActive={r.id === selectedId}
-                onClick={() => onSelect(r.id)}
-              />
-            ))}
+            {rows.map(r => {
+              const isActive = r.id === selectedId;
+              const detailProduct = isActive ? selectedDetail?.product : null;
+              const altUrls = isActive && detailProduct?.additionalImages
+                ? detailProduct.additionalImages.filter(u => u && u !== detailProduct.imageUrl)
+                : [];
+              return (
+                <Box key={r.id}>
+                  <SidebarRow
+                    row={r}
+                    isActive={isActive}
+                    parentHeroActive={isActive && activeAltIndex === null}
+                    onClick={() => onSelect(r.id)}
+                    onParentHeroClick={isActive ? () => onAltSelect(null) : undefined}
+                  />
+                  {isActive && altUrls.length > 0 && (
+                    <Box pl={6} pt={1.5}>
+                      <VStack align="stretch" spacing={1.5}>
+                        {altUrls.map((url, idx) => (
+                          <AltRow
+                            key={`${r.id}-alt-${idx}`}
+                            url={url}
+                            label={`Alt ${idx + 1}`}
+                            isActive={activeAltIndex === idx}
+                            onClick={() => onAltSelect(idx)}
+                          />
+                        ))}
+                      </VStack>
+                    </Box>
+                  )}
+                </Box>
+              );
+            })}
             {hasMore && (
               <Button onClick={onLoadMore} isLoading={loading} variant="ghost" size="sm" mt={2}>
                 Load more
@@ -142,15 +178,32 @@ export function Sidebar({
   );
 }
 
-function SidebarRow({ row, isActive, onClick }: { row: CatalogListRow; isActive: boolean; onClick: () => void }) {
+function SidebarRow({
+  row, isActive, parentHeroActive, onClick, onParentHeroClick
+}: {
+  row:               CatalogListRow;
+  isActive:          boolean;
+  parentHeroActive?: boolean;        // true when this parent's hero is the gallery's active item
+  onClick:           () => void;
+  onParentHeroClick?: () => void;    // when isActive AND user clicks the row, swap gallery back to parent hero
+}) {
   const tone = sourceTone(row.source);
+  // Two-click affordance for the active row: clicking it when NOT yet
+  // active selects it. Clicking it when active (i.e. user wants to
+  // revert from an alt back to the parent hero) calls onParentHeroClick.
+  const handleClick = isActive ? (onParentHeroClick || onClick) : onClick;
+  // Distinct outline when the parent hero is the gallery's current view
+  // (vs. parent selected but an alt is being shown in the gallery).
+  const ringColor = isActive
+    ? (parentHeroActive ? 'rsViolet.400' : 'rsViolet.200')
+    : 'brand.border';
   return (
     <Box
-      onClick={onClick}
+      onClick={handleClick}
       cursor="pointer"
       borderRadius="lg"
-      borderWidth="1px"
-      borderColor={isActive ? 'rsViolet.300' : 'brand.border'}
+      borderWidth={parentHeroActive ? '2px' : '1px'}
+      borderColor={ringColor}
       bg={isActive ? 'rsViolet.50' : 'brand.surface'}
       p={2}
       transition="border-color 120ms, background 120ms"
@@ -192,3 +245,50 @@ function SidebarRow({ row, isActive, onClick }: { row: CatalogListRow; isActive:
 }
 
 function StarIcon() { return <Icon viewBox="0 0 24 24" w="10px" h="10px" color="#F59E0B"><path fill="currentColor" d="M12 2l2.4 7.4H22l-6 4.5 2.3 7.1L12 16.5l-6.3 4.5L8 13.9 2 9.4h7.6z" /></Icon>; }
+
+// Subordinate card for an alt image under the active product. Smaller
+// thumbnail + label only — the right-rail tabs inherit the parent's
+// data so we don't need to repeat title/price/etc. here. Distinct
+// highlight when this alt is the gallery's active item. Indented via
+// the parent VStack's pl, plus a connecting line for visual hierarchy.
+function AltRow({
+  url, label, isActive, onClick
+}: {
+  url:      string;
+  label:    string;
+  isActive: boolean;
+  onClick:  () => void;
+}) {
+  return (
+    <Box
+      onClick={onClick}
+      cursor="pointer"
+      borderRadius="md"
+      borderWidth={isActive ? '2px' : '1px'}
+      borderColor={isActive ? 'rsViolet.400' : 'brand.border'}
+      bg={isActive ? 'rsViolet.50' : 'brand.surface'}
+      p={1.5}
+      transition="border-color 120ms, background 120ms"
+      _hover={{ borderColor: isActive ? 'rsViolet.400' : 'gray.300' }}
+      position="relative"
+    >
+      <HStack spacing={2.5} align="center">
+        {/* Connector dash so the parent → alt relationship reads as a tree */}
+        <Box
+          position="absolute"
+          left="-12px"
+          top="50%"
+          w="8px"
+          h="1px"
+          bg="brand.border"
+        />
+        <Box w="36px" h="36px" flexShrink={0} borderRadius="sm" overflow="hidden" bg="gray.100">
+          <Image src={url} alt={label} w="100%" h="100%" objectFit="cover" loading="lazy" />
+        </Box>
+        <Text fontSize="xs" color={isActive ? 'rsViolet.700' : 'brand.muted'} fontWeight={isActive ? '700' : '500'} noOfLines={1}>
+          {label}
+        </Text>
+      </HStack>
+    </Box>
+  );
+}

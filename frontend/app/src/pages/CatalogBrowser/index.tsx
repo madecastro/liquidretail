@@ -9,7 +9,7 @@
 //   └─────────┴─────────────────────────────┴──────────┘
 // Right sidebar tabs: Summary · Reviews · Specs · Sellers · Matches.
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Flex, Box, Text } from '@chakra-ui/react';
 import { Sidebar } from './Sidebar';
@@ -24,6 +24,15 @@ export function CatalogBrowserPage() {
   const list = useCatalogList();
   const [params, setParams] = useSearchParams();
   const selectedId = params.get('productId');
+  // null = the parent hero is the active gallery item; number = that
+  // index of additionalImages is the active gallery item. Resets when
+  // the selected product changes. Drives both the left-rail alt-
+  // fanout's highlighted card AND the middle gallery's image swap.
+  // The right-rail tabs (Summary / Reviews / Specs / Sellers / Matches)
+  // intentionally keep reading detail.data.product so alts inherit
+  // the parent's data — clicking an alt only changes the gallery.
+  const [activeAltIndex, setActiveAltIndex] = useState<number | null>(null);
+  useEffect(() => { setActiveAltIndex(null); }, [selectedId]);
 
   // Default-select the first row when none pinned via URL
   useEffect(() => {
@@ -57,7 +66,10 @@ export function CatalogBrowserPage() {
           selectedId={selectedId}
           filters={list.filters}
           categories={list.categories}
-          onSelect={handleSelect}
+          selectedDetail={detail.data || null}
+          activeAltIndex={activeAltIndex}
+          onSelect={(id) => { handleSelect(id); setActiveAltIndex(null); }}
+          onAltSelect={setActiveAltIndex}
           onLoadMore={list.loadMore}
           onFilters={list.setFilters}
         />
@@ -72,6 +84,8 @@ export function CatalogBrowserPage() {
               <ImageGallery
                 product={detail.data.product}
                 heroCrops={detail.data.heroCrops || null}
+                altCrops={detail.data.altCrops || []}
+                activeAltIndex={activeAltIndex}
               />
             </>
           ) : selectedId ? (

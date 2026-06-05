@@ -557,104 +557,169 @@
         }
       }
 
-      // Geometry wireframes — same canvas dimensions, each zone drawn
-      // as a labeled positioned div. Two passes so you can see how the
-      // Resolver shifted things.
-      drawWireframe(document.getElementById('wireframeCanvas'),   data.spec, null);
-      drawWireframe(document.getElementById('wireframeResolved'), data.spec, data.resolvedLayout);
+      // Geometry wireframes — TWO independent passes from TWO different
+      // sources. Left pane = the LLM's raw canvas spec zones. Right pane
+      // = the post-Resolver resolvedZones (kind/slot/layer reflect any
+      // fallback substitutions, computed font_px is visible, dropped
+      // zones are missing). Canvas dimensions come from the spec on
+      // both sides since the Resolver doesn't move geometry.
+      const canvasDims = {
+        w: data.spec?.canvas?.width  || 1000,
+        h: data.spec?.canvas?.height || 1000
+      };
+      drawWireframeFromSpec(
+        document.getElementById('wireframeCanvas'),
+        data.spec, canvasDims
+      );
+      drawWireframeFromResolved(
+        document.getElementById('wireframeResolved'),
+        data.resolvedLayout, data.spec, canvasDims
+      );
     }
 
     // ── Wireframe drawing ────────────────────────────────────────────
-    // Builds a positioned-div diagram of the canvas spec's zones (and
-    // the Resolver's overrides, if supplied). Scales to fit the wrapper
-    // width while preserving aspect ratio. Each zone shows its id, kind,
-    // slot, layer, and (in resolved mode) the post-Resolver computed
-    // font_size_px + fallback indicator.
-    function drawWireframe(stage, spec, resolvedLayout) {
+    // Two entrypoints — one for the raw canvas spec (left pane), one
+    // for the Resolver's output (right pane). They diverge on which
+    // fields each zone shows, and on whether dropped / fallback /
+    // downgraded zones get visually flagged.
+
+    function drawWireframeFromSpec(stage, spec, canvasDims) {
       if (!stage) return;
       stage.innerHTML = '';
-      if (!spec || !spec.canvas || !Array.isArray(spec.zones)) {
+      if (!spec || !Array.isArray(spec.zones)) {
         stage.innerHTML = '<div class="helper" style="padding:20px;text-align:center;color:#666;">(no canvas spec)</div>';
         return;
       }
-      const cw = spec.canvas.width  || 1000;
-      const ch = spec.canvas.height || 1000;
-
-      // Fix the aspect ratio via padding-bottom hack.
-      stage.style.paddingBottom = ((ch / cw) * 100).toFixed(2) + '%';
-
-      // Build a lookup of resolved zones by zone id so we can overlay
-      // fallback indicators + computed font sizes on top of the spec's
-      // original geometry.
-      const resolvedById = {};
-      if (resolvedLayout && Array.isArray(resolvedLayout.resolvedZones)) {
-        for (const rz of resolvedLayout.resolvedZones) {
-          if (rz?.id) resolvedById[rz.id] = rz;
-        }
-      }
-
-      // Position children using percent so the padding-bottom-driven
-      // aspect ratio works at any container width.
+      stage.style.paddingBottom = ((canvasDims.h / canvasDims.w) * 100).toFixed(2) + '%';
       const zones = spec.zones.slice().sort((a, b) => layerOrder(a) - layerOrder(b));
       for (const z of zones) {
         const r = z.rect || {};
         if (r.x == null || r.y == null || r.w == null || r.h == null) continue;
-
-        // If the resolver dropped this zone (it'd be missing from
-        // resolvedZones), skip it on the resolved side — that's the
-        // diagnostic. Empty zone arrays mean show all.
-        const rz = resolvedById[z.id];
-        if (resolvedLayout && Object.keys(resolvedById).length && !rz) continue;
-
-        const div = document.createElement('div');
-        const kind = String(z.kind || 'default').toLowerCase();
-        div.className = 'wireframe-zone wf-k-' + (kind.replace(/[^a-z_]/g, '') || 'default');
-        div.style.left   = ((r.x / cw) * 100).toFixed(3) + '%';
-        div.style.top    = ((r.y / ch) * 100).toFixed(3) + '%';
-        div.style.width  = ((r.w / cw) * 100).toFixed(3) + '%';
-        div.style.height = ((r.h / ch) * 100).toFixed(3) + '%';
-
-        // Layer indicator — slight box-shadow inset so visual stacking
-        // hints come through even on the flat geometry view.
-        const layer = String(z.layer || '').toLowerCase();
-        if (layer === 'background') div.style.boxShadow = 'inset 0 0 0 2px rgba(255,255,255,0.05)';
-        if (layer === 'copy')       div.style.boxShadow = 'inset 0 0 0 2px rgba(255,255,255,0.20)';
-
-        const idEl = document.createElement('span');
-        idEl.className = 'wf-id';
-        idEl.textContent = z.id || '(no id)';
-        div.appendChild(idEl);
-
-        const slotEl = document.createElement('span');
-        slotEl.className = 'wf-slot';
-        const slotStr = Array.isArray(z.slot) ? z.slot.join(', ') : (z.slot || '');
-        slotEl.textContent = (z.kind || '?') + (slotStr ? ' · ' + slotStr : '');
-        div.appendChild(slotEl);
-
-        // Meta corner — layer in canvas spec mode, computed font_px in
-        // resolved mode if available.
-        const metaEl = document.createElement('span');
-        metaEl.className = 'wf-meta';
-        if (rz?.computed?.font_size_px != null) {
-          metaEl.textContent = 'L:' + (layer || '?') + ' ƒ' + rz.computed.font_size_px;
-        } else {
-          metaEl.textContent = 'L:' + (layer || '?');
-        }
-        div.appendChild(metaEl);
-
-        // Fallback marker — yellow tag in the upper right when the
-        // Resolver had to fall back from the LLM's pick.
-        if (rz?.slot?.from_fallback) {
-          const fbEl = document.createElement('span');
-          fbEl.className = 'wf-fb-tag';
-          fbEl.textContent = 'FB';
-          fbEl.title = 'Resolver fell back from: ' + rz.slot.from_fallback;
-          div.style.borderColor = '#facc15';
-          div.appendChild(fbEl);
-        }
-
+        const div = makeZoneDiv({
+          rect:           r,
+          canvasDims,
+          kind:           z.kind,
+          id:             z.id,
+          slot:           z.slot,
+          layer:          z.layer,
+          componentStyle: z.style_variant || z.component_style,
+          fontPx:         null,
+          fromFallback:   null,
+          removed:        false
+        });
         stage.appendChild(div);
       }
+    }
+
+    function drawWireframeFromResolved(stage, resolvedLayout, spec, canvasDims) {
+      if (!stage) return;
+      stage.innerHTML = '';
+      if (!resolvedLayout || !Array.isArray(resolvedLayout.resolvedZones)) {
+        stage.innerHTML = '<div class="helper" style="padding:20px;text-align:center;color:#666;">(no ResolvedLayoutArtifact yet — shadow Resolver hasn\'t fired)</div>';
+        return;
+      }
+      stage.style.paddingBottom = ((canvasDims.h / canvasDims.w) * 100).toFixed(2) + '%';
+
+      // The Resolver's slots map (resolvedData.slots) carries the
+      // per-zone from_fallback marker — the resolvedZones array itself
+      // doesn't. Cross-reference by zone id.
+      const slotsMap = resolvedLayout.resolvedData?.slots || {};
+
+      // Cross-reference spec zones by id so we can flag DOWNGRADED
+      // component_styles (Resolver picked a different variant than
+      // the LLM emitted).
+      const specById = {};
+      if (spec && Array.isArray(spec.zones)) {
+        for (const sz of spec.zones) if (sz?.id) specById[sz.id] = sz;
+      }
+
+      const zones = resolvedLayout.resolvedZones.slice().sort((a, b) => layerOrder(a) - layerOrder(b));
+      for (const rz of zones) {
+        const r = rz.rect || {};
+        if (r.x == null || r.y == null || r.w == null || r.h == null) continue;
+        const slotEntry = slotsMap[rz.id] || {};
+        const specZone  = specById[rz.id] || {};
+        const specStyle = specZone.style_variant || specZone.component_style || null;
+        const downgraded = specStyle && rz.component_style && specStyle !== rz.component_style
+          ? { from: specStyle, to: rz.component_style }
+          : null;
+        const div = makeZoneDiv({
+          rect:           r,
+          canvasDims,
+          kind:           rz.kind,
+          id:             rz.id,
+          slot:           rz.slot,
+          layer:          rz.layer,
+          componentStyle: rz.component_style,
+          fontPx:         rz.computed?.font_size_px,
+          fromFallback:   slotEntry.from_fallback || null,
+          downgraded,
+          removed:        !!rz.removed
+        });
+        stage.appendChild(div);
+      }
+    }
+
+    // Build one wireframe-zone div from a normalized zone descriptor.
+    function makeZoneDiv({ rect, canvasDims, kind, id, slot, layer, componentStyle, fontPx, fromFallback, downgraded, removed }) {
+      const div = document.createElement('div');
+      const k = String(kind || 'default').toLowerCase();
+      div.className = 'wireframe-zone wf-k-' + (k.replace(/[^a-z_]/g, '') || 'default');
+      div.style.left   = ((rect.x / canvasDims.w) * 100).toFixed(3) + '%';
+      div.style.top    = ((rect.y / canvasDims.h) * 100).toFixed(3) + '%';
+      div.style.width  = ((rect.w / canvasDims.w) * 100).toFixed(3) + '%';
+      div.style.height = ((rect.h / canvasDims.h) * 100).toFixed(3) + '%';
+
+      const layerStr = String(layer || '').toLowerCase();
+      if (layerStr === 'background') div.style.boxShadow = 'inset 0 0 0 2px rgba(255,255,255,0.05)';
+      if (layerStr === 'copy')       div.style.boxShadow = 'inset 0 0 0 2px rgba(255,255,255,0.20)';
+
+      // Removed zones — red strikethrough border, dimmed background.
+      if (removed) {
+        div.style.borderStyle  = 'dashed';
+        div.style.borderColor  = '#f87171';
+        div.style.opacity      = '0.45';
+      }
+      // Fallback substitution — yellow border + FB tag.
+      if (fromFallback) {
+        div.style.borderColor = '#facc15';
+        const fb = document.createElement('span');
+        fb.className = 'wf-fb-tag';
+        fb.textContent = 'FB';
+        fb.title = 'Resolver fell back to slot: ' + fromFallback;
+        div.appendChild(fb);
+      }
+
+      const idEl = document.createElement('span');
+      idEl.className = 'wf-id';
+      idEl.textContent = id || '(no id)';
+      div.appendChild(idEl);
+
+      const slotEl = document.createElement('span');
+      slotEl.className = 'wf-slot';
+      const slotStr = Array.isArray(slot) ? slot.join(', ') : (slot || '');
+      let label = (kind || '?') + (slotStr ? ' · ' + slotStr : '');
+      if (componentStyle) label += '\nstyle: ' + componentStyle;
+      if (downgraded)     label += '\n↓ from ' + downgraded.from;
+      slotEl.style.whiteSpace = 'pre-line';
+      slotEl.textContent = label;
+      div.appendChild(slotEl);
+
+      // Meta corner — layer always shown, computed font_px when present.
+      const metaEl = document.createElement('span');
+      metaEl.className = 'wf-meta';
+      metaEl.textContent = 'L:' + (layerStr || '?') + (fontPx != null ? ' ƒ' + fontPx : '');
+      div.appendChild(metaEl);
+
+      if (removed) {
+        const tag = document.createElement('span');
+        tag.className = 'wf-fb-tag';
+        tag.style.color = '#f87171';
+        tag.textContent = 'REMOVED';
+        div.appendChild(tag);
+      }
+
+      return div;
     }
 
     // Mirror the renderer's z-ordering so the wireframe stacks the same

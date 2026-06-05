@@ -1322,25 +1322,13 @@ const CATALOG_SOURCE_LABEL: Record<string, string> = {
   'manual-upload':     'Manual upload',
   'detect-identified': 'Auto-detected'
 };
-const UGC_SOURCE_LABEL: Record<string, string> = {
-  'instagram': 'IG Post',
-  'tiktok':    'TikTok Post'
-};
+// UGC_SOURCE_LABEL removed — the rich tile uses platformLabel() with
+// a different short-form ("IG" vs "IG Post") since the tile already
+// shows the post type alongside it.
 
-function formatCatalogMeta(img: CatalogImageRow): string {
-  const src = CATALOG_SOURCE_LABEL[img.productSource || ''] || 'Catalog';
-  const title = (img.productTitle || '').trim();
-  const date = formatShortDate(img.productLastSyncedAt);
-  return [src, title, date].filter(Boolean).join(' · ');
-}
-
-function formatUgcMeta(m: MediaRow): string {
-  const src = UGC_SOURCE_LABEL[m.source || ''] || 'Post';
-  const handle = (m.creatorHandle || '').trim();
-  const handleStr = handle ? (handle.startsWith('@') ? handle : `@${handle}`) : '';
-  const date = formatShortDate(m.postedAt);
-  return [src, handleStr, date].filter(Boolean).join(' · ');
-}
+// formatCatalogMeta + formatUgcMeta removed — the rich tiles now
+// stack the same info inline as Box children rather than a single
+// dot-separated line, so the helpers are no longer used.
 
 // ── Rich-tile helpers ────────────────────────────────────────────────
 // Compact formatters used by the redesigned related-media tiles. Each
@@ -1494,16 +1482,31 @@ function BrandUnifiedView(props: BrandUnifiedViewProps) {
     return lifestyleEligibleIds.has(mediaId);
   };
 
-  // Main ribbon: every available tile across the brand —
-  //   product hero      → ProductTile (toggles value.productIds)
-  //   product alts      → CatalogAltTile (auto-fanout; click toggles
-  //                       a (productId, altMediaId) exclusion so the
-  //                       operator can opt-out specific alts without
-  //                       dropping the product)
-  //   UGC media         → MediaTile (toggles value.mediaIds)
-  // Products are emitted as a hero + N alt block per row, then all
-  // UGC follows. Operator scrolls horizontally to browse the full set.
+  // Sort media by composite ad-fit so the most-pickable tiles sit at
+  // the left of the ribbon. Score weights:
+  //   - lifestyle / on_model shotType:        +30
+  //   - evergreen contentNature:              +20
+  //   - adReadiness (0–1):                    × 100
+  //   - engagement rate (0–1):                × 50
+  //   - falls back to likes+comments (capped) when engagement absent
+  // Untyped media (no classification) still score on engagement so
+  // they appear in the ribbon, just lower.
+  const sortedMedia = [...media]
+    .filter(m => mediaLifestyleOk(m.id))
+    .map(m => ({ m, score: brandAdFitScore(m) }))
+    .sort((a, b) => b.score - a.score)
+    .map(x => x.m);
+
+  // Primary ribbon: all eligible UGC + catalog imagery as a single
+  // sorted list. Operator clicks a tile to add it to their queue.
+  // Products + catalog alts come AFTER media — they're the constant
+  // brand inventory; UGC is where the variance lives. Suppressed for
+  // brand-kind: alt auto-fanout (lives in the main ribbon explicitly
+  // instead of cascading from a product pick).
   const mainTiles: UnifiedTile[] = [];
+  for (const m of sortedMedia) {
+    mainTiles.push({ kind: 'media', media: m });
+  }
   for (const p of products) {
     mainTiles.push({ kind: 'product', product: p });
     const altUrls = p.additionalImages || [];
@@ -1527,58 +1530,41 @@ function BrandUnifiedView(props: BrandUnifiedViewProps) {
       });
     }
   }
-  for (const m of media) {
-    if (!mediaLifestyleOk(m.id)) continue;
-    mainTiles.push({ kind: 'media', media: m });
-  }
 
-  // Recommended ribbon: media related to operator picks. Includes
-  // discovered products from picked media + matched UGC for effective
-  // products + (gated) category-matched + brand-matched. Catalog alts
-  // are NOT duplicated here under brand-kind (they're already in the
-  // main ribbon).
-  void catalogImagery; // referenced only by product-kind flow; kept on the props signature for symmetry
-  const recommendedTiles: UnifiedTile[] = [];
-  const seenProductIds = new Set<string>();
-  const seenMediaIds = new Set<string>();
-  for (const p of relatedProducts) {
-    if (seenProductIds.has(p.id)) continue;
-    seenProductIds.add(p.id);
-    recommendedTiles.push({ kind: 'product', product: p });
-  }
-  for (const m of productMatchedRelated) {
-    if (seenMediaIds.has(m.id)) continue;
-    if (!mediaLifestyleOk(m.id)) continue;
-    seenMediaIds.add(m.id);
-    recommendedTiles.push({ kind: 'media', media: m });
-  }
-  if (includeCategoryMatched) {
-    for (const m of categoryMatchedRelated) {
-      if (seenMediaIds.has(m.id)) continue;
-      if (!mediaLifestyleOk(m.id)) continue;
-      seenMediaIds.add(m.id);
-      recommendedTiles.push({ kind: 'media', media: m });
-    }
-  }
-  if (includeBrandMatched) {
-    for (const m of brandMatches) {
-      if (seenMediaIds.has(m.id)) continue;
-      if (!mediaLifestyleOk(m.id)) continue;
-      seenMediaIds.add(m.id);
-      recommendedTiles.push({ kind: 'media', media: m });
-    }
-  }
+  // Subordinate ribbon — operator's queued picks. NO auto-fanout of
+  // related/matched media (per the brand-campaign UX rewrite); the
+  // queue is whatever the operator has actively selected from the
+  // primary ribbon above. Filters mainTiles down to picks.
+  void catalogImagery;            // product-kind only — kept on props for symmetry
+  void relatedProducts;           // recommendations no longer auto-surface in brand-kind subordinate
+  void productMatchedRelated;
+  void categoryMatchedRelated;
+  void brandMatches;
+  void includeCategoryMatched;
+  void includeBrandMatched;
+  void onTierToggle;
+  const queuedTiles = mainTiles.filter(t => {
+    if (t.kind === 'product') return productSet.has(t.product.id);
+    if (t.kind === 'media')   return mediaSet.has(t.media.id);
+    // catalog_alts are queued by absence-from-excludedPairings (they
+    // auto-fan out alongside their picked product); only show queued
+    // alts whose parent product is picked AND not in excludedPairings.
+    const alt = t.img;
+    if (!productSet.has(alt.productId)) return false;
+    const altKey = alt.imageMediaId ? pairingKey(alt.productId, alt.imageMediaId) : null;
+    return altKey ? !excludedSet.has(altKey) : true;
+  });
 
   return (
     <>
       <SectionHeader
-        title="Media"
-        subtitle="Catalog imagery (hero + alts) and social posts. Pick any tile to feature — alts fan out automatically alongside their hero; click an alt to opt it out."
+        title="Pick the media for your brand ads"
+        subtitle="UGC posts and catalog photos, sorted by ad-fit (engagement, ad-readiness, lifestyle / evergreen first). Tap to add to your queue."
       />
       <UnifiedRibbon
         tiles={mainTiles}
         loading={loadingP || loadingM}
-        emptyHint="No products or media yet — connect a catalog or Instagram to get started."
+        emptyHint="No media yet. Connect Instagram or a catalog to get started."
         productSet={productSet}
         mediaSet={mediaSet}
         excludedSet={excludedSet}
@@ -1590,53 +1576,44 @@ function BrandUnifiedView(props: BrandUnifiedViewProps) {
       {anyPicks && (
         <>
           <SectionHeader
-            title={`Media related to your selection (${recommendedTiles.length})`}
-            subtitle="Other products and posts that pair with what you've picked. Click any tile to add or remove it."
+            title={`Queued for this run (${queuedTiles.length})`}
+            subtitle="Just what you picked above. Tap any tile to remove it from the queue."
             tone="muted"
           />
-          {recommendedTiles.length === 0 ? (
-            <Box h="100px" bg="gray.50" borderRadius="md" display="flex" alignItems="center" justifyContent="center">
-              <Text fontSize="xs" color="brand.muted">
-                No related items yet — try the tier expand buttons below to widen the recommendation pool.
-              </Text>
-            </Box>
-          ) : (
-            <UnifiedRibbon
-              tiles={recommendedTiles}
-              loading={false}
-              productSet={productSet}
-              mediaSet={mediaSet}
-              excludedSet={excludedSet}
-              toggleProduct={toggleProduct}
-              toggleMedia={toggleMedia}
-              toggleExclude={toggleExclude}
-            />
-          )}
-
-          <HStack spacing={3} pt={1} wrap="wrap">
-            <Button
-              size="xs"
-              variant={includeCategoryMatched ? 'softBrand' : 'outline'}
-              onClick={() => onTierToggle('includeCategoryMatched', !includeCategoryMatched)}
-              isDisabled={categoryMatchedRelated.length === 0 && !includeCategoryMatched}
-            >
-              {includeCategoryMatched ? '✓ ' : '+ '}
-              Include category-matched ({categoryMatchedRelated.length})
-            </Button>
-            <Button
-              size="xs"
-              variant={includeBrandMatched ? 'softBrand' : 'outline'}
-              onClick={() => onTierToggle('includeBrandMatched', !includeBrandMatched)}
-              isDisabled={brandMatches.length === 0 && !includeBrandMatched}
-            >
-              {includeBrandMatched ? '✓ ' : '+ '}
-              Include brand-matched ({brandMatches.length})
-            </Button>
-          </HStack>
+          <UnifiedRibbon
+            tiles={queuedTiles}
+            loading={false}
+            productSet={productSet}
+            mediaSet={mediaSet}
+            excludedSet={excludedSet}
+            toggleProduct={toggleProduct}
+            toggleMedia={toggleMedia}
+            toggleExclude={toggleExclude}
+          />
         </>
       )}
     </>
   );
+}
+
+// Composite ad-fit score used to sort the brand-kind primary ribbon
+// left → right. Higher = more pickable. Mirrors the signals the
+// rich UGC tile surfaces so the visual ranking matches the chips.
+function brandAdFitScore(m: MediaRow): number {
+  let score = 0;
+  const shot = String(m.shotType || '').toLowerCase();
+  if (shot === 'lifestyle' || shot === 'on_model') score += 30;
+  if (String(m.contentNature || '').toLowerCase() === 'evergreen') score += 20;
+  if (typeof m.adReadiness === 'number') score += m.adReadiness * 100;
+  if (typeof m.engagement  === 'number' && m.engagement > 0) {
+    score += m.engagement * 50;
+  } else {
+    // Fallback: clamp likes+comments to a 0–50 contribution so a viral
+    // outlier doesn't dominate sort across the brand.
+    const totals = (m.likes ?? 0) + (m.comments ?? 0);
+    score += Math.min(50, totals / 200);
+  }
+  return score;
 }
 
 type UnifiedRibbonProps = {
@@ -1711,27 +1688,13 @@ function UnifiedRibbon(props: UnifiedRibbonProps) {
           if (t.kind === 'media') {
             const m = t.media;
             const sel = mediaSet.has(m.id);
-            const key = pairingKey(m.seedProductId || null, m.id);
-            const excluded = (m.seedProductId !== undefined) ? excludedSet.has(key) : false;
             return (
-              <Box key={`m-${m.id}-${idx}`} flexShrink={0} position="relative" opacity={excluded ? 0.4 : 1}>
-                <MediaTile media={m} selected={sel} onClick={() => toggleMedia(m.id)} />
-                {m.seedProductId !== undefined && (
-                  <Box
-                    as="button"
-                    onClick={(e: MouseEvent) => { e.stopPropagation(); toggleExclude(m.seedProductId || null, m.id); }}
-                    position="absolute"
-                    top="4px"
-                    right="4px"
-                    w="18px" h="18px" borderRadius="full"
-                    bg="rgba(0,0,0,0.55)" color="white"
-                    fontSize="11px" fontWeight="800"
-                    display="flex" alignItems="center" justifyContent="center"
-                    title={excluded ? 'Re-include this pairing' : 'Exclude this pairing'}
-                  >
-                    {excluded ? '+' : '×'}
-                  </Box>
-                )}
+              <Box key={`m-${m.id}-${idx}`} flexShrink={0}>
+                <ProductRelatedUgcTile
+                  media={m}
+                  selected={sel}
+                  onToggle={() => toggleMedia(m.id)}
+                />
               </Box>
             );
           }

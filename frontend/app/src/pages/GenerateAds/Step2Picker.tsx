@@ -71,9 +71,14 @@ type MediaRow = {
   source?:             string | null;   // Media.source — e.g. 'instagram', 'catalog-product'
 } & Partial<MatchEvidence> & {
   seedProductId?: string | null;   // null for brand_match (no SKU)
-  likes?:    number | null;
-  comments?: number | null;
-  saves?:    number | null;
+  likes?:        number | null;
+  comments?:     number | null;
+  saves?:        number | null;
+  engagement?:   number | null;   // 0–1 engagement rate (likes+comments / reach)
+  postType?:     string | null;   // 'image' | 'video' | 'reel' | 'carousel' from IG/TikTok metadata
+  shotType?:     string | null;   // 'lifestyle' | 'on_model' | 'product_only' | 'flat_lay' | etc.
+  contentNature?:string | null;   // 'evergreen' | 'promotional' | 'announcement' | etc.
+  adReadiness?:  number | null;   // 0–1 from adSuitability.score
 };
 
 // Pairing-key encoder. brand_match seeds use 'null' as the productId
@@ -397,7 +402,16 @@ export function Step2Picker({ value, onChange }: Props) {
       winner: string | null;
       matchSource: string | null;
       confidence: number | null;
-      media: { externalId: string; fileType: 'image' | 'video'; fileUrl: string; source: string; permalink: string | null; creatorHandle: string | null; postedAt: string | null; likes: number | null; comments: number | null; saves: number | null; adSuitability: number | null; createdAt: string };
+      media: {
+        externalId: string; fileType: 'image' | 'video'; fileUrl: string;
+        source: string; permalink: string | null;
+        creatorHandle: string | null; postedAt: string | null;
+        likes: number | null; comments: number | null; saves: number | null;
+        engagement: number | null; postType: string | null;
+        shotType: string | null; contentNature: string | null;
+        adReadiness: number | null;
+        adSuitability: number | null; createdAt: string;
+      };
     }> }>(`/api/brand/${encodeURIComponent(brandId)}/brand-matches?limit=24`)
       .then(r => {
         if (cancelled) return;
@@ -417,7 +431,12 @@ export function Step2Picker({ value, onChange }: Props) {
           catalogCombinedScore: x.confidence,
           likes:               x.media.likes,
           comments:            x.media.comments,
-          saves:               x.media.saves
+          saves:               x.media.saves,
+          engagement:          x.media.engagement,
+          postType:            x.media.postType,
+          shotType:            x.media.shotType,
+          contentNature:       x.media.contentNature,
+          adReadiness:         x.media.adReadiness ?? x.media.adSuitability
         }));
         setBrandMatches(rows);
       })
@@ -1072,8 +1091,8 @@ function ProductKindView(props: ProductKindViewProps) {
   return (
     <>
       <SectionHeader
-        title="Media"
-        subtitle="Pick a product hero. Catalog alts and matched UGC posts fan out automatically."
+        title="Pick the product(s) to make ads for"
+        subtitle="Each tile is one SKU. Pick as many as you want — the wizard generates ads for each."
       />
       <RibbonPicker
         items={products}
@@ -1081,7 +1100,7 @@ function ProductKindView(props: ProductKindViewProps) {
         selectedIds={productSet}
         onToggle={toggleProduct}
         loading={loadingP}
-        emptyHint="No products in this brand's catalog yet."
+        emptyHint="No products in this brand's catalog yet. Connect a catalog to get started."
         render={(p, selected, onClick) => (
           <ProductTile product={p} selected={selected} onClick={onClick} />
         )}
@@ -1090,14 +1109,14 @@ function ProductKindView(props: ProductKindViewProps) {
       {anyProductPicked && (
         <>
           <SectionHeader
-            title={`Media Related To Your Selection (${relatedTiles.length})`}
-            subtitle="All media related to the product(s) selected."
+            title={`Related media (${relatedTiles.length})`}
+            subtitle="Catalog photos and social posts that go with what you picked. Tap any to opt out."
             tone="muted"
           />
           {relatedTiles.length === 0 ? (
             <Box h="100px" bg="gray.50" borderRadius="md" display="flex" alignItems="center" justifyContent="center">
               <Text fontSize="xs" color="brand.muted">
-                No related media yet — try the tier expand buttons below.
+                Nothing related yet. Try the buttons below to widen the pool.
               </Text>
             </Box>
           ) : (
@@ -1140,7 +1159,7 @@ function ProductKindView(props: ProductKindViewProps) {
               isDisabled={categoryMatchedRelated.length === 0 && !includeCategoryMatched}
             >
               {includeCategoryMatched ? '✓ ' : '+ '}
-              Include category-matched posts ({categoryMatchedRelated.length})
+              Add same-category posts ({categoryMatchedRelated.length})
             </Button>
             <Button
               size="xs"
@@ -1149,7 +1168,7 @@ function ProductKindView(props: ProductKindViewProps) {
               isDisabled={brandMatches.length === 0 && !includeBrandMatched}
             >
               {includeBrandMatched ? '✓ ' : '+ '}
-              Include brand-matched posts ({brandMatches.length})
+              Add brand-only posts ({brandMatches.length})
             </Button>
           </HStack>
         </>
@@ -1216,15 +1235,20 @@ function ProductRelatedAltTile({
           {excluded ? 'EXCLUDED' : 'AUTO'}
         </Box>
       </Box>
-      <Text fontSize="10px" color="brand.muted" mt={1.5} noOfLines={2} lineHeight="1.3">
-        {formatCatalogMeta(img)}
-      </Text>
+      <Box mt={1.5} fontSize="10px" lineHeight="1.35" color="brand.muted">
+        <Text noOfLines={1} color="brand.ink" fontWeight="600">
+          {CATALOG_SOURCE_LABEL[img.productSource || ''] || 'Catalog'} · Alt #{img.altIndex}
+        </Text>
+        <Text noOfLines={1} mt={0.5}>{(img.productTitle || '').trim() || '—'}</Text>
+        <Text noOfLines={1} mt={0.5} color="brand.muted">Relation: same product</Text>
+      </Box>
     </Box>
   );
 }
 
 // UGC tile in the product-kind related ribbon. Wraps MediaTile and
-// appends the metadata strip "IG Post · {handle} · {postedAt}".
+// stacks a dense info block beneath: platform + post type, ad readiness,
+// classification + content nature, engagement, source + relation, date.
 function ProductRelatedUgcTile({
   media, selected, onToggle
 }: {
@@ -1232,12 +1256,60 @@ function ProductRelatedUgcTile({
   selected: boolean;
   onToggle: () => void;
 }) {
+  const platform = platformLabel(media.source);
+  const postType = (media.postType || media.fileType || '').toLowerCase();
+  const postTypeLabel = formatPostType(postType, media.fileType);
+  const relation     = matchTierLabel(media.matchTier);
+  const ad           = adReadinessBucket(media.adReadiness);
+  const eng          = formatEngagement(media);
+  const handle       = media.creatorHandle ? (media.creatorHandle.startsWith('@') ? media.creatorHandle : `@${media.creatorHandle}`) : null;
+  const date         = formatShortDate(media.postedAt);
   return (
-    <Box w="120px">
-      <MediaTile media={media} selected={selected} onClick={onToggle} />
-      <Text fontSize="10px" color="brand.muted" mt={1.5} noOfLines={2} lineHeight="1.3">
-        {formatUgcMeta(media)}
-      </Text>
+    <Box w="148px">
+      <Box position="relative">
+        <MediaTile media={media} selected={selected} onClick={onToggle} />
+        {/* Platform + post type chip — top left */}
+        <Box
+          position="absolute" top="4px" left="4px"
+          bg="blackAlpha.700" color="white"
+          px={1.5} py={0.5} borderRadius="sm"
+          fontSize="9px" fontWeight="700" letterSpacing="0.04em"
+          pointerEvents="none"
+        >
+          {platform}{postTypeLabel ? ` · ${postTypeLabel}` : ''}
+        </Box>
+        {/* Ad readiness chip — top right */}
+        {ad && (
+          <Box
+            position="absolute" top="4px" right="4px"
+            bg={ad.bg} color="white"
+            px={1.5} py={0.5} borderRadius="sm"
+            fontSize="9px" fontWeight="800" letterSpacing="0.04em"
+            pointerEvents="none"
+            title={`Ad readiness: ${ad.label}`}
+          >
+            {ad.short}
+          </Box>
+        )}
+      </Box>
+      <Box mt={1.5} fontSize="10px" lineHeight="1.35" color="brand.muted">
+        {/* Classification row — content nature + shot type */}
+        {(media.contentNature || media.shotType) && (
+          <Text noOfLines={1} color="brand.ink" fontWeight="600">
+            {[media.contentNature, media.shotType].filter(Boolean).map(titleCase).join(' · ')}
+          </Text>
+        )}
+        {/* Engagement row */}
+        {eng && (
+          <Text noOfLines={1} mt={0.5}>{eng}</Text>
+        )}
+        {/* Relation row — match tier + handle */}
+        <Text noOfLines={1} mt={0.5}>
+          {[relation, handle].filter(Boolean).join(' · ')}
+        </Text>
+        {/* Date */}
+        {date && <Text noOfLines={1} mt={0.5} color="brand.muted">{date}</Text>}
+      </Box>
     </Box>
   );
 }
@@ -1268,6 +1340,70 @@ function formatUgcMeta(m: MediaRow): string {
   const handleStr = handle ? (handle.startsWith('@') ? handle : `@${handle}`) : '';
   const date = formatShortDate(m.postedAt);
   return [src, handleStr, date].filter(Boolean).join(' · ');
+}
+
+// ── Rich-tile helpers ────────────────────────────────────────────────
+// Compact formatters used by the redesigned related-media tiles. Each
+// returns either a short string or a small object the tile renders
+// inline. Null returns drop the chip silently when data isn't present.
+
+function platformLabel(src: string | null | undefined): string {
+  if (!src) return 'Post';
+  const s = String(src).toLowerCase();
+  if (s === 'instagram') return 'IG';
+  if (s === 'tiktok')    return 'TikTok';
+  if (s === 'manual-upload') return 'Upload';
+  if (s === 'catalog-product') return 'Catalog';
+  return titleCase(s);
+}
+
+function formatPostType(postType: string, fileType?: 'image' | 'video'): string {
+  const pt = (postType || '').toLowerCase();
+  if (pt === 'reel')     return 'Reel';
+  if (pt === 'carousel') return 'Carousel';
+  if (pt === 'story')    return 'Story';
+  if (pt === 'video' || fileType === 'video') return 'Video';
+  if (pt === 'image' || fileType === 'image') return 'Photo';
+  return '';
+}
+
+function matchTierLabel(tier: MatchTier | null | undefined): string {
+  switch (tier) {
+    case 'product_match':    return 'Tagged this product';
+    case 'product_category': return 'Same category';
+    case 'brand_match':      return 'Brand-only post';
+    default:                 return '';
+  }
+}
+
+// 0–1 score bucketed into Strong / OK / Weak with corresponding colors
+// so the chip is glanceable. Null when score is missing.
+function adReadinessBucket(score: number | null | undefined): { short: string; label: string; bg: string } | null {
+  if (typeof score !== 'number') return null;
+  const pct = Math.round(score * 100);
+  if (score >= 0.75) return { short: `★ ${pct}`, label: `Strong (${pct}/100)`, bg: 'rgba(16,185,129,0.85)' };  // emerald
+  if (score >= 0.50) return { short: `${pct}`,    label: `OK (${pct}/100)`,     bg: 'rgba(245,158,11,0.85)' };  // amber
+  return                        { short: `${pct}`, label: `Weak (${pct}/100)`,  bg: 'rgba(239,68,68,0.85)' };   // red
+}
+
+// Engagement string — prefer the engagement rate when available
+// (formatted as percent), else fall back to "1.2K ♥ · 84 💬" totals.
+// Compact numbers via Intl.NumberFormat 'compact' style.
+function formatEngagement(m: MediaRow): string {
+  if (typeof m.engagement === 'number' && m.engagement > 0) {
+    return `${(m.engagement * 100).toFixed(1)}% eng`;
+  }
+  const bits: string[] = [];
+  const fmt = (n: number) => new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(n);
+  if (typeof m.likes    === 'number' && m.likes    > 0) bits.push(`${fmt(m.likes)} ♥`);
+  if (typeof m.comments === 'number' && m.comments > 0) bits.push(`${fmt(m.comments)} 💬`);
+  if (typeof m.saves    === 'number' && m.saves    > 0) bits.push(`${fmt(m.saves)} ⤴`);
+  return bits.join(' · ');
+}
+
+function titleCase(s: string | null | undefined): string {
+  if (!s) return '';
+  return String(s).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
 function formatShortDate(iso: string | null | undefined): string {

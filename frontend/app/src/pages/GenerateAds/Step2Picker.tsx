@@ -124,7 +124,12 @@ export function Step2Picker({ value, onChange }: Props) {
     if (!brandId) return;
     let cancelled = false;
     setLoadingP(true);
-    apiJson<{ products: ProductRow[] }>(`/api/catalog?brandId=${encodeURIComponent(brandId)}&limit=50`)
+    // collapseVariants=1 — show one logical product per family in the
+    // picker ribbon (e.g. "Hot Crispy Oil - Original" once, not three
+    // times for 3-pack / 6-pack / 12-pack). The variants surface in
+    // the matched-media ribbon below after a product is picked, where
+    // the operator can deselect individual SKUs.
+    apiJson<{ products: ProductRow[] }>(`/api/catalog?brandId=${encodeURIComponent(brandId)}&limit=50&collapseVariants=1`)
       .then(res => { if (!cancelled) setProducts(res.products || []); })
       .finally(() => { if (!cancelled) setLoadingP(false); });
     setLoadingM(true);
@@ -439,7 +444,13 @@ export function Step2Picker({ value, onChange }: Props) {
           imageMediaId: string | null;
           additionalImageMediaIds: string[];
           lastSyncedAt: string | null;
-        } }>(`/api/catalog/${pid}`)
+        }; variants?: Array<{
+          id: string;
+          title: string | null;
+          imageUrl: string | null;
+          imageMediaId: string | null;
+          source: string | null;
+        }> }>(`/api/catalog/${pid}`)
           .then(r => {
             const out: CatalogImageRow[] = [];
             const title = r.product?.title || null;
@@ -467,6 +478,26 @@ export function Step2Picker({ value, onChange }: Props) {
                 imageMediaId: altIds[i] || null,
                 role: 'alt',
                 altIndex: i + 1
+              });
+            });
+            // Sibling SKU variants — the 3-pack / 6-pack / 12-pack
+            // siblings of the picked primary. They surface as alt-style
+            // tiles in the matched-media ribbon so the operator can
+            // deselect specific pack-sizes without dropping the family.
+            // Each variant uses its OWN productId so the ad pipeline
+            // resolves matches via the variant's primaryProductId
+            // (Phase X.1 inheritance commit).
+            (r.variants || []).forEach((v, i) => {
+              if (!v.imageUrl) return;
+              out.push({
+                productId:           v.id,
+                productTitle:        v.title || title,
+                productSource:       v.source || productSource,
+                productLastSyncedAt: lastSyncedAt,
+                imageUrl:            v.imageUrl,
+                imageMediaId:        v.imageMediaId || null,
+                role:                'alt',
+                altIndex:            (r.product?.additionalImages?.length || 0) + i + 1
               });
             });
             return out;

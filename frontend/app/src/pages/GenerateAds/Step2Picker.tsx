@@ -281,6 +281,12 @@ export function Step2Picker({ value, onChange }: Props) {
     return Array.from(new Set([...value.productIds, ...mediaDerivedProductIds]));
   }, [isBrandKind, value.productIds, mediaDerivedProductIds]);
 
+  // Sum of `filteredOutByAdEligible` across all picked products' match
+  // fetches. When > 0 and relatedMedia is empty, the picker can explain
+  // why: the classifier flagged every matched post as promotional or
+  // announcement and the adEligible gate dropped them.
+  const [adEligibleFilteredCount, setAdEligibleFilteredCount] = useState(0);
+
   useEffect(() => {
     let cancelled = false;
     // Fetch on the effective seed-product set so the brand-kind
@@ -288,28 +294,37 @@ export function Step2Picker({ value, onChange }: Props) {
     // products (not just explicit picks). Product-kind / other kinds
     // fall back to value.productIds via expansionSeedProductIds's
     // own derivation.
-    if (!expansionSeedProductIds.length) { setRelatedMedia([]); return; }
+    if (!expansionSeedProductIds.length) { setRelatedMedia([]); setAdEligibleFilteredCount(0); return; }
     Promise.all(
       expansionSeedProductIds.slice(0, 5).map(seedId =>
-        apiJson<{ matches: { mediaId: string; matchTier: MatchTier | null; outcomeReasoning: string | null; winner: string | null; matchSource: string | null; catalogCombinedScore: number | null; media: MediaRow }[] }>(`/api/catalog/${seedId}/matches?adEligible=1`)
-          .then(r => (r.matches || []).map(x => ({
-            ...x.media,
-            id: x.mediaId,
-            seedProductId:        seedId,
-            matchTier:            x.matchTier,
-            outcomeReasoning:     x.outcomeReasoning,
-            winner:               x.winner,
-            matchSource:          x.matchSource,
-            catalogCombinedScore: x.catalogCombinedScore
-          })))
-          .catch(() => [] as MediaRow[])
+        apiJson<{
+          matches: { mediaId: string; matchTier: MatchTier | null; outcomeReasoning: string | null; winner: string | null; matchSource: string | null; catalogCombinedScore: number | null; media: MediaRow }[];
+          filteredOutByAdEligible?: number;
+        }>(`/api/catalog/${seedId}/matches?adEligible=1`)
+          .then(r => ({
+            seedId,
+            rows: (r.matches || []).map(x => ({
+              ...x.media,
+              id: x.mediaId,
+              seedProductId:        seedId,
+              matchTier:            x.matchTier,
+              outcomeReasoning:     x.outcomeReasoning,
+              winner:               x.winner,
+              matchSource:          x.matchSource,
+              catalogCombinedScore: x.catalogCombinedScore
+            })),
+            filteredOut: r.filteredOutByAdEligible || 0
+          }))
+          .catch(() => ({ seedId, rows: [] as MediaRow[], filteredOut: 0 }))
       )
-    ).then(lists => {
+    ).then(results => {
       if (cancelled) return;
       const seen = new Set(value.mediaIds.map(String));
       const flat: MediaRow[] = [];
-      for (const list of lists) {
-        for (const m of list) {
+      let totalFiltered = 0;
+      for (const r of results) {
+        totalFiltered += r.filteredOut;
+        for (const m of r.rows) {
           // Dedupe by (seedProductId, mediaId) — same media surfaced
           // from two seed products gets one tile per pair so each is
           // independently excludable.
@@ -319,6 +334,7 @@ export function Step2Picker({ value, onChange }: Props) {
           flat.push(m);
         }
       }
+      setAdEligibleFilteredCount(totalFiltered);
       setRelatedMedia(flat.slice(0, 24));
     });
     return () => { cancelled = true; };
@@ -659,6 +675,7 @@ export function Step2Picker({ value, onChange }: Props) {
             includeBrandMatched={value.includeBrandMatched}
             onTierToggle={(field, next) => onChange({ [field]: next } as Partial<WizardSelections>)}
             anyProductPicked={value.productIds.length > 0}
+            adEligibleFilteredCount={adEligibleFilteredCount}
           />
         ) : (
           // ── Other kinds (promotional, unset): existing browse-everything layout ──
@@ -1056,6 +1073,7 @@ type ProductKindViewProps = {
   includeBrandMatched:    boolean;
   onTierToggle:           (field: 'includeCategoryMatched' | 'includeBrandMatched', next: boolean) => void;
   anyProductPicked:       boolean;
+  adEligibleFilteredCount: number;
 };
 
 function ProductKindView(props: ProductKindViewProps) {
@@ -1063,7 +1081,8 @@ function ProductKindView(props: ProductKindViewProps) {
     products, productSet, mediaSet, excludedSet,
     toggleProduct, toggleMedia, toggleExclude,
     catalogImagery, productMatchedRelated, categoryMatchedRelated, brandMatches,
-    loadingP, includeCategoryMatched, includeBrandMatched, onTierToggle, anyProductPicked
+    loadingP, includeCategoryMatched, includeBrandMatched, onTierToggle, anyProductPicked,
+    adEligibleFilteredCount
   } = props;
 
   // Build the unified related-tile list. Dedup is by mediaId across
@@ -1123,9 +1142,11 @@ function ProductKindView(props: ProductKindViewProps) {
             tone="muted"
           />
           {relatedTiles.length === 0 ? (
-            <Box h="100px" bg="gray.50" borderRadius="md" display="flex" alignItems="center" justifyContent="center">
-              <Text fontSize="xs" color="brand.muted">
-                Nothing related yet. Try the buttons below to widen the pool.
+            <Box h="100px" bg="gray.50" borderRadius="md" display="flex" alignItems="center" justifyContent="center" px={4}>
+              <Text fontSize="xs" color="brand.muted" textAlign="center">
+                {adEligibleFilteredCount > 0
+                  ? `${adEligibleFilteredCount} matched post${adEligibleFilteredCount === 1 ? '' : 's'} hidden — classifier flagged ${adEligibleFilteredCount === 1 ? 'it' : 'them'} as promotional or announcement. Try the buttons below to widen the pool.`
+                  : 'Nothing related yet. Try the buttons below to widen the pool.'}
               </Text>
             </Box>
           ) : (

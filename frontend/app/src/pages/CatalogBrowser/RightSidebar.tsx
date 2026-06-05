@@ -13,7 +13,7 @@ import {
   Card, CardBody, Heading, Image, Divider, Icon, Link
 } from '@chakra-ui/react';
 import type { CatalogDetail, CatalogMatchRow, SourceMediaRef, CatalogReviewRow, CatalogSeller, CatalogReviewQuote, PlatformStats } from './types';
-import { sourceTone, formatPrice, timeAgo, compactNumber } from './format';
+import { sourceTone, formatPrice, timeAgo, compactNumber, mediaThumbUrl } from './format';
 
 type Props = {
   product:     CatalogDetail | null;
@@ -523,9 +523,24 @@ function MatchRow({ m }: { m: CatalogMatchRow }) {
         {/* Matched-media thumb shows the ACTUAL post image, not the
             YOLO-refined crop. Operators want to recognize the post
             their UGC came from at a glance; the crop is an internal
-            detail. */}
-        <Box w="56px" h="56px" borderRadius="md" overflow="hidden" bg="gray.100" flexShrink={0}>
-          <Image src={m.media.fileUrl} alt="matched post" w="100%" h="100%" objectFit="cover" />
+            detail. Videos get a Cloudinary frame-extract transform
+            so the <img> renders the first-frame thumbnail used by
+            the matching pipeline. */}
+        <Box w="56px" h="56px" borderRadius="md" overflow="hidden" bg="gray.100" flexShrink={0} position="relative">
+          <Image
+            src={mediaThumbUrl(m.media.fileUrl, m.media.fileType)}
+            alt="matched post"
+            w="100%" h="100%" objectFit="cover"
+          />
+          {m.media.fileType === 'video' && (
+            <Badge
+              position="absolute" bottom="2px" left="2px"
+              fontSize="7px" px={1} py={0} borderRadius="sm"
+              bg="blackAlpha.700" color="white" textTransform="none"
+            >
+              VIDEO
+            </Badge>
+          )}
         </Box>
         <Box flex={1} minW={0}>
           <HStack spacing={2}>

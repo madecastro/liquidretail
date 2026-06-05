@@ -2,6 +2,23 @@
 
 import type { CatalogSource } from './types';
 
+// Pick a renderable thumbnail URL for a Media entry. Videos served from
+// Cloudinary need a frame-extract transform (so_0/ → first frame +
+// .jpg extension swap) so an <img> tag can display them. Non-Cloudinary
+// videos fall back to fileUrl — the <img> may break but that's the
+// best we can do without server-side thumbnailing for those sources.
+// For images, the URL is returned as-is.
+export function mediaThumbUrl(fileUrl: string | null | undefined, fileType?: 'image' | 'video' | string | null): string {
+  if (!fileUrl) return '';
+  if (fileType !== 'video') return fileUrl;
+  if (fileUrl.includes('/video/upload/')) {
+    return fileUrl
+      .replace('/video/upload/', '/video/upload/so_0/')
+      .replace(/\.(mp4|mov|webm|m4v|mkv|avi)(\?.*)?$/i, '.jpg$2');
+  }
+  return fileUrl;
+}
+
 export const SOURCE_LABEL: Record<string, string> = {
   'ig-catalog':         'Meta Catalog',
   'manual-upload':      'Manual',

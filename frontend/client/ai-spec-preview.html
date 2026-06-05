@@ -103,6 +103,58 @@
       border: 1px solid;
       border-radius: 4px;
     }
+    /* Wireframe geometry view — blank stage scaled to fit, each zone a
+       labeled positioned div. Cleaner diagnostic than the rendered ad. */
+    .wireframe-stage {
+      position: relative;
+      width: 100%;
+      background:
+        repeating-linear-gradient(0deg,    #1a1a1a 0 1px, transparent 1px 50px),
+        repeating-linear-gradient(90deg,   #1a1a1a 0 1px, transparent 1px 50px),
+        #0a0a0a;
+      border: 1px solid #222;
+      border-radius: 6px;
+      overflow: hidden;
+      font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    }
+    .wireframe-zone {
+      position: absolute;
+      box-sizing: border-box;
+      border: 1.5px solid;
+      font-size: 9px;
+      line-height: 1.2;
+      color: #fff;
+      padding: 3px 4px;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .wireframe-zone .wf-id      { font-weight: 700; letter-spacing: 0.02em; }
+    .wireframe-zone .wf-slot    { color: rgba(255,255,255,0.6); font-size: 8px; display: block; margin-top: 1px; white-space: normal; }
+    .wireframe-zone .wf-meta    { position: absolute; bottom: 2px; right: 4px; font-size: 8px; color: rgba(255,255,255,0.65); }
+    .wireframe-zone .wf-fb-tag  { position: absolute; top: 2px; right: 4px; font-size: 8px; color: #facc15; font-weight: 700; }
+    /* Kind color palette */
+    .wf-k-media,
+    .wf-k-hero_media       { background: rgba(136, 224, 160, 0.20); border-color: #88e0a0; }
+    .wf-k-text,
+    .wf-k-headline,
+    .wf-k-eyebrow,
+    .wf-k-eyebrow_rules,
+    .wf-k-quote,
+    .wf-k-quote_card,
+    .wf-k-stat,
+    .wf-k-rating           { background: rgba(138, 166, 255, 0.20); border-color: #8aa6ff; }
+    .wf-k-panel,
+    .wf-k-scrim            { background: rgba(212, 136, 255, 0.20); border-color: #d488ff; }
+    .wf-k-cta              { background: rgba(248, 113, 113, 0.20); border-color: #f87171; }
+    .wf-k-logo,
+    .wf-k-creator,
+    .wf-k-badges,
+    .wf-k-badge_row        { background: rgba(252, 211, 77, 0.18); border-color: #fcd34d; }
+    .wf-k-product,
+    .wf-k-product_card     { background: rgba(110, 231, 183, 0.20); border-color: #6ee7b7; }
+    .wf-k-proof_bar        { background: rgba(167, 139, 250, 0.20); border-color: #a78bfa; }
+    .wf-k-default          { background: rgba(120, 120, 120, 0.18); border-color: #555; }
     /* tpStageFrame + tpStage themselves are styled by tp-zones.css
        (the shared renderer CSS). No need to override here — the page
        previously defined .tp-stage locally because tp-zones.css wasn't
@@ -220,6 +272,22 @@
         </div>
       </div>
       <p class="helper">Both panes draw via templatePreview.js. LEFT = canvasSpec only (legacy path, what the renderer does today); RIGHT = canvasSpec + ResolvedLayoutArtifact (Phase 5b.2 — post-fallback component variants, computed font/padding inline). Visual diffs between the two columns are exactly what flipping <code>RENDER_USE_RESOLVED=true</code> will change in production.</p>
+
+      <h3 style="margin-top:18px;font-size:10px;color:#888;letter-spacing:0.08em;text-transform:uppercase;font-weight:700;">Geometry wireframe</h3>
+      <div class="render-pair">
+        <div class="render-col">
+          <div class="stage-wrap">
+            <div id="wireframeCanvas" class="wireframe-stage"></div>
+          </div>
+        </div>
+        <div class="render-col">
+          <div class="stage-wrap">
+            <div id="wireframeResolved" class="wireframe-stage"></div>
+          </div>
+        </div>
+      </div>
+      <p class="helper">Blank canvas with each zone drawn as a labeled rect — no text content, no images, no styling. Shows where the LLM placed things and how the Resolver shifted them. Color = kind. Yellow border on right pane = fallback applied. Numbers in the corners = z-layer / computed font_px. Rect labels = id | kind | slot.</p>
+
       <div id="warningsBlock"></div>
 
       <h2 style="margin-top:18px;display:flex;align-items:center;justify-content:space-between;">
@@ -488,6 +556,116 @@
           }
         }
       }
+
+      // Geometry wireframes — same canvas dimensions, each zone drawn
+      // as a labeled positioned div. Two passes so you can see how the
+      // Resolver shifted things.
+      drawWireframe(document.getElementById('wireframeCanvas'),   data.spec, null);
+      drawWireframe(document.getElementById('wireframeResolved'), data.spec, data.resolvedLayout);
+    }
+
+    // ── Wireframe drawing ────────────────────────────────────────────
+    // Builds a positioned-div diagram of the canvas spec's zones (and
+    // the Resolver's overrides, if supplied). Scales to fit the wrapper
+    // width while preserving aspect ratio. Each zone shows its id, kind,
+    // slot, layer, and (in resolved mode) the post-Resolver computed
+    // font_size_px + fallback indicator.
+    function drawWireframe(stage, spec, resolvedLayout) {
+      if (!stage) return;
+      stage.innerHTML = '';
+      if (!spec || !spec.canvas || !Array.isArray(spec.zones)) {
+        stage.innerHTML = '<div class="helper" style="padding:20px;text-align:center;color:#666;">(no canvas spec)</div>';
+        return;
+      }
+      const cw = spec.canvas.width  || 1000;
+      const ch = spec.canvas.height || 1000;
+
+      // Fix the aspect ratio via padding-bottom hack.
+      stage.style.paddingBottom = ((ch / cw) * 100).toFixed(2) + '%';
+
+      // Build a lookup of resolved zones by zone id so we can overlay
+      // fallback indicators + computed font sizes on top of the spec's
+      // original geometry.
+      const resolvedById = {};
+      if (resolvedLayout && Array.isArray(resolvedLayout.resolvedZones)) {
+        for (const rz of resolvedLayout.resolvedZones) {
+          if (rz?.id) resolvedById[rz.id] = rz;
+        }
+      }
+
+      // Position children using percent so the padding-bottom-driven
+      // aspect ratio works at any container width.
+      const zones = spec.zones.slice().sort((a, b) => layerOrder(a) - layerOrder(b));
+      for (const z of zones) {
+        const r = z.rect || {};
+        if (r.x == null || r.y == null || r.w == null || r.h == null) continue;
+
+        // If the resolver dropped this zone (it'd be missing from
+        // resolvedZones), skip it on the resolved side — that's the
+        // diagnostic. Empty zone arrays mean show all.
+        const rz = resolvedById[z.id];
+        if (resolvedLayout && Object.keys(resolvedById).length && !rz) continue;
+
+        const div = document.createElement('div');
+        const kind = String(z.kind || 'default').toLowerCase();
+        div.className = 'wireframe-zone wf-k-' + (kind.replace(/[^a-z_]/g, '') || 'default');
+        div.style.left   = ((r.x / cw) * 100).toFixed(3) + '%';
+        div.style.top    = ((r.y / ch) * 100).toFixed(3) + '%';
+        div.style.width  = ((r.w / cw) * 100).toFixed(3) + '%';
+        div.style.height = ((r.h / ch) * 100).toFixed(3) + '%';
+
+        // Layer indicator — slight box-shadow inset so visual stacking
+        // hints come through even on the flat geometry view.
+        const layer = String(z.layer || '').toLowerCase();
+        if (layer === 'background') div.style.boxShadow = 'inset 0 0 0 2px rgba(255,255,255,0.05)';
+        if (layer === 'copy')       div.style.boxShadow = 'inset 0 0 0 2px rgba(255,255,255,0.20)';
+
+        const idEl = document.createElement('span');
+        idEl.className = 'wf-id';
+        idEl.textContent = z.id || '(no id)';
+        div.appendChild(idEl);
+
+        const slotEl = document.createElement('span');
+        slotEl.className = 'wf-slot';
+        const slotStr = Array.isArray(z.slot) ? z.slot.join(', ') : (z.slot || '');
+        slotEl.textContent = (z.kind || '?') + (slotStr ? ' · ' + slotStr : '');
+        div.appendChild(slotEl);
+
+        // Meta corner — layer in canvas spec mode, computed font_px in
+        // resolved mode if available.
+        const metaEl = document.createElement('span');
+        metaEl.className = 'wf-meta';
+        if (rz?.computed?.font_size_px != null) {
+          metaEl.textContent = 'L:' + (layer || '?') + ' ƒ' + rz.computed.font_size_px;
+        } else {
+          metaEl.textContent = 'L:' + (layer || '?');
+        }
+        div.appendChild(metaEl);
+
+        // Fallback marker — yellow tag in the upper right when the
+        // Resolver had to fall back from the LLM's pick.
+        if (rz?.slot?.from_fallback) {
+          const fbEl = document.createElement('span');
+          fbEl.className = 'wf-fb-tag';
+          fbEl.textContent = 'FB';
+          fbEl.title = 'Resolver fell back from: ' + rz.slot.from_fallback;
+          div.style.borderColor = '#facc15';
+          div.appendChild(fbEl);
+        }
+
+        stage.appendChild(div);
+      }
+    }
+
+    // Mirror the renderer's z-ordering so the wireframe stacks the same
+    // way: media (background) at the bottom, copy on top.
+    function layerOrder(z) {
+      const l = String(z?.layer || '').toLowerCase();
+      if (l === 'media' || z?.kind === 'media' || z?.kind === 'hero_media') return 0;
+      if (l === 'background') return 1;
+      if (l === 'foreground') return 2;
+      if (l === 'copy')       return 3;
+      return 2;
     }
 
     // Phase 5a — render the ResolvedLayoutArtifact (shadow). Shows

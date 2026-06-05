@@ -136,8 +136,20 @@ export type SourceMediaRef = {
   platformStats?: PlatformStats | null;
 } | null;
 
+// LLM-judged crop winners per ratio. Resolved by the catalog detail
+// endpoint via the catalog hero's CropArtifact + DetectionArtifact —
+// gives the gallery the actual ad-ready framings instead of relying
+// on YOLO refined crops from matched UGC posts.
+export type HeroCrops = {
+  '5:4': string | null;
+  '1:1': string | null;
+  '4:5': string | null;
+} | null;
+
 export type CatalogDetailResponse = {
   product:     CatalogDetail;
+  heroCrops?:  HeroCrops;
+  altCrops?:   HeroCrops[];      // parallel to product.additionalImages
   sourceMedia: SourceMediaRef;
 };
 

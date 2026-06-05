@@ -71,7 +71,7 @@ export function CatalogBrowserPage() {
               />
               <ImageGallery
                 product={detail.data.product}
-                matches={matches.data?.matches || []}
+                heroCrops={detail.data.heroCrops || null}
               />
             </>
           ) : selectedId ? (

@@ -1,45 +1,48 @@
-// Phase 4 follow-up #3 — image gallery for the selected product.
+// Catalog browser — image gallery for the selected product.
 //
-// Stacks: primary product image (large) + a horizontal strip of
-// thumbnails for additionalImages + per-match cropped images (so
-// operators can see how the product showed up in actual UGC). Click
-// a thumb to swap the main image. Empty state when no images at all.
+// Stacks: primary catalog hero (large) + a horizontal strip of
+// thumbnails for additionalImages + the LLM-judged ad-crop winners
+// (5:4, 1:1, 4:5) of the catalog hero. Click a thumb to swap the
+// main image. Empty state when no images at all.
+//
+// (Per-match YOLO crops moved OUT of the gallery — they belong to the
+//  matched UGC posts, not the catalog hero, and were misleading the
+//  operator into thinking they were judged crops of this product.)
 
 import { useEffect, useState, useMemo } from 'react';
 import { Box, HStack, VStack, Image, Text, Badge, Flex } from '@chakra-ui/react';
-import type { CatalogDetail, CatalogMatchRow } from './types';
+import type { CatalogDetail, HeroCrops } from './types';
 
 type Props = {
-  product:  CatalogDetail;
-  matches:  CatalogMatchRow[];
+  product:    CatalogDetail;
+  heroCrops:  HeroCrops;
 };
 
 type GalleryEntry = {
   url:      string;
   kind:     'primary' | 'additional' | 'crop';
   label?:   string;
-  source?:  string;        // creator handle / external id when crop
+  source?:  string;
 };
 
-export function ImageGallery({ product, matches }: Props) {
+export function ImageGallery({ product, heroCrops }: Props) {
   const entries = useMemo<GalleryEntry[]>(() => {
     const out: GalleryEntry[] = [];
-    if (product.imageUrl) out.push({ url: product.imageUrl, kind: 'primary', label: 'Catalog' });
+    if (product.imageUrl) out.push({ url: product.imageUrl, kind: 'primary', label: 'Catalog hero' });
     for (const u of product.additionalImages || []) {
       if (u && u !== product.imageUrl) out.push({ url: u, kind: 'additional', label: 'Alt view' });
     }
-    for (const m of matches) {
-      if (m.croppedImageUrl) {
-        out.push({
-          url:    m.croppedImageUrl,
-          kind:   'crop',
-          label:  m.cropLabel || 'Match crop',
-          source: m.media.creatorHandle || m.media.externalId
-        });
+    // LLM-judged ad-crop winners of the catalog hero — these are the
+    // framings the renderer will use when this product becomes a
+    // hero in an ad. Each ratio is a distinct judged crop.
+    if (heroCrops) {
+      for (const ratio of ['5:4', '1:1', '4:5'] as const) {
+        const url = heroCrops[ratio];
+        if (url) out.push({ url, kind: 'crop', label: `Judged ${ratio} crop` });
       }
     }
     return out;
-  }, [product, matches]);
+  }, [product, heroCrops]);
 
   const [activeIdx, setActiveIdx] = useState(0);
   // Reset to first when product changes

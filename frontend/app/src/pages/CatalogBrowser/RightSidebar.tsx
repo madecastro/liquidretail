@@ -520,10 +520,12 @@ function MatchRow({ m }: { m: CatalogMatchRow }) {
   return (
     <Box>
       <HStack align="flex-start" spacing={3}>
+        {/* Matched-media thumb shows the ACTUAL post image, not the
+            YOLO-refined crop. Operators want to recognize the post
+            their UGC came from at a glance; the crop is an internal
+            detail. */}
         <Box w="56px" h="56px" borderRadius="md" overflow="hidden" bg="gray.100" flexShrink={0}>
-          {m.croppedImageUrl
-            ? <Image src={m.croppedImageUrl} alt="match crop" w="100%" h="100%" objectFit="cover" />
-            : <Image src={m.media.fileUrl} alt="media" w="100%" h="100%" objectFit="cover" />}
+          <Image src={m.media.fileUrl} alt="matched post" w="100%" h="100%" objectFit="cover" />
         </Box>
         <Box flex={1} minW={0}>
           <HStack spacing={2}>

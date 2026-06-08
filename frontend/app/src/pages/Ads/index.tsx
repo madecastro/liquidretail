@@ -40,6 +40,11 @@ type AdRow = {
   kind:         'image' | 'video';
   // Render-output fields null until status transitions to 'draft' or beyond.
   renderUrl:    string | null;
+  // Phase B — gpt-image-1 polished version, joined from AiFullRender-
+  // Artifact by the Ad's cache key. Frontend displays this instead of
+  // renderUrl when useImageRefAsProduction is true AND populated.
+  photorealUrl: string | null;
+  useImageRefAsProduction: boolean;
   posterUrl:    string | null;
   width:        number | null;
   height:       number | null;
@@ -70,6 +75,23 @@ type AdRow = {
   metaSyncError:      string | null;
   metaSyncedAt:       string | null;
 };
+
+// Phase B — pick the image URL to display for an ad. Returns the
+// gpt-image-1 polished version (photorealUrl) when the campaign opted
+// in AND the polish has landed; falls back to the deterministic
+// Puppeteer render (renderUrl) otherwise. Both nullable; either may
+// be null while the worker is still rendering / the image-ref shadow
+// is still mid-run.
+function displayUrl(ad: AdRow): string | null {
+  if (ad.useImageRefAsProduction && ad.photorealUrl) return ad.photorealUrl;
+  return ad.renderUrl;
+}
+
+// True when the displayed image is the photoreal polished version.
+// Drives the "Photoreal" pill on the ad card.
+function isShowingPhotoreal(ad: AdRow): boolean {
+  return !!(ad.useImageRefAsProduction && ad.photorealUrl);
+}
 
 type MetaAdsetRow = {
   adsetId:        string;
@@ -601,10 +623,10 @@ export function AdsPage() {
                 overflow="hidden"
                 style={{ aspectRatio: '1 / 1' }}
               >
-                {ad.renderUrl ? (
+                {displayUrl(ad) ? (
                   ad.kind === 'video' ? (
                     <video
-                      src={ad.renderUrl}
+                      src={displayUrl(ad) || undefined}
                       poster={ad.posterUrl || undefined}
                       muted
                       loop
@@ -619,7 +641,7 @@ export function AdsPage() {
                     />
                   ) : (
                     <Image
-                      src={ad.renderUrl}
+                      src={displayUrl(ad) || ''}
                       alt={ad.copy.headline || ad.template}
                       width="100%"
                       height="100%"
@@ -675,6 +697,19 @@ export function AdsPage() {
                     {selectedIds.has(ad.id) ? '✓' : ''}
                   </Box>
                 </Box>
+                {/* Phase B — Photoreal pill (top-left of tile). Fires
+                    when the displayed image is the gpt-image-1 polish
+                    output (not the deterministic Puppeteer render). */}
+                {isShowingPhotoreal(ad) && (
+                  <Badge
+                    position="absolute" top={2} left={2}
+                    colorScheme="purple" fontSize="9px"
+                    px={1.5} py={0.5}
+                    pointerEvents="none"
+                  >
+                    PHOTOREAL
+                  </Badge>
+                )}
                 {/* Meta sync pill — bottom-right of the tile. Synced
                     pill links to Ads Manager; failed pill surfaces the
                     error in a tooltip. */}
@@ -736,10 +771,10 @@ export function AdsPage() {
             {selected && (
               <VStack align="stretch" spacing={4}>
                 <Box bg="gray.900" borderRadius="md" overflow="hidden" style={{ aspectRatio: `${selected.width} / ${selected.height}` }}>
-                  {selected.renderUrl ? (
+                  {displayUrl(selected) ? (
                     selected.kind === 'video' ? (
                       <video
-                        src={selected.renderUrl}
+                        src={displayUrl(selected) || undefined}
                         poster={selected.posterUrl || undefined}
                         controls
                         playsInline
@@ -747,7 +782,7 @@ export function AdsPage() {
                         style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', background: '#000' }}
                       />
                     ) : (
-                      <Image src={selected.renderUrl} alt={selected.copy.headline || selected.template} width="100%" height="100%" objectFit="contain" />
+                      <Image src={displayUrl(selected) || ''} alt={selected.copy.headline || selected.template} width="100%" height="100%" objectFit="contain" />
                     )
                   ) : (
                     <Box w="100%" h="100%" display="flex" alignItems="center" justifyContent="center" color="gray.400" fontSize="12px">

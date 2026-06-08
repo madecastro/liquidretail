@@ -291,10 +291,24 @@
       <div id="warningsBlock"></div>
 
       <h2 style="margin-top:18px;display:flex;align-items:center;justify-content:space-between;">
+        HTML Output <span style="font-size:9px;color:#888;letter-spacing:0;text-transform:none;font-weight:400;">(Phase 6.1 — Layout Generator HTML path)</span>
+        <button id="toggleHtmlOutput" class="toggle-btn" type="button">show</button>
+      </h2>
+      <p class="helper">Self-contained HTML the Layout Generator emitted. When <code>RENDER_USE_HTML=true</code>, the renderer uses this directly via <code>page.setContent</code>. Iframe below renders it sandboxed at native viewport; source toggle reveals the raw HTML. Palette swatches show the colors the LLM picked.</p>
+      <div id="htmlOutputBlock" style="display:none;"></div>
+
+      <h2 style="margin-top:18px;display:flex;align-items:center;justify-content:space-between;">
+        HTML Validation <span style="font-size:9px;color:#888;letter-spacing:0;text-transform:none;font-weight:400;">(Phase 6.2 — Pre-Judge filter input)</span>
+        <button id="toggleHtmlValidation" class="toggle-btn" type="button">show</button>
+      </h2>
+      <p class="helper">Deterministic checks against the winning HTML candidate. Hard violations drop candidates before the Judge sees them (parse failures, missing &lt;html&gt;/&lt;body&gt;, &lt;script&gt; tags, hero image 404s, proof-strategy unsupported). Soft warnings (contrast below AA, image probe failures, palette concerns) surface here; render still proceeds.</p>
+      <div id="htmlValidationBlock" style="display:none;"></div>
+
+      <h2 style="margin-top:18px;display:flex;align-items:center;justify-content:space-between;">
         AI Image Reference <span style="font-size:9px;color:#888;letter-spacing:0;text-transform:none;font-weight:400;">(Phase X.1 shadow — gpt-image-1)</span>
         <button id="toggleImgRef" class="toggle-btn" type="button">show</button>
       </h2>
-      <p class="helper">A complete ad gpt-image-1 generated from the SAME Director concept + brand/product brief. Side-by-side comparison vs the deterministic render above shows the gap between "what raw image gen can compose" vs "what our pipeline produces." Opt-in via <code>AI_IMAGE_REFERENCE_ENABLED=true</code>; ~$0.04 per render.</p>
+      <p class="helper">A "photoreal polish" of the design. Seeded from the HTML render when present (Phase 6.4 — refines the rendered HTML into a photoreal version); falls back to catalog hero or UGC source otherwise. Currently shadow only — not used as the production ad until the Campaign toggle is on.</p>
       <div id="imgRefBlock" style="display:none;"></div>
     </section>
 
@@ -440,6 +454,28 @@
         toggleResBtn.textContent = showing ? 'show' : 'hide';
       });
       if (!data.resolvedLayout) toggleResBtn.textContent = 'show (none yet)';
+
+      // Phase 6.1 — HTML Output block
+      renderHtmlOutput(data.htmlOutput, data.aspectRatio);
+      const toggleHtmlBtn = document.getElementById('toggleHtmlOutput');
+      const htmlBlock     = document.getElementById('htmlOutputBlock');
+      toggleHtmlBtn.addEventListener('click', () => {
+        const showing = htmlBlock.style.display !== 'none';
+        htmlBlock.style.display = showing ? 'none' : 'block';
+        toggleHtmlBtn.textContent = showing ? 'show' : 'hide';
+      });
+      if (!data.htmlOutput?.html) toggleHtmlBtn.textContent = 'show (none yet)';
+
+      // Phase 6.2 — HTML Validation block
+      renderHtmlValidation(data.htmlValidation);
+      const toggleValBtn = document.getElementById('toggleHtmlValidation');
+      const valBlock     = document.getElementById('htmlValidationBlock');
+      toggleValBtn.addEventListener('click', () => {
+        const showing = valBlock.style.display !== 'none';
+        valBlock.style.display = showing ? 'none' : 'block';
+        toggleValBtn.textContent = showing ? 'show' : 'hide';
+      });
+      if (!data.htmlValidation) toggleValBtn.textContent = 'show (none yet)';
 
       // Phase X.1 — AI Image Reference (gpt-image-1) block
       renderImageReference(data.imageReference);
@@ -833,9 +869,142 @@
       block.innerHTML = html;
     }
 
+    // Phase 6.1 — render the HTML Output panel. Iframe-renders the
+    // outputHtml sandboxed at the canvas's native viewport so the
+    // operator sees what page.setContent would screenshot. Source
+    // toggle + palette swatches alongside.
+    function renderHtmlOutput(htmlOut, aspectRatio) {
+      const block = document.getElementById('htmlOutputBlock');
+      if (!htmlOut?.html) {
+        block.innerHTML = '<p class="helper">(no HTML output for this canvas yet — set <code>AI_HTML_LAYOUT_ENABLED=true</code> on the backend and re-generate the spec to populate)</p>';
+        return;
+      }
+      const dims = canvasDimsForRatio(aspectRatio);
+      const palette = Array.isArray(htmlOut.colorPalette) ? htmlOut.colorPalette : [];
+      const paletteHtml = palette.length
+        ? palette.map(c => `<span title="${window.escapeHtml(c)}" style="display:inline-block;width:28px;height:28px;border-radius:4px;border:1px solid #2a2a2a;background:${window.escapeHtml(c)};vertical-align:middle;margin-right:4px;"></span><code style="font-size:9px;color:#888;margin-right:10px;">${window.escapeHtml(c)}</code>`).join('')
+        : '<span style="font-size:10px;color:#666;">(no palette emitted)</span>';
+
+      const iframeId = 'htmlOutIframe';
+      const sourceId = 'htmlOutSource';
+      block.innerHTML = `
+        <div style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;">
+          <div style="flex:0 0 auto;">
+            <div style="background:#0a0a0a;border:1px solid #2a2a2a;border-radius:6px;overflow:hidden;">
+              <iframe id="${iframeId}" sandbox="allow-same-origin"
+                style="display:block;border:0;width:${Math.min(dims.w, 480)}px;height:${Math.round(Math.min(dims.w, 480) * (dims.h / dims.w))}px;"></iframe>
+            </div>
+            <p class="helper" style="margin-top:6px;">Rendered at ${Math.min(dims.w, 480)}×${Math.round(Math.min(dims.w, 480) * (dims.h / dims.w))} (native viewport ${dims.w}×${dims.h}).</p>
+          </div>
+          <div style="flex:1 1 320px;min-width:280px;font-size:11px;color:#ccc;">
+            <div class="meta-row"><strong style="color:#888;">Schema:</strong> ${window.escapeHtml(htmlOut.htmlSchemaVersion || '—')}</div>
+            <div class="meta-row"><strong style="color:#888;">HTML length:</strong> ${htmlOut.html.length.toLocaleString()} chars</div>
+            <div class="meta-row" style="margin-top:10px;"><strong style="color:#888;">Palette:</strong></div>
+            <div style="margin-top:4px;">${paletteHtml}</div>
+            <h3 style="font-size:10px;color:#888;letter-spacing:0.08em;text-transform:uppercase;margin:18px 0 6px;display:flex;align-items:center;justify-content:space-between;">
+              HTML source
+              <button class="toggle-btn" type="button" onclick="(function(){var el=document.getElementById('${sourceId}');var show=el.style.display==='none';el.style.display=show?'block':'none';this.textContent=show?'hide':'show';}).call(this)">show</button>
+            </h3>
+            <pre id="${sourceId}" class="json" style="max-height:520px;white-space:pre-wrap;display:none;">${window.escapeHtml(htmlOut.html)}</pre>
+          </div>
+        </div>
+      `;
+      const iframe = document.getElementById(iframeId);
+      if (iframe) iframe.srcdoc = htmlOut.html;
+    }
+
+    // Helper — canvas dims per ratio (mirrors aiCanvasSpecService.parseRatio).
+    function canvasDimsForRatio(ar) {
+      switch (ar) {
+        case '4:5':    return { w: 1000, h: 1250 };
+        case '5:4':    return { w: 1250, h: 1000 };
+        case '9:16':   return { w: 1000, h: 1778 };
+        case '1.91:1': return { w: 1500, h: 785 };
+        default:       return { w: 1000, h: 1000 };
+      }
+    }
+
+    // Phase 6.2 — render the HTML Validation panel. Shows hard
+    // violations (red), warnings (amber), image probe results, and
+    // a contrast check table.
+    function renderHtmlValidation(v) {
+      const block = document.getElementById('htmlValidationBlock');
+      if (!v) {
+        block.innerHTML = '<p class="helper">(no AiHtmlValidationArtifact for this canvas yet — runs after HTML Gen completes)</p>';
+        return;
+      }
+      const parseColor = v.parseOk ? '#34d399' : '#f87171';
+      const parseLabel = v.parseOk ? 'PARSE OK' : 'PARSE FAILED';
+
+      const hardHtml = (v.hardViolations || []).length
+        ? `<div style="background:rgba(239,68,68,0.10);border:1px solid rgba(239,68,68,0.35);border-radius:6px;padding:10px 12px;margin-top:8px;">
+             <strong style="color:#f87171;font-size:11px;">Hard violations (${v.hardViolations.length})</strong>
+             <ul style="margin:6px 0 0 16px;padding:0;color:#fca5a5;font-size:11px;">
+               ${v.hardViolations.map(c => '<li>' + window.escapeHtml(c) + '</li>').join('')}
+             </ul>
+           </div>`
+        : '<div style="margin-top:8px;color:#34d399;font-size:11px;">✓ No hard violations</div>';
+
+      const warningsHtml = (v.warnings || []).length
+        ? `<table class="zones" style="margin-top:14px;">
+             <thead><tr><th>Severity</th><th>Code</th><th>Message</th><th>Locator</th></tr></thead>
+             <tbody>
+               ${v.warnings.map(w => {
+                 const sevColor = w.severity === 'high' ? '#f87171' : w.severity === 'medium' ? '#facc15' : '#888';
+                 return `<tr>
+                   <td style="color:${sevColor};">${window.escapeHtml(w.severity || '')}</td>
+                   <td>${window.escapeHtml(w.code || '')}</td>
+                   <td>${window.escapeHtml(w.message || '')}</td>
+                   <td style="color:#888;font-size:10px;">${window.escapeHtml(w.locator || '')}</td>
+                 </tr>`;
+               }).join('')}
+             </tbody>
+           </table>`
+        : '<div style="margin-top:14px;color:#888;font-size:11px;">No warnings</div>';
+
+      const probe = v.imageProbe || { tested: 0, ok: 0, failed: [] };
+      const probeColor = probe.failed.length ? '#f87171' : '#34d399';
+      const probeHtml = `
+        <div style="margin-top:14px;padding:10px 12px;background:#0e0e0e;border-radius:6px;font-size:11px;">
+          <strong style="color:#888;">Image probe:</strong>
+          <span style="color:${probeColor};">${probe.ok}/${probe.tested} responding</span>
+          ${probe.failed.length ? '<ul style="margin:6px 0 0 16px;color:#fca5a5;font-size:10px;">' + probe.failed.slice(0, 6).map(u => '<li>' + window.escapeHtml(u) + '</li>').join('') + '</ul>' : ''}
+        </div>
+      `;
+
+      const contrastHtml = (v.contrastChecks || []).length
+        ? `<h3 style="font-size:10px;color:#888;letter-spacing:0.08em;text-transform:uppercase;margin:14px 0 6px;">Contrast checks (${v.contrastChecks.length})</h3>
+           <table class="zones">
+             <thead><tr><th>Selector</th><th>Foreground</th><th>Background</th><th>Ratio</th><th>AA</th></tr></thead>
+             <tbody>
+               ${v.contrastChecks.slice(0, 20).map(c => `
+                 <tr>
+                   <td style="font-size:10px;color:#888;">${window.escapeHtml((c.selector || '').slice(0, 60))}</td>
+                   <td><span style="display:inline-block;width:14px;height:14px;border-radius:2px;border:1px solid #333;background:${window.escapeHtml(c.fg || '#000')};vertical-align:middle;margin-right:4px;"></span><code style="font-size:9px;">${window.escapeHtml(c.fg || '')}</code></td>
+                   <td><span style="display:inline-block;width:14px;height:14px;border-radius:2px;border:1px solid #333;background:${window.escapeHtml(c.bg || '#000')};vertical-align:middle;margin-right:4px;"></span><code style="font-size:9px;">${window.escapeHtml(c.bg || '')}</code></td>
+                   <td>${Number(c.ratio || 0).toFixed(2)}:1</td>
+                   <td style="color:${c.passAA ? '#34d399' : '#f87171'};">${c.passAA ? '✓' : '✕'}</td>
+                 </tr>
+               `).join('')}
+             </tbody>
+           </table>`
+        : '';
+
+      block.innerHTML = `
+        <div style="display:inline-block;padding:4px 10px;border-radius:4px;font-size:11px;font-weight:700;background:rgba(${v.parseOk ? '52,211,153' : '239,68,68'},0.18);color:${parseColor};border:1px solid ${parseColor};">
+          ${parseLabel}
+        </div>
+        <span style="font-size:11px;color:#888;margin-left:12px;">Candidate index: ${v.candidateIndex} · ${v.createdAt ? new Date(v.createdAt).toLocaleString() : ''}</span>
+        ${hardHtml}
+        ${probeHtml}
+        ${warningsHtml}
+        ${contrastHtml}
+      `;
+    }
+
     // Phase X.1 — render the gpt-image-1 reference artifact for this
     // canvas. Shows the generated image at native size with the prompt
-    // text beneath, plus cost + elapsed metadata.
+    // text beneath, plus cost + elapsed metadata + seed source.
     function renderImageReference(ir) {
       const block = document.getElementById('imgRefBlock');
       if (!ir) {
@@ -845,6 +1014,14 @@
       const cost = ir.costEstimateUsd != null ? '$' + Number(ir.costEstimateUsd).toFixed(3) : '—';
       const ms   = ir.elapsedMs != null ? ir.elapsedMs + 'ms' : '—';
       const dim  = (ir.width && ir.height) ? (ir.width + '×' + ir.height) : '—';
+      // Phase 6.4 — seedSource pill. html_render is the goal state
+      // (gpt-image-1 polishing our exact composition); catalog-hero /
+      // ugc-source / none are fallbacks worth flagging.
+      const seed = ir.seedSource || 'none';
+      const seedTone = seed === 'html_render' ? { bg: 'rgba(52,211,153,0.18)', fg: '#34d399', label: 'Seeded from HTML render' }
+                     : seed === 'catalog-hero' ? { bg: 'rgba(138,166,255,0.18)', fg: '#8aa6ff', label: 'Seeded from catalog hero' }
+                     : seed === 'ugc-source'   ? { bg: 'rgba(212,136,255,0.18)', fg: '#d488ff', label: 'Seeded from UGC source' }
+                     :                            { bg: 'rgba(120,120,120,0.18)', fg: '#888',    label: 'No seed (text-only generate)' };
       block.innerHTML = `
         <div style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;">
           <div style="flex:0 0 auto;">
@@ -854,6 +1031,9 @@
             </a>
           </div>
           <div style="flex:1 1 320px;min-width:280px;font-size:11px;color:#ccc;">
+            <div style="display:inline-block;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;background:${seedTone.bg};color:${seedTone.fg};border:1px solid ${seedTone.fg};margin-bottom:10px;">
+              ${seedTone.label}
+            </div>
             <div class="meta-row"><strong style="color:#888;">Model:</strong> ${window.escapeHtml(ir.modelId || '—')}</div>
             <div class="meta-row"><strong style="color:#888;">Size:</strong> ${window.escapeHtml(dim)}</div>
             <div class="meta-row"><strong style="color:#888;">Cost est:</strong> ${window.escapeHtml(cost)}</div>

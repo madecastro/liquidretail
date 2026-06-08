@@ -221,9 +221,14 @@
   // (so production text sizes apply during DOM rendering), and apply
   // a transform: scale(N) so the stage visually fits the frame.
   // Called at the end of each draw routine + on phone-frame toggle.
-  function applyCanvasSize(canvasW, canvasH) {
-    const frame = document.getElementById('tpStageFrame');
-    const stage = document.getElementById('tpStage');
+  // stageEl is optional — when provided (spec preview's side-by-side
+  // diagnostic), this sizes THAT specific stage instead of always
+  // mutating the page's primary #tpStage. Frame is derived from the
+  // stage's closest .tp-stage-frame ancestor so the frame and stage
+  // stay paired regardless of which pane is being drawn.
+  function applyCanvasSize(canvasW, canvasH, stageEl) {
+    const stage = stageEl || document.getElementById('tpStage');
+    const frame = stage ? stage.closest('.tp-stage-frame') : document.getElementById('tpStageFrame');
     if (!frame || !stage) return;
     frame.style.aspectRatio = `${canvasW} / ${canvasH}`;
     stage.style.width  = `${canvasW}px`;
@@ -236,9 +241,9 @@
     // fitted-mode lets the frame's CSS aspect-ratio stretch to the
     // available container width and applies a transform: scale(N).
     if (TP_STATE.actualSize) {
-      requestAnimationFrame(applyActualSize);
+      requestAnimationFrame(() => applyActualSize(stage));
     } else {
-      requestAnimationFrame(applyStageScale);
+      requestAnimationFrame(() => applyStageScale(stage));
     }
   }
 
@@ -249,9 +254,12 @@
   // like sub-pixel font hinting and image smoothing differ between
   // scaled and un-scaled rendering; the actual-size mode is the
   // diagnostic surface).
-  function applyStageScale() {
-    const frame = document.getElementById('tpStageFrame');
-    const stage = document.getElementById('tpStage');
+  // stageEl optional — defaults to the primary #tpStage. Called with a
+  // specific stage by drawTpCanvas (per-pane); called without args by
+  // the window resize handler (which scales every .tp-stage on the page).
+  function applyStageScale(stageEl) {
+    const stage = stageEl || document.getElementById('tpStage');
+    const frame = stage ? stage.closest('.tp-stage-frame') : document.getElementById('tpStageFrame');
     if (!frame || !stage) return;
     if (TP_STATE.actualSize) {
       stage.style.transform = 'none';
@@ -272,9 +280,9 @@
   // pixel size. In actual-size mode the frame grows to the stage's pixel
   // dimensions and the surrounding tp-stage-wrap gets overflow:auto so
   // the user can scroll a 1000×1778 9:16 canvas at 1:1.
-  function applyActualSize() {
-    const frame = document.getElementById('tpStageFrame');
-    const stage = document.getElementById('tpStage');
+  function applyActualSize(stageEl) {
+    const stage = stageEl || document.getElementById('tpStage');
+    const frame = stage ? stage.closest('.tp-stage-frame') : document.getElementById('tpStageFrame');
     const wrap  = frame?.closest('.tp-stage-wrap');
     if (!frame || !stage) return;
     const stageW = parseFloat(stage.style.width)  || 0;
@@ -305,7 +313,7 @@
         wrap.style.justifyContent = '';
       }
     }
-    requestAnimationFrame(applyStageScale);
+    requestAnimationFrame(() => applyStageScale(stage));
   }
 
   // Conservation slider — lives next to the debug chips. Drags coalesce via
@@ -565,10 +573,14 @@
   // Recompute the stage scale on viewport resize so the WYSIWYG preview
   // continues to fit when the user resizes the window or toggles the
   // tab pane width. Debounced via RAF so we don't churn during drags.
+  // Scales every .tp-stage on the page — the spec preview's side-by-side
+  // diagnostic mounts two stages, both need to rescale together.
   let _resizeRaf = 0;
   window.addEventListener('resize', () => {
     cancelAnimationFrame(_resizeRaf);
-    _resizeRaf = requestAnimationFrame(applyStageScale);
+    _resizeRaf = requestAnimationFrame(() => {
+      document.querySelectorAll('.tp-stage').forEach(applyStageScale);
+    });
   });
 
   // Wire the Debug / Brand Object tabs once on first load. The host page
@@ -918,7 +930,10 @@
     const w = canvas.canvas.width, h = canvas.canvas.height;
     stage.innerHTML = '';
     // WYSIWYG: render at full canvas pixel size and scale via CSS.
-    applyCanvasSize(w, h);
+    // Pass the stage element so the spec preview's side-by-side
+    // diagnostic sizes BOTH panes (legacy + resolved) independently
+    // instead of clobbering the primary #tpStage twice.
+    applyCanvasSize(w, h, stage);
 
     // Apply per-(template × ratio) zone_scalers from the canvas spec
     // BEFORE the zone-paint loop, so the rect-to-percent conversion
@@ -1725,7 +1740,7 @@
     // production sizes so what we see matches what the renderer would
     // produce.
     const dims = dimsForRatio(input.aspect_ratio);
-    applyCanvasSize(dims.w, dims.h);
+    applyCanvasSize(dims.w, dims.h, stage);
 
     // Brand tokens (same as canonical preview)
     const brand = input.brand || {};

@@ -361,14 +361,9 @@ export function CampaignDetailPage() {
         />
       )}
 
-      {/* Phase B — Photoreal toggle. Only meaningful for reach-social
-          campaigns (the platform that runs through our AI pipeline). */}
-      {editable && (
-        <PhotorealToggleCard
-          campaign={campaign}
-          onSaved={(useImageRefAsProduction) => setCampaign(prev => prev ? { ...prev, useImageRefAsProduction } : prev)}
-        />
-      )}
+      {/* Photoreal toggle deprecated — display logic always prefers
+          photorealUrl now (HTML render is internal seed only). Backend
+          useImageRefAsProduction field kept for rollback safety. */}
 
       {(pinnedProductIds.length > 0 || pinnedMediaIds.length > 0) && (
         <Card variant="outline" bg="rsViolet.50" borderColor="rsViolet.200">
@@ -1084,26 +1079,19 @@ function AdsSection({
   return (
     <SimpleGrid columns={{ base: 1, sm: 2, md: 3, lg: 4 }} spacing={4}>
       {ads.map(ad => {
-        const coupled = !!(ad.renderUrl && ad.photorealUrl);
+        // Photoreal preferred; renderUrl is the fallback while the
+        // polish is still cooking. POLISHING badge tells the operator
+        // it's transient.
+        const src = ad.photorealUrl || ad.renderUrl;
+        const polishing = !!(ad.renderUrl && !ad.photorealUrl);
         return (
         <Card key={ad.id} variant="outline">
-          <Box position="relative" bg="gray.900" borderTopRadius="md" overflow="hidden" style={{ aspectRatio: coupled ? '1 / 2' : '1 / 1' }}>
-            {coupled ? (
-              // Coupled view — HTML render (top) + AI polish (bottom).
-              // Mirrors the Ads page tile so the operator sees the same
-              // pairing regardless of where they're browsing from.
-              <Box display="flex" flexDirection="column" w="100%" h="100%">
-                <Box position="relative" w="100%" flex="1 1 50%" overflow="hidden" borderBottom="1px solid" borderColor="whiteAlpha.300">
-                  <Image src={ad.renderUrl} alt={`${ad.copy.headline || ad.template} (HTML)`} w="100%" h="100%" objectFit="contain" />
-                  <Badge position="absolute" bottom={1} left={1} bg="blackAlpha.700" color="white" fontSize="8px" px={1.5} py={0.5} pointerEvents="none">HTML</Badge>
-                </Box>
-                <Box position="relative" w="100%" flex="1 1 50%" overflow="hidden">
-                  <Image src={ad.photorealUrl || ''} alt={`${ad.copy.headline || ad.template} (AI polish)`} w="100%" h="100%" objectFit="contain" />
-                  <Badge position="absolute" bottom={1} left={1} colorScheme="purple" fontSize="8px" px={1.5} py={0.5} pointerEvents="none">AI POLISH</Badge>
-                </Box>
-              </Box>
-            ) : (
-              <Image src={ad.renderUrl} alt={ad.copy.headline || ad.template} w="100%" h="100%" objectFit="contain" />
+          <Box position="relative" bg="gray.900" borderTopRadius="md" overflow="hidden" style={{ aspectRatio: '1 / 1' }}>
+            <Image src={src} alt={ad.copy.headline || ad.template} w="100%" h="100%" objectFit="contain" />
+            {polishing && (
+              <Badge position="absolute" top={2} left={2} bg="blackAlpha.700" color="white" fontSize="9px" px={1.5} py={0.5} pointerEvents="none">
+                POLISHING…
+              </Badge>
             )}
             <Badge
               position="absolute" top={2} right={2}

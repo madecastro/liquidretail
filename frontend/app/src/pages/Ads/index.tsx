@@ -76,28 +76,25 @@ type AdRow = {
   metaSyncedAt:       string | null;
 };
 
-// Phase B — pick the image URL to display for an ad. Returns the
-// gpt-image-1 polished version (photorealUrl) when the campaign opted
-// in AND the polish has landed; falls back to the deterministic
-// Puppeteer render (renderUrl) otherwise. Both nullable; either may
-// be null while the worker is still rendering / the image-ref shadow
-// is still mid-run.
+// Photoreal-only display. The HTML render still happens internally
+// (it's the seed gpt-image-1 polishes from), but the tile only ever
+// shows the photoreal output once it's landed. While the polish is
+// still cooking we fall back to the HTML render with a POLISHING
+// badge so the operator knows it's transient.
 function displayUrl(ad: AdRow): string | null {
-  if (ad.useImageRefAsProduction && ad.photorealUrl) return ad.photorealUrl;
-  return ad.renderUrl;
+  return ad.photorealUrl || ad.renderUrl;
 }
 
-// True when the displayed image is the photoreal polished version.
-// Drives the "Photoreal" pill on the ad card.
 function isShowingPhotoreal(ad: AdRow): boolean {
-  return !!(ad.useImageRefAsProduction && ad.photorealUrl);
+  return !!ad.photorealUrl;
 }
 
-// True when both deterministic render and gpt-image-1 polish exist —
-// the tile shows them as a coupled pair (HTML render on top, AI polish
-// on bottom) instead of the legacy single-image swap.
-function hasCoupledRenders(ad: AdRow): boolean {
-  return !!(ad.renderUrl && ad.photorealUrl && ad.kind !== 'video');
+// True when only the HTML render has landed but the photoreal polish
+// hasn't yet — used to paint a POLISHING badge so the operator knows
+// the tile will refresh to the photoreal once the gpt-image-1 call
+// completes.
+function isAwaitingPolish(ad: AdRow): boolean {
+  return !!(ad.renderUrl && !ad.photorealUrl && ad.kind !== 'video');
 }
 
 type MetaAdsetRow = {
@@ -628,54 +625,9 @@ export function AdsPage() {
                 bg="gray.900"
                 borderTopRadius="md"
                 overflow="hidden"
-                style={{ aspectRatio: hasCoupledRenders(ad) ? '1 / 2' : '1 / 1' }}
+                style={{ aspectRatio: '1 / 1' }}
               >
-                {hasCoupledRenders(ad) ? (
-                  // Coupled view — top half: HTML render (deterministic
-                  // Puppeteer screenshot of the LLM HTML). Bottom half:
-                  // gpt-image-1 polish seeded from that HTML render. Both
-                  // labeled so the operator can see the layout the LLM
-                  // emitted vs the photoreal refinement that ships when
-                  // useImageRefAsProduction is on.
-                  <Box display="flex" flexDirection="column" w="100%" h="100%">
-                    <Box position="relative" w="100%" flex="1 1 50%" overflow="hidden" borderBottom="1px solid" borderColor="whiteAlpha.300">
-                      <Image
-                        src={ad.renderUrl || ''}
-                        alt={`${ad.copy.headline || ad.template} (HTML)`}
-                        width="100%"
-                        height="100%"
-                        objectFit="contain"
-                        loading="lazy"
-                      />
-                      <Badge
-                        position="absolute" bottom={1} left={1}
-                        bg="blackAlpha.700" color="white"
-                        fontSize="8px" px={1.5} py={0.5}
-                        pointerEvents="none"
-                      >
-                        HTML
-                      </Badge>
-                    </Box>
-                    <Box position="relative" w="100%" flex="1 1 50%" overflow="hidden">
-                      <Image
-                        src={ad.photorealUrl || ''}
-                        alt={`${ad.copy.headline || ad.template} (AI polish)`}
-                        width="100%"
-                        height="100%"
-                        objectFit="contain"
-                        loading="lazy"
-                      />
-                      <Badge
-                        position="absolute" bottom={1} left={1}
-                        colorScheme="purple"
-                        fontSize="8px" px={1.5} py={0.5}
-                        pointerEvents="none"
-                      >
-                        AI POLISH
-                      </Badge>
-                    </Box>
-                  </Box>
-                ) : displayUrl(ad) ? (
+                {displayUrl(ad) ? (
                   ad.kind === 'video' ? (
                     <video
                       src={displayUrl(ad) || undefined}
@@ -749,12 +701,24 @@ export function AdsPage() {
                     {selectedIds.has(ad.id) ? '✓' : ''}
                   </Box>
                 </Box>
-                {/* Phase B — Photoreal pill (top-left of tile). Fires
-                    when the displayed image is the gpt-image-1 polish
-                    output (not the deterministic Puppeteer render).
-                    Hidden in coupled mode — both panes have their own
-                    per-pane labels. */}
-                {isShowingPhotoreal(ad) && !hasCoupledRenders(ad) && (
+                {/* POLISHING pill — shown while the photoreal hasn't
+                    landed yet and the tile is falling back to the HTML
+                    render. Page refresh after image-ref lands swaps to
+                    the photoreal automatically. */}
+                {isAwaitingPolish(ad) && (
+                  <Badge
+                    position="absolute" top={2} left={10}
+                    bg="blackAlpha.700" color="white"
+                    fontSize="9px" px={1.5} py={0.5}
+                    pointerEvents="none"
+                  >
+                    POLISHING…
+                  </Badge>
+                )}
+                {/* Phase B — Photoreal pill (top-left of tile). Now
+                    fires whenever the photoreal landed (legacy toggle
+                    deprecated; display always prefers photoreal). */}
+                {isShowingPhotoreal(ad) && (
                   <Badge
                     position="absolute" top={2} left={2}
                     colorScheme="purple" fontSize="9px"

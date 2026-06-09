@@ -112,6 +112,36 @@ export function CampaignDetailPage() {
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState<string | null>(null);
 
+  // Delete-confirm modal. Operator must type the campaign name to
+  // arm the destructive button — same affordance as GitHub/Vercel
+  // repo deletes. Stops accidental "wait that wasn't a test campaign"
+  // mistakes since the action is hard-delete (cascades Ads + runs).
+  const deleteModal = useDisclosure();
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deleting, setDeleting] = useState(false);
+
+  const onDeleteCampaign = async () => {
+    if (!campaign) return;
+    setDeleting(true);
+    try {
+      const result = await apiJson<{ ok: boolean; adsDeleted: number; runsDeleted: number; cloudinaryQueued: number }>(
+        `/api/campaigns/${campaign.id}`,
+        { method: 'DELETE' }
+      );
+      toast({
+        title: 'Campaign deleted',
+        description: `Removed ${result.adsDeleted} ads + ${result.runsDeleted} runs. ${result.cloudinaryQueued} Cloudinary assets queued for cleanup.`,
+        status: 'success',
+        duration: 5000
+      });
+      deleteModal.onClose();
+      navigate('/campaigns');
+    } catch (e) {
+      toast({ title: 'Delete failed', description: e instanceof Error ? e.message : String(e), status: 'error' });
+      setDeleting(false);
+    }
+  };
+
   const refreshAll = useCallback(async () => {
     if (!id || !activeBrandId) return;
     setLoading(true);
@@ -249,17 +279,66 @@ export function CampaignDetailPage() {
               )}
               <Text fontSize="xs" color="brand.muted" mt={1}>{campaign.externalId}</Text>
             </Box>
-            <Button
-              variant="brand"
-              onClick={() => launchWizard()}
-              isDisabled={!!campaign.isExpired}
-              title={campaign.isExpired ? 'This campaign has ended' : undefined}
-            >
-              Generate Ads
-            </Button>
+            <HStack spacing={2}>
+              <Button
+                variant="outline"
+                colorScheme="red"
+                onClick={() => { setDeleteConfirmText(''); deleteModal.onOpen(); }}
+              >
+                Delete campaign
+              </Button>
+              <Button
+                variant="brand"
+                onClick={() => launchWizard()}
+                isDisabled={!!campaign.isExpired}
+                title={campaign.isExpired ? 'This campaign has ended' : undefined}
+              >
+                Generate Ads
+              </Button>
+            </HStack>
           </HStack>
         </CardBody>
       </Card>
+
+      <Modal isOpen={deleteModal.isOpen} onClose={deleteModal.onClose} isCentered>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Delete this campaign?</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <VStack align="stretch" spacing={3}>
+              <Text fontSize="sm">
+                This permanently deletes <b>{campaign.name}</b>, all of its generated ads,
+                and any campaign-run history. Source media, catalog products, and AI
+                layout artifacts are preserved (they belong to the brand and may be
+                reused by other campaigns).
+              </Text>
+              <Text fontSize="sm">
+                Type <b>{campaign.name}</b> to confirm.
+              </Text>
+              <Input
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder={campaign.name}
+                autoFocus
+              />
+            </VStack>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="ghost" mr={3} onClick={deleteModal.onClose} isDisabled={deleting}>
+              Cancel
+            </Button>
+            <Button
+              colorScheme="red"
+              isLoading={deleting}
+              isDisabled={deleteConfirmText !== campaign.name}
+              onClick={onDeleteCampaign}
+            >
+              Delete forever
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
 
       {campaign.isExpired && (
         <Card variant="outline" bg="red.50" borderColor="red.200">

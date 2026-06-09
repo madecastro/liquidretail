@@ -85,6 +85,8 @@ type AdRow = {
   template:    string;
   aspectRatio: string;
   renderUrl:   string;
+  photorealUrl?: string | null;          // gpt-image-1 polish; joined from AiFullRenderArtifact
+  useImageRefAsProduction?: boolean;     // campaign-level flag (which to favor when only one shown)
   status:      'draft' | 'live' | 'archived';
   copy:        { headline?: string; productName?: string; productPrice?: string; cta_text?: string };
   generatedAt: string;
@@ -1002,10 +1004,28 @@ function AdsSection({
 
   return (
     <SimpleGrid columns={{ base: 1, sm: 2, md: 3, lg: 4 }} spacing={4}>
-      {ads.map(ad => (
+      {ads.map(ad => {
+        const coupled = !!(ad.renderUrl && ad.photorealUrl);
+        return (
         <Card key={ad.id} variant="outline">
-          <Box position="relative" bg="gray.900" borderTopRadius="md" overflow="hidden" style={{ aspectRatio: '1 / 1' }}>
-            <Image src={ad.renderUrl} alt={ad.copy.headline || ad.template} w="100%" h="100%" objectFit="contain" />
+          <Box position="relative" bg="gray.900" borderTopRadius="md" overflow="hidden" style={{ aspectRatio: coupled ? '1 / 2' : '1 / 1' }}>
+            {coupled ? (
+              // Coupled view — HTML render (top) + AI polish (bottom).
+              // Mirrors the Ads page tile so the operator sees the same
+              // pairing regardless of where they're browsing from.
+              <Box display="flex" flexDirection="column" w="100%" h="100%">
+                <Box position="relative" w="100%" flex="1 1 50%" overflow="hidden" borderBottom="1px solid" borderColor="whiteAlpha.300">
+                  <Image src={ad.renderUrl} alt={`${ad.copy.headline || ad.template} (HTML)`} w="100%" h="100%" objectFit="contain" />
+                  <Badge position="absolute" bottom={1} left={1} bg="blackAlpha.700" color="white" fontSize="8px" px={1.5} py={0.5} pointerEvents="none">HTML</Badge>
+                </Box>
+                <Box position="relative" w="100%" flex="1 1 50%" overflow="hidden">
+                  <Image src={ad.photorealUrl || ''} alt={`${ad.copy.headline || ad.template} (AI polish)`} w="100%" h="100%" objectFit="contain" />
+                  <Badge position="absolute" bottom={1} left={1} colorScheme="purple" fontSize="8px" px={1.5} py={0.5} pointerEvents="none">AI POLISH</Badge>
+                </Box>
+              </Box>
+            ) : (
+              <Image src={ad.renderUrl} alt={ad.copy.headline || ad.template} w="100%" h="100%" objectFit="contain" />
+            )}
             <Badge
               position="absolute" top={2} right={2}
               colorScheme={ad.status === 'live' ? 'green' : ad.status === 'archived' ? 'gray' : 'orange'}
@@ -1033,7 +1053,8 @@ function AdsSection({
             </VStack>
           </CardBody>
         </Card>
-      ))}
+        );
+      })}
     </SimpleGrid>
   );
 }

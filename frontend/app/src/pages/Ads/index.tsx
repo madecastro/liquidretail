@@ -93,6 +93,13 @@ function isShowingPhotoreal(ad: AdRow): boolean {
   return !!(ad.useImageRefAsProduction && ad.photorealUrl);
 }
 
+// True when both deterministic render and gpt-image-1 polish exist —
+// the tile shows them as a coupled pair (HTML render on top, AI polish
+// on bottom) instead of the legacy single-image swap.
+function hasCoupledRenders(ad: AdRow): boolean {
+  return !!(ad.renderUrl && ad.photorealUrl && ad.kind !== 'video');
+}
+
 type MetaAdsetRow = {
   adsetId:        string;
   adsetName:      string;
@@ -621,9 +628,54 @@ export function AdsPage() {
                 bg="gray.900"
                 borderTopRadius="md"
                 overflow="hidden"
-                style={{ aspectRatio: '1 / 1' }}
+                style={{ aspectRatio: hasCoupledRenders(ad) ? '1 / 2' : '1 / 1' }}
               >
-                {displayUrl(ad) ? (
+                {hasCoupledRenders(ad) ? (
+                  // Coupled view — top half: HTML render (deterministic
+                  // Puppeteer screenshot of the LLM HTML). Bottom half:
+                  // gpt-image-1 polish seeded from that HTML render. Both
+                  // labeled so the operator can see the layout the LLM
+                  // emitted vs the photoreal refinement that ships when
+                  // useImageRefAsProduction is on.
+                  <Box display="flex" flexDirection="column" w="100%" h="100%">
+                    <Box position="relative" w="100%" flex="1 1 50%" overflow="hidden" borderBottom="1px solid" borderColor="whiteAlpha.300">
+                      <Image
+                        src={ad.renderUrl || ''}
+                        alt={`${ad.copy.headline || ad.template} (HTML)`}
+                        width="100%"
+                        height="100%"
+                        objectFit="contain"
+                        loading="lazy"
+                      />
+                      <Badge
+                        position="absolute" bottom={1} left={1}
+                        bg="blackAlpha.700" color="white"
+                        fontSize="8px" px={1.5} py={0.5}
+                        pointerEvents="none"
+                      >
+                        HTML
+                      </Badge>
+                    </Box>
+                    <Box position="relative" w="100%" flex="1 1 50%" overflow="hidden">
+                      <Image
+                        src={ad.photorealUrl || ''}
+                        alt={`${ad.copy.headline || ad.template} (AI polish)`}
+                        width="100%"
+                        height="100%"
+                        objectFit="contain"
+                        loading="lazy"
+                      />
+                      <Badge
+                        position="absolute" bottom={1} left={1}
+                        colorScheme="purple"
+                        fontSize="8px" px={1.5} py={0.5}
+                        pointerEvents="none"
+                      >
+                        AI POLISH
+                      </Badge>
+                    </Box>
+                  </Box>
+                ) : displayUrl(ad) ? (
                   ad.kind === 'video' ? (
                     <video
                       src={displayUrl(ad) || undefined}
@@ -699,8 +751,10 @@ export function AdsPage() {
                 </Box>
                 {/* Phase B — Photoreal pill (top-left of tile). Fires
                     when the displayed image is the gpt-image-1 polish
-                    output (not the deterministic Puppeteer render). */}
-                {isShowingPhotoreal(ad) && (
+                    output (not the deterministic Puppeteer render).
+                    Hidden in coupled mode — both panes have their own
+                    per-pane labels. */}
+                {isShowingPhotoreal(ad) && !hasCoupledRenders(ad) && (
                   <Badge
                     position="absolute" top={2} left={2}
                     colorScheme="purple" fontSize="9px"

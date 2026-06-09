@@ -18,7 +18,7 @@ import {
   Box, Image, Spinner, IconButton, Icon, useToast, Tabs, TabList, Tab,
   TabPanels, TabPanel, Editable, EditableInput, EditablePreview,
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter,
-  ModalCloseButton, useDisclosure, Input, SimpleGrid, Switch
+  ModalCloseButton, useDisclosure, Input, SimpleGrid
 } from '@chakra-ui/react';
 import { PageHeader } from '../../shell/PageHeader';
 import { apiJson } from '../../auth/apiFetch';
@@ -502,74 +502,6 @@ function PromotionalDetailsCard({ campaign, editable, onSaved }: PromoCardProps)
         initial={promo}
         onSaved={(updated) => { onSaved(updated); editModal.onClose(); }}
       />
-    </Card>
-  );
-}
-
-// Phase B — toggle to swap the rsvite Ads view between the
-// deterministic Puppeteer render (default) and the gpt-image-1
-// polished version (AiFullRenderArtifact.imageUrl). Patches
-// useImageRefAsProduction on the campaign. The polish runs as a
-// shadow on the backend regardless of this flag; the toggle is
-// purely a display preference.
-function PhotorealToggleCard({ campaign, onSaved }: { campaign: Campaign; onSaved: (v: boolean) => void }) {
-  const toast = useToast();
-  const [saving, setSaving] = useState(false);
-  const enabled = !!campaign.useImageRefAsProduction;
-
-  const toggle = async () => {
-    const next = !enabled;
-    setSaving(true);
-    try {
-      await apiJson<{ campaign: Campaign }>(`/api/campaigns/${campaign.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ useImageRefAsProduction: next })
-      });
-      onSaved(next);
-      toast({
-        title: next ? 'Photoreal display enabled' : 'Photoreal display disabled',
-        description: next
-          ? 'Ads now show the gpt-image-1 polished version when available (~$0.04 per ad polished in shadow).'
-          : 'Ads now show the deterministic Puppeteer render.',
-        status: 'success',
-        duration: 4000,
-        isClosable: true
-      });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      toast({ title: 'Update failed', description: msg, status: 'error', duration: 5000, isClosable: true });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Card variant="outline">
-      <CardBody>
-        <HStack justify="space-between" align="start" spacing={4}>
-          <Box flex={1}>
-            <HStack spacing={2} mb={1}>
-              <Text fontSize="xs" fontWeight="800" color="brand.muted" textTransform="uppercase" letterSpacing="0.06em">
-                Photoreal ads
-              </Text>
-              <Badge colorScheme="purple" fontSize="9px">EXPERIMENTAL</Badge>
-            </HStack>
-            <Text fontSize="sm" color="brand.ink" mb={1}>
-              Show the gpt-image-1 polished version as the ad image.
-            </Text>
-            <Text fontSize="xs" color="brand.muted">
-              The polished version refines the deterministic render into a photoreal ad — same composition, photoreal imagery, smoother typography. Cost: ~$0.04 per ad polished in the background. Falls back to the standard render until the polish completes.
-            </Text>
-          </Box>
-          <Switch
-            isChecked={enabled}
-            onChange={toggle}
-            isDisabled={saving}
-            colorScheme="purple"
-            size="lg"
-          />
-        </HStack>
-      </CardBody>
     </Card>
   );
 }

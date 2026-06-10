@@ -85,6 +85,8 @@ type AdRow = {
   template:    string;
   aspectRatio: string;
   renderUrl:   string;
+  posterUrl?:  string | null;            // present when kind='video' (frame thumbnail)
+  kind?:       'image' | 'video' | null; // 'video' = renderUrl is a Cloudinary video composite
   photorealUrl?: string | null;          // gpt-image-1 polish; joined from AiFullRenderArtifact
   useImageRefAsProduction?: boolean;     // campaign-level flag (which to favor when only one shown)
   status:      'draft' | 'live' | 'archived';
@@ -1013,13 +1015,26 @@ function AdsSection({
       {ads.map(ad => {
         // Photoreal preferred; renderUrl is the fallback while the
         // polish is still cooking. POLISHING badge tells the operator
-        // it's transient.
+        // it's transient — guarded against ad.kind='video' since
+        // gpt-image-1 doesn't produce video and those ads will never
+        // get a photorealUrl (they stay on the Cloudinary composite
+        // forever, intentionally).
+        const isVideo = ad.kind === 'video';
         const src = ad.photorealUrl || ad.renderUrl;
-        const polishing = !!(ad.renderUrl && !ad.photorealUrl);
+        const polishing = !isVideo && !!(ad.renderUrl && !ad.photorealUrl);
         return (
         <Card key={ad.id} variant="outline">
           <Box position="relative" bg="gray.900" borderTopRadius="md" overflow="hidden" style={{ aspectRatio: '1 / 1' }}>
-            <Image src={src} alt={ad.copy.headline || ad.template} w="100%" h="100%" objectFit="contain" />
+            {isVideo ? (
+              <video
+                src={src}
+                poster={ad.posterUrl || undefined}
+                muted loop playsInline autoPlay preload="metadata"
+                style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', background: '#000' }}
+              />
+            ) : (
+              <Image src={src} alt={ad.copy.headline || ad.template} w="100%" h="100%" objectFit="contain" />
+            )}
             {polishing && (
               <Badge position="absolute" top={2} left={2} bg="blackAlpha.700" color="white" fontSize="9px" px={1.5} py={0.5} pointerEvents="none">
                 POLISHING…

@@ -92,7 +92,9 @@ function isShowingPhotoreal(ad: AdRow): boolean {
 // True when only the HTML render has landed but the photoreal polish
 // hasn't yet — used to paint a POLISHING badge so the operator knows
 // the tile will refresh to the photoreal once the gpt-image-1 call
-// completes.
+// completes. Video ads are excluded: gpt-image-1 doesn't produce
+// video, so photorealUrl is permanently null for them — they live on
+// the Cloudinary video composite forever by design, not transiently.
 function isAwaitingPolish(ad: AdRow): boolean {
   return !!(ad.renderUrl && !ad.photorealUrl && ad.kind !== 'video');
 }

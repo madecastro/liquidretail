@@ -7,8 +7,8 @@
 // where the page polls /api/ads/runs/:id to show progress as
 // creatives stream in.
 
-import { useState } from 'react';
-import { Box, VStack, HStack, Text, Button, Divider, Badge, Tooltip, useToast } from '@chakra-ui/react';
+import { useEffect, useState } from 'react';
+import { Box, VStack, HStack, Text, Button, Divider, Badge, Tooltip, useToast, Spinner } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { apiJson } from '../../auth/apiFetch';
 import { useAdReadiness } from '../../brand/useAdReadiness';
@@ -28,8 +28,18 @@ type GenerateResponse = {
   status:        'running' | 'done' | 'failed';
 };
 
+type PreviewResponse = {
+  total:         number;
+  byProduct:     Record<string, number>;
+  byVariantKind: { ugc: number; product_image: number };
+  seedCount:     number;
+  productCount:  number;
+};
+
 export function Step4Generate({ value }: Props) {
   const [busy, setBusy] = useState(false);
+  const [preview, setPreview] = useState<PreviewResponse | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const toast = useToast();
   const navigate = useNavigate();
   const readiness = useAdReadiness();
@@ -38,14 +48,62 @@ export function Step4Generate({ value }: Props) {
     ? [readiness.reason, ...(readiness.blockers || []).map(b => `• ${b.message}`)].filter(Boolean).join('\n')
     : '';
 
-  // Each seed (a picked product OR a picked media) cartesians against
-  // every selected template × shipping ratio. Media-only seeds are
-  // valid — seedFromMedia falls back to brand_match when no PMA links
-  // them to a product. Backend caps the total at MAX_CREATIVES_PER_RUN
-  // (6 today) regardless of this number.
-  const seedCount     = value.productIds.length + value.mediaIds.length;
-  const totalCreatives = seedCount * value.templateIds.length;
+  // Naive client-side count is kept as the loading placeholder while
+  // the backend dry-run resolves. The backend dry-run is authoritative
+  // — it accounts for matchedMedia fan-in, alt expansion, per-product
+  // cap (3), and the global MAX_ADS cap, none of which the client can
+  // see without re-implementing the seed engine.
+  const seedCount      = value.productIds.length + value.mediaIds.length;
+  const naiveEstimate  = seedCount * value.templateIds.length;
+  const totalCreatives = preview?.total ?? naiveEstimate;
   const composedUrl = composeCtaUrl(value.ctaUrl, value.urlParams);
+
+  // Fetch the dry-run preview on entry + whenever selections change.
+  // Skips when the form isn't valid enough to run expansion (no
+  // campaign, no templates, no seeds).
+  useEffect(() => {
+    if (!value.campaignId || !value.templateIds.length || seedCount === 0) {
+      setPreview(null);
+      return;
+    }
+    let cancelled = false;
+    setPreviewLoading(true);
+    const excludePairings = (value.excludedPairings || []).map(s => {
+      const [pid, mid] = s.split('|');
+      return { productId: pid === 'null' ? null : pid, mediaId: mid };
+    });
+    apiJson<PreviewResponse>('/api/ads/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        campaignId:  value.campaignId,
+        productIds:  value.productIds,
+        mediaIds:    value.mediaIds,
+        templateIds: value.templateIds,
+        cta:         { text: value.ctaText, url: value.ctaUrl },
+        urlParams:   value.urlParams,
+        excludePairings,
+        includeCategoryMatched: value.includeCategoryMatched,
+        includeBrandMatched:    value.includeBrandMatched
+      })
+    })
+      .then(res => { if (!cancelled) setPreview(res); })
+      .catch(()  => { if (!cancelled) setPreview(null); })
+      .finally(()=> { if (!cancelled) setPreviewLoading(false); });
+    return () => { cancelled = true; };
+  }, [
+    value.campaignId,
+    value.productIds.join(','),
+    value.mediaIds.join(','),
+    value.templateIds.join(','),
+    value.ctaText,
+    value.ctaUrl,
+    value.urlParams,
+    value.includeCategoryMatched,
+    value.includeBrandMatched,
+    (value.excludedPairings || []).join(','),
+    seedCount
+  ]);
 
   const generate = async () => {
     setBusy(true);
@@ -137,8 +195,14 @@ export function Step4Generate({ value }: Props) {
             <HStack spacing={2} mt={1}>
               <Text fontSize="lg" fontWeight="800" color="brand.ink">{totalCreatives}</Text>
               <Text fontSize="sm" color="brand.muted">
-                creative{totalCreatives === 1 ? '' : 's'} ({seedCount} seed{seedCount === 1 ? '' : 's'} × {value.templateIds.length} template{value.templateIds.length === 1 ? '' : 's'}, capped at 6 per run)
+                creative{totalCreatives === 1 ? '' : 's'}
+                {preview ? (
+                  <> ({preview.byVariantKind.product_image} product image{preview.byVariantKind.product_image === 1 ? '' : 's'}, {preview.byVariantKind.ugc} UGC; ≤3 per product)</>
+                ) : (
+                  <> (estimate; backend dry-run pending)</>
+                )}
               </Text>
+              {previewLoading && <Spinner size="xs" color="brand.muted" />}
             </HStack>
           </Box>
           <Tooltip label={gateTip} isDisabled={!gateDisabled} hasArrow whiteSpace="pre-line">

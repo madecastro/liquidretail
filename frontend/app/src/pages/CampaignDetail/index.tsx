@@ -1013,14 +1013,13 @@ function AdsSection({
   return (
     <SimpleGrid columns={{ base: 1, sm: 2, md: 3, lg: 4 }} spacing={4}>
       {ads.map(ad => {
-        // Photoreal preferred; renderUrl is the fallback while the
-        // polish is still cooking. POLISHING badge tells the operator
-        // it's transient — guarded against ad.kind='video' since
-        // gpt-image-1 doesn't produce video and those ads will never
-        // get a photorealUrl (they stay on the Cloudinary composite
-        // forever, intentionally).
+        // Photoreal preferred for image ads; renderUrl is the fallback
+        // while the polish is still cooking (POLISHING badge tells the
+        // operator it's transient). Video ads ALWAYS use renderUrl since
+        // gpt-image-1 doesn't produce video — a stale photoreal PNG fed
+        // into the <video> tag wouldn't play.
         const isVideo = ad.kind === 'video';
-        const src = ad.photorealUrl || ad.renderUrl;
+        const src = isVideo ? ad.renderUrl : (ad.photorealUrl || ad.renderUrl);
         const polishing = !isVideo && !!(ad.renderUrl && !ad.photorealUrl);
         return (
         <Card key={ad.id} variant="outline">

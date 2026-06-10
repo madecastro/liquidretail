@@ -81,12 +81,18 @@ type AdRow = {
 // shows the photoreal output once it's landed. While the polish is
 // still cooking we fall back to the HTML render with a POLISHING
 // badge so the operator knows it's transient.
+//
+// Video ads always use renderUrl (the Cloudinary composite). gpt-image-1
+// doesn't produce video and the backend skips image-ref for video sources,
+// so photorealUrl should stay null — guarding here too in case a stale
+// row exists from before the backend guard landed.
 function displayUrl(ad: AdRow): string | null {
+  if (ad.kind === 'video') return ad.renderUrl;
   return ad.photorealUrl || ad.renderUrl;
 }
 
 function isShowingPhotoreal(ad: AdRow): boolean {
-  return !!ad.photorealUrl;
+  return ad.kind !== 'video' && !!ad.photorealUrl;
 }
 
 // True when only the HTML render has landed but the photoreal polish

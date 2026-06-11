@@ -31,61 +31,63 @@ function SeedUsageOverlay({ usage }: { usage: SeedUsage }) {
   const { adCount, conceptsTotal, conceptsUsed, conceptsRemaining } = usage;
   const isFresh     = adCount === 0;
   const isExhausted = conceptsTotal > 0 && conceptsUsed >= conceptsTotal;
+  // Show a placeholder row of 4 (the Director's default N) when no
+  // Director has fired yet so every tile has a visible indicator —
+  // operator can SEE the affordance exists and learn what it means
+  // before they've run their first generation.
+  const displayedTotal = conceptsTotal > 0 ? conceptsTotal : 4;
 
   const tooltipLabel = isFresh
-    ? 'Brand-new seed — Director will emit fresh concepts on first run'
+    ? `Fresh seed — no ads yet. The Director emits ${displayedTotal} concepts on first run; each dot fills as a concept gets rendered against this seed.`
     : `${adCount} ad${adCount === 1 ? '' : 's'} rendered · ${conceptsUsed} of ${conceptsTotal} directions used`
       + (conceptsRemaining.length
           ? `\nFresh angles: ${conceptsRemaining.slice(0, 4).map(c => c.name).join(', ')}`
           : conceptsTotal > 0 ? '\nAll directions explored — re-runs rotate via runId' : '');
 
+  // Tooltip needs a single interactive child. Use a flexed bottom
+  // strip with pointer-events:auto so hover lands on the badge + dots
+  // without blocking the tile's click target.
   return (
     <Tooltip label={tooltipLabel} placement="top" hasArrow whiteSpace="pre-line" fontSize="11px">
-      <Box position="absolute" inset={0} pointerEvents="none">
-        {/* Ad-count badge — top-left, hidden on fresh seeds */}
-        {!isFresh && (
-          <Box
-            position="absolute" top={1.5} left={1.5}
-            bg={isExhausted ? 'green.600' : 'blackAlpha.700'}
-            color="white"
-            px={1.5} py={0.5}
-            borderRadius="md"
-            fontSize="9px" fontWeight="800"
-            letterSpacing="0.04em"
-            pointerEvents="auto"
-          >
-            {isExhausted ? `ALL ${adCount}` : `${adCount} AD${adCount === 1 ? '' : 'S'}`}
-          </Box>
-        )}
-        {/* Dot row — bottom-left, only when Director has concepts */}
-        {conceptsTotal > 0 && (
-          <HStack
-            position="absolute" bottom={1.5} left={1.5}
-            spacing={0.5}
-            bg="blackAlpha.700"
-            px={1.5} py={1}
-            borderRadius="md"
-            pointerEvents="auto"
-          >
-            {/* Up to 6 dots — past that, switch to fraction text */}
-            {conceptsTotal <= 6 ? (
-              Array.from({ length: conceptsTotal }).map((_, i) => (
-                <Box
-                  key={i}
-                  w="6px" h="6px"
-                  borderRadius="full"
-                  bg={i < conceptsUsed ? (isExhausted ? 'green.300' : 'rsViolet.300') : 'whiteAlpha.500'}
-                  borderWidth={i < conceptsUsed ? 0 : '1px'}
-                  borderColor="whiteAlpha.700"
-                />
-              ))
-            ) : (
-              <Text fontSize="9px" color="white" fontWeight="800" letterSpacing="0.04em">
-                {conceptsUsed}/{conceptsTotal}
-              </Text>
-            )}
-          </HStack>
-        )}
+      <Box
+        position="absolute" left={0} right={0} bottom={0}
+        display="flex" alignItems="flex-end" justifyContent="space-between"
+        p={1.5}
+        pointerEvents="auto"
+      >
+        <HStack
+          spacing={0.5}
+          bg="blackAlpha.800"
+          px={1.5} py={1}
+          borderRadius="md"
+        >
+          {displayedTotal <= 6 ? (
+            Array.from({ length: displayedTotal }).map((_, i) => (
+              <Box
+                key={i}
+                w="7px" h="7px"
+                borderRadius="full"
+                bg={i < conceptsUsed ? (isExhausted ? 'green.300' : 'rsViolet.300') : 'transparent'}
+                borderWidth={i < conceptsUsed ? 0 : '1.5px'}
+                borderColor="whiteAlpha.800"
+              />
+            ))
+          ) : (
+            <Text fontSize="9px" color="white" fontWeight="800" letterSpacing="0.04em">
+              {conceptsUsed}/{conceptsTotal}
+            </Text>
+          )}
+        </HStack>
+        <Box
+          bg={isFresh ? 'rsViolet.500' : isExhausted ? 'green.600' : 'blackAlpha.800'}
+          color="white"
+          px={1.5} py={0.5}
+          borderRadius="md"
+          fontSize="9px" fontWeight="800"
+          letterSpacing="0.04em"
+        >
+          {isFresh ? 'NEW' : isExhausted ? `ALL ${adCount}` : `${adCount} AD${adCount === 1 ? '' : 'S'}`}
+        </Box>
       </Box>
     </Tooltip>
   );

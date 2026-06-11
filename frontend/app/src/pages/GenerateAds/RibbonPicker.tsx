@@ -10,8 +10,86 @@
 //
 // Selection lives in the parent — RibbonPicker is presentational.
 
-import { Box, HStack, Text, Spinner, Flex } from '@chakra-ui/react';
+import { Box, HStack, Text, Spinner, Flex, Tooltip } from '@chakra-ui/react';
 import type { ReactNode } from 'react';
+
+// Per-seed concept-usage state, fetched from /api/seeds/usage and
+// surfaced as a dot row + ad-count badge on each tile so the operator
+// can decide whether this seed has fresh angles left to render against.
+export type SeedUsage = {
+  adCount:           number;
+  conceptsTotal:     number;
+  conceptsUsed:      number;
+  conceptsRemaining: { id: string; name: string }[];
+};
+
+// Compact tile overlay — top-left ad-count badge + bottom-left dot row.
+// Top-right is reserved for the selection checkmark; bottom-left dots
+// stay clear of the bottom-right where MediaTile shows the VIDEO badge.
+// Hover surfaces the full breakdown via a Chakra Tooltip.
+function SeedUsageOverlay({ usage }: { usage: SeedUsage }) {
+  const { adCount, conceptsTotal, conceptsUsed, conceptsRemaining } = usage;
+  const isFresh     = adCount === 0;
+  const isExhausted = conceptsTotal > 0 && conceptsUsed >= conceptsTotal;
+
+  const tooltipLabel = isFresh
+    ? 'Brand-new seed — Director will emit fresh concepts on first run'
+    : `${adCount} ad${adCount === 1 ? '' : 's'} rendered · ${conceptsUsed} of ${conceptsTotal} directions used`
+      + (conceptsRemaining.length
+          ? `\nFresh angles: ${conceptsRemaining.slice(0, 4).map(c => c.name).join(', ')}`
+          : conceptsTotal > 0 ? '\nAll directions explored — re-runs rotate via runId' : '');
+
+  return (
+    <Tooltip label={tooltipLabel} placement="top" hasArrow whiteSpace="pre-line" fontSize="11px">
+      <Box position="absolute" inset={0} pointerEvents="none">
+        {/* Ad-count badge — top-left, hidden on fresh seeds */}
+        {!isFresh && (
+          <Box
+            position="absolute" top={1.5} left={1.5}
+            bg={isExhausted ? 'green.600' : 'blackAlpha.700'}
+            color="white"
+            px={1.5} py={0.5}
+            borderRadius="md"
+            fontSize="9px" fontWeight="800"
+            letterSpacing="0.04em"
+            pointerEvents="auto"
+          >
+            {isExhausted ? `ALL ${adCount}` : `${adCount} AD${adCount === 1 ? '' : 'S'}`}
+          </Box>
+        )}
+        {/* Dot row — bottom-left, only when Director has concepts */}
+        {conceptsTotal > 0 && (
+          <HStack
+            position="absolute" bottom={1.5} left={1.5}
+            spacing={0.5}
+            bg="blackAlpha.700"
+            px={1.5} py={1}
+            borderRadius="md"
+            pointerEvents="auto"
+          >
+            {/* Up to 6 dots — past that, switch to fraction text */}
+            {conceptsTotal <= 6 ? (
+              Array.from({ length: conceptsTotal }).map((_, i) => (
+                <Box
+                  key={i}
+                  w="6px" h="6px"
+                  borderRadius="full"
+                  bg={i < conceptsUsed ? (isExhausted ? 'green.300' : 'rsViolet.300') : 'whiteAlpha.500'}
+                  borderWidth={i < conceptsUsed ? 0 : '1px'}
+                  borderColor="whiteAlpha.700"
+                />
+              ))
+            ) : (
+              <Text fontSize="9px" color="white" fontWeight="800" letterSpacing="0.04em">
+                {conceptsUsed}/{conceptsTotal}
+              </Text>
+            )}
+          </HStack>
+        )}
+      </Box>
+    </Tooltip>
+  );
+}
 
 type Props<T> = {
   items:        T[];
@@ -71,11 +149,12 @@ export function RibbonPicker<T>({
 // fn, but these match the visual language used across the wizard.
 
 export function ProductTile({
-  product, selected, onClick
+  product, selected, onClick, usage
 }: {
   product: { id: string; title: string; imageUrl: string | null; price?: number | null; currency?: string | null; brand?: string | null };
   selected: boolean;
   onClick: () => void;
+  usage?: SeedUsage;
 }) {
   return (
     <Box
@@ -112,6 +191,7 @@ export function ProductTile({
             ✓
           </Box>
         )}
+        {usage && <SeedUsageOverlay usage={usage} />}
       </Box>
       <Box p={2}>
         <Text fontSize="11px" fontWeight="700" color="brand.ink" noOfLines={2}>{product.title}</Text>
@@ -126,11 +206,12 @@ export function ProductTile({
 }
 
 export function MediaTile({
-  media, selected, onClick
+  media, selected, onClick, usage
 }: {
   media: { id: string; fileType: 'image' | 'video'; fileUrl: string; creatorHandle?: string | null; primarySubjectLabel?: string | null };
   selected: boolean;
   onClick: () => void;
+  usage?: SeedUsage;
 }) {
   // Video sources need a Cloudinary first-frame transform — same trick
   // the media-library Sidebar uses. Falls through to the raw fileUrl
@@ -187,6 +268,7 @@ export function MediaTile({
             ✓
           </Box>
         )}
+        {usage && <SeedUsageOverlay usage={usage} />}
       </Box>
       <Box p={1.5}>
         <Text fontSize="10px" fontWeight="700" color="brand.ink" noOfLines={1}>{label}</Text>

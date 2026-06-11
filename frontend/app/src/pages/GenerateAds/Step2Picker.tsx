@@ -24,6 +24,9 @@ import { StepShell } from './index';
 import { apiJson } from '../../auth/apiFetch';
 import { useBrand } from '../../brand/BrandContext';
 import { RibbonPicker, ProductTile, MediaTile } from './RibbonPicker';
+import type { SeedUsage } from './RibbonPicker';
+
+type SeedUsageResp = { seeds: ({ seedKind: 'product' | 'media'; seedId: string } & SeedUsage)[] };
 
 // Match-evidence fields the picker surfaces on related-ribbon tiles.
 // Backed by /api/catalog/:id/matches, /api/media/:id/related-products,
@@ -120,6 +123,7 @@ export function Step2Picker({ value, onChange }: Props) {
   const [loadingP, setLoadingP]         = useState(false);
   const [loadingM, setLoadingM]         = useState(false);
   const [relatedMedia, setRelatedMedia] = useState<MediaRow[]>([]);
+  const [seedUsage, setSeedUsage]       = useState<Map<string, SeedUsage>>(new Map());
   const [relatedProducts, setRelatedProducts] = useState<ProductRow[]>([]);
 
   // Load brand catalog + media list. Both endpoints support pagination,
@@ -151,6 +155,41 @@ export function Step2Picker({ value, onChange }: Props) {
       .finally(() => { if (!cancelled) setLoadingM(false); });
     return () => { cancelled = true; };
   }, [brandId]);
+
+  // Fetch concept-usage for every visible product + media so the
+  // ribbon tiles can paint the dot row + ad-count badge. Re-fires
+  // whenever the visible lists change. Backend response is keyed
+  // by seedId so we flatten into a single map.
+  useEffect(() => {
+    if (!brandId) return;
+    const productIds = products.map(p => p.id).filter(Boolean);
+    const mediaIds   = media.map(m => m.id).filter(Boolean);
+    if (!productIds.length && !mediaIds.length) {
+      setSeedUsage(new Map());
+      return;
+    }
+    let cancelled = false;
+    const qp = new URLSearchParams({ brandId });
+    if (productIds.length) qp.set('productIds', productIds.join(','));
+    if (mediaIds.length)   qp.set('mediaIds',   mediaIds.join(','));
+    if (value.campaignKind) qp.set('campaignKind', value.campaignKind);
+    apiJson<SeedUsageResp>(`/api/seeds/usage?${qp.toString()}`)
+      .then(res => {
+        if (cancelled) return;
+        const m = new Map<string, SeedUsage>();
+        for (const s of (res.seeds || [])) {
+          m.set(s.seedId, {
+            adCount:           s.adCount,
+            conceptsTotal:     s.conceptsTotal,
+            conceptsUsed:      s.conceptsUsed,
+            conceptsRemaining: s.conceptsRemaining
+          });
+        }
+        setSeedUsage(m);
+      })
+      .catch(() => { /* silent — usage chrome is non-critical */ });
+    return () => { cancelled = true; };
+  }, [brandId, products, media, value.campaignKind]);
 
   // Hydrate any pre-selected ids that aren't in the first page. The
   // wizard arrives with productIds/mediaIds from URL params (Generate
@@ -698,7 +737,7 @@ export function Step2Picker({ value, onChange }: Props) {
               loading={loadingP}
               emptyHint="No products in this brand's catalog yet."
               render={(p, selected, onClick) => (
-                <ProductTile product={p} selected={selected} onClick={onClick} />
+                <ProductTile product={p} selected={selected} onClick={onClick} usage={seedUsage.get(p.id)} />
               )}
             />
 
@@ -734,7 +773,7 @@ export function Step2Picker({ value, onChange }: Props) {
               loading={loadingM}
               emptyHint="No media yet — connect Instagram or upload manually."
               render={(m, selected, onClick) => (
-                <MediaTile media={m} selected={selected} onClick={onClick} />
+                <MediaTile media={m} selected={selected} onClick={onClick} usage={seedUsage.get(m.id)} />
               )}
             />
 

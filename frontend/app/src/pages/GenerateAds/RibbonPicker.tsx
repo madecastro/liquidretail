@@ -27,7 +27,7 @@ export type SeedUsage = {
 // Top-right is reserved for the selection checkmark; bottom-left dots
 // stay clear of the bottom-right where MediaTile shows the VIDEO badge.
 // Hover surfaces the full breakdown via a Chakra Tooltip.
-function SeedUsageOverlay({ usage }: { usage: SeedUsage }) {
+export function SeedUsageOverlay({ usage }: { usage: SeedUsage }) {
   const { adCount, conceptsTotal, conceptsUsed, conceptsRemaining } = usage;
   const isFresh     = adCount === 0;
   const isExhausted = conceptsTotal > 0 && conceptsUsed >= conceptsTotal;

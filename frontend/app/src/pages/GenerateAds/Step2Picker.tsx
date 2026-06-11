@@ -23,7 +23,7 @@ import type { WizardSelections } from './index';
 import { StepShell } from './index';
 import { apiJson } from '../../auth/apiFetch';
 import { useBrand } from '../../brand/BrandContext';
-import { RibbonPicker, ProductTile, MediaTile } from './RibbonPicker';
+import { RibbonPicker, ProductTile, MediaTile, SeedUsageOverlay } from './RibbonPicker';
 import type { SeedUsage } from './RibbonPicker';
 
 type SeedUsageResp = { seeds: ({ seedKind: 'product' | 'media'; seedId: string } & SeedUsage)[] };
@@ -155,41 +155,6 @@ export function Step2Picker({ value, onChange }: Props) {
       .finally(() => { if (!cancelled) setLoadingM(false); });
     return () => { cancelled = true; };
   }, [brandId]);
-
-  // Fetch concept-usage for every visible product + media so the
-  // ribbon tiles can paint the dot row + ad-count badge. Re-fires
-  // whenever the visible lists change. Backend response is keyed
-  // by seedId so we flatten into a single map.
-  useEffect(() => {
-    if (!brandId) return;
-    const productIds = products.map(p => p.id).filter(Boolean);
-    const mediaIds   = media.map(m => m.id).filter(Boolean);
-    if (!productIds.length && !mediaIds.length) {
-      setSeedUsage(new Map());
-      return;
-    }
-    let cancelled = false;
-    const qp = new URLSearchParams({ brandId });
-    if (productIds.length) qp.set('productIds', productIds.join(','));
-    if (mediaIds.length)   qp.set('mediaIds',   mediaIds.join(','));
-    if (value.campaignKind) qp.set('campaignKind', value.campaignKind);
-    apiJson<SeedUsageResp>(`/api/seeds/usage?${qp.toString()}`)
-      .then(res => {
-        if (cancelled) return;
-        const m = new Map<string, SeedUsage>();
-        for (const s of (res.seeds || [])) {
-          m.set(s.seedId, {
-            adCount:           s.adCount,
-            conceptsTotal:     s.conceptsTotal,
-            conceptsUsed:      s.conceptsUsed,
-            conceptsRemaining: s.conceptsRemaining
-          });
-        }
-        setSeedUsage(m);
-      })
-      .catch(() => { /* silent — usage chrome is non-critical */ });
-    return () => { cancelled = true; };
-  }, [brandId, products, media, value.campaignKind]);
 
   // Hydrate any pre-selected ids that aren't in the first page. The
   // wizard arrives with productIds/mediaIds from URL params (Generate
@@ -566,6 +531,46 @@ export function Step2Picker({ value, onChange }: Props) {
     return () => { cancelled = true; };
   }, [expansionSeedProductIds]);
 
+  // Fetch concept-usage for every visible product + media (including
+  // catalog alt mediaIds) so the ribbon tiles paint the dot row +
+  // ad-count badge. Re-fires whenever the visible lists change.
+  // Placed after catalogImagery is declared (TDZ would fire if this
+  // sat above its useState).
+  useEffect(() => {
+    if (!brandId) return;
+    const productIds = products.map(p => p.id).filter(Boolean);
+    const altMediaIds = catalogImagery.map(c => c.imageMediaId).filter((id): id is string => !!id);
+    const mediaIds   = Array.from(new Set([
+      ...media.map(m => m.id).filter(Boolean),
+      ...altMediaIds
+    ]));
+    if (!productIds.length && !mediaIds.length) {
+      setSeedUsage(new Map());
+      return;
+    }
+    let cancelled = false;
+    const qp = new URLSearchParams({ brandId });
+    if (productIds.length) qp.set('productIds', productIds.join(','));
+    if (mediaIds.length)   qp.set('mediaIds',   mediaIds.join(','));
+    if (value.campaignKind) qp.set('campaignKind', value.campaignKind);
+    apiJson<SeedUsageResp>(`/api/seeds/usage?${qp.toString()}`)
+      .then(res => {
+        if (cancelled) return;
+        const m = new Map<string, SeedUsage>();
+        for (const s of (res.seeds || [])) {
+          m.set(s.seedId, {
+            adCount:           s.adCount,
+            conceptsTotal:     s.conceptsTotal,
+            conceptsUsed:      s.conceptsUsed,
+            conceptsRemaining: s.conceptsRemaining
+          });
+        }
+        setSeedUsage(m);
+      })
+      .catch(() => { /* silent — usage chrome is non-critical */ });
+    return () => { cancelled = true; };
+  }, [brandId, products, media, catalogImagery, value.campaignKind]);
+
   const productSet = useMemo(() => new Set(value.productIds), [value.productIds]);
   const mediaSet   = useMemo(() => new Set(value.mediaIds),   [value.mediaIds]);
   const excludedSet = useMemo(() => new Set(value.excludedPairings), [value.excludedPairings]);
@@ -758,7 +763,7 @@ export function Step2Picker({ value, onChange }: Props) {
                       winner={p.winner}
                       source={p.matchSource}
                     >
-                      <ProductTile product={p} selected={productSet.has(p.id)} onClick={() => toggleProduct(p.id)} />
+                      <ProductTile product={p} selected={productSet.has(p.id)} onClick={() => toggleProduct(p.id)} usage={seedUsage.get(p.id)} />
                     </ExcludeWrapper>
                   );
                 }}
@@ -1184,7 +1189,7 @@ function ProductKindView(props: ProductKindViewProps) {
         loading={loadingP}
         emptyHint="No products in this brand's catalog yet. Connect a catalog to get started."
         render={(p, selected, onClick) => (
-          <ProductTile product={p} selected={selected} onClick={onClick} />
+          <ProductTile product={p} selected={selected} onClick={onClick} usage={seedUsage.get(p.id)} />
         )}
       />
 
@@ -1222,6 +1227,7 @@ function ProductKindView(props: ProductKindViewProps) {
                           img={t.img}
                           excludedSet={excludedSet}
                           toggleExclude={toggleExclude}
+                          usage={t.img.imageMediaId ? seedUsage.get(t.img.imageMediaId) : undefined}
                         />
                       : <ProductRelatedUgcTile
                           media={t.media}
@@ -1282,11 +1288,12 @@ function ProductKindView(props: ProductKindViewProps) {
 // altMediaId) entry in excludedPairings. Beneath the image, a
 // metadata strip displays "IG catalog · {title} · {updatedAt}".
 function ProductRelatedAltTile({
-  img, excludedSet, toggleExclude
+  img, excludedSet, toggleExclude, usage
 }: {
   img: CatalogImageRow;
   excludedSet: Set<string>;
   toggleExclude: (productId: string | null, mediaId: string) => void;
+  usage?: SeedUsage;
 }) {
   const altKey = img.imageMediaId ? pairingKey(img.productId, img.imageMediaId) : null;
   const excluded = altKey ? excludedSet.has(altKey) : false;
@@ -1333,6 +1340,7 @@ function ProductRelatedAltTile({
         >
           {excluded ? 'EXCLUDED' : 'AUTO'}
         </Box>
+        {usage && <SeedUsageOverlay usage={usage} />}
       </Box>
       <Box mt={1.5} fontSize="10px" lineHeight="1.35" color="brand.muted">
         <Text noOfLines={1} color="brand.ink" fontWeight="600">
@@ -1784,7 +1792,7 @@ function UnifiedRibbon(props: UnifiedRibbonProps) {
             const excluded = p.seedMediaId ? excludedSet.has(key) : false;
             return (
               <Box key={`p-${p.id}-${idx}`} flexShrink={0} position="relative" opacity={excluded ? 0.4 : 1}>
-                <ProductTile product={p} selected={sel} onClick={() => toggleProduct(p.id)} />
+                <ProductTile product={p} selected={sel} onClick={() => toggleProduct(p.id)} usage={seedUsage.get(p.id)} />
                 {p.seedMediaId && (
                   <Box
                     as="button"

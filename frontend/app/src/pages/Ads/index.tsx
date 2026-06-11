@@ -16,6 +16,16 @@ import {
   Badge, Image, Box, Spinner, useDisclosure, Modal, ModalOverlay, ModalContent,
   ModalHeader, ModalBody, ModalCloseButton, Select, Progress, useToast
 } from '@chakra-ui/react';
+import { keyframes } from '@emotion/react';
+
+// Visual treatment for the POLISHING state — slow breathing purple
+// overlay so the unfinished render reads distinctly from a final ad
+// at a glance. Paired with a desaturate/dim filter on the image itself.
+const polishPulse = keyframes`
+  0%, 100% { opacity: 0; }
+  50% { opacity: 0.22; }
+`;
+const POLISHING_IMG_FILTER = 'grayscale(0.4) brightness(0.9) contrast(0.95)';
 import { PageHeader } from '../../shell/PageHeader';
 import { apiJson } from '../../auth/apiFetch';
 import { useBrand } from '../../brand/BrandContext';
@@ -659,6 +669,7 @@ export function AdsPage() {
                       height="100%"
                       objectFit="contain"
                       loading="lazy"
+                      style={isAwaitingPolish(ad) ? { filter: POLISHING_IMG_FILTER } : undefined}
                     />
                   )
                 ) : (
@@ -709,19 +720,28 @@ export function AdsPage() {
                     {selectedIds.has(ad.id) ? '✓' : ''}
                   </Box>
                 </Box>
-                {/* POLISHING pill — shown while the photoreal hasn't
-                    landed yet and the tile is falling back to the HTML
-                    render. Page refresh after image-ref lands swaps to
-                    the photoreal automatically. */}
+                {/* POLISHING state — desaturate filter on the image
+                    above plus a slow breathing purple overlay here so
+                    the unfinished render reads visually distinct from
+                    a final ad at a glance. Badge stays prominent. */}
                 {isAwaitingPolish(ad) && (
-                  <Badge
-                    position="absolute" top={2} left={10}
-                    bg="blackAlpha.700" color="white"
-                    fontSize="9px" px={1.5} py={0.5}
-                    pointerEvents="none"
-                  >
-                    POLISHING…
-                  </Badge>
+                  <>
+                    <Box
+                      position="absolute"
+                      inset={0}
+                      bg="purple.400"
+                      pointerEvents="none"
+                      animation={`${polishPulse} 2.6s ease-in-out infinite`}
+                    />
+                    <Badge
+                      position="absolute" top={2} left={10}
+                      bg="purple.600" color="white"
+                      fontSize="9px" px={1.5} py={0.5}
+                      pointerEvents="none"
+                    >
+                      POLISHING…
+                    </Badge>
+                  </>
                 )}
                 {/* Phase B — Photoreal pill (top-left of tile). Now
                     fires whenever the photoreal landed (legacy toggle

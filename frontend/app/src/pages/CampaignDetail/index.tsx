@@ -20,6 +20,17 @@ import {
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter,
   ModalCloseButton, useDisclosure, Input, SimpleGrid
 } from '@chakra-ui/react';
+import { keyframes } from '@emotion/react';
+
+// POLISHING state visual treatment — mirrors the Ads page so the
+// unfinished render looks the same regardless of where the operator
+// is browsing. Desaturate filter on the image + slow breathing
+// purple overlay.
+const polishPulse = keyframes`
+  0%, 100% { opacity: 0; }
+  50% { opacity: 0.22; }
+`;
+const POLISHING_IMG_FILTER = 'grayscale(0.4) brightness(0.9) contrast(0.95)';
 import { PageHeader } from '../../shell/PageHeader';
 import { apiJson } from '../../auth/apiFetch';
 import { useBrand } from '../../brand/BrandContext';
@@ -1032,12 +1043,26 @@ function AdsSection({
                 style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', background: '#000' }}
               />
             ) : (
-              <Image src={src} alt={ad.copy.headline || ad.template} w="100%" h="100%" objectFit="contain" />
+              <Image
+                src={src}
+                alt={ad.copy.headline || ad.template}
+                w="100%" h="100%" objectFit="contain"
+                style={polishing ? { filter: POLISHING_IMG_FILTER } : undefined}
+              />
             )}
             {polishing && (
-              <Badge position="absolute" top={2} left={2} bg="blackAlpha.700" color="white" fontSize="9px" px={1.5} py={0.5} pointerEvents="none">
-                POLISHING…
-              </Badge>
+              <>
+                <Box
+                  position="absolute"
+                  inset={0}
+                  bg="purple.400"
+                  pointerEvents="none"
+                  animation={`${polishPulse} 2.6s ease-in-out infinite`}
+                />
+                <Badge position="absolute" top={2} left={2} bg="purple.600" color="white" fontSize="9px" px={1.5} py={0.5} pointerEvents="none">
+                  POLISHING…
+                </Badge>
+              </>
             )}
             <Badge
               position="absolute" top={2} right={2}

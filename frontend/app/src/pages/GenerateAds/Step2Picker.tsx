@@ -701,6 +701,7 @@ export function Step2Picker({ value, onChange }: Props) {
             onTierToggle={(field, next) => onChange({ [field]: next } as Partial<WizardSelections>)}
             anyPicks={value.productIds.length + value.mediaIds.length > 0}
             lifestyleEligibleIds={lifestyleEligibleIds}
+            seedUsage={seedUsage}
           />
         ) : isProductKind ? (
           // ── Product-kind: hero ribbon + unified Media Related section ──
@@ -724,6 +725,7 @@ export function Step2Picker({ value, onChange }: Props) {
             adEligibleFilteredCount={adEligibleFilteredCount}
             includeFilteredPromo={includeFilteredPromo}
             onToggleFilteredPromo={() => setIncludeFilteredPromo(v => !v)}
+            seedUsage={seedUsage}
           />
         ) : (
           // ── Other kinds (promotional, unset): existing browse-everything layout ──
@@ -1124,6 +1126,7 @@ type ProductKindViewProps = {
   adEligibleFilteredCount: number;
   includeFilteredPromo:   boolean;
   onToggleFilteredPromo:  () => void;
+  seedUsage:              Map<string, SeedUsage>;
 };
 
 function ProductKindView(props: ProductKindViewProps) {
@@ -1132,7 +1135,8 @@ function ProductKindView(props: ProductKindViewProps) {
     toggleProduct, toggleMedia, toggleExclude,
     catalogImagery, productMatchedRelated, categoryMatchedRelated, brandMatches,
     loadingP, includeCategoryMatched, includeBrandMatched, onTierToggle, anyProductPicked,
-    adEligibleFilteredCount, includeFilteredPromo, onToggleFilteredPromo
+    adEligibleFilteredCount, includeFilteredPromo, onToggleFilteredPromo,
+    seedUsage
   } = props;
 
   // Build the unified related-tile list. Dedup is by mediaId across
@@ -1223,6 +1227,7 @@ function ProductKindView(props: ProductKindViewProps) {
                           media={t.media}
                           selected={mediaSet.has(t.media.id)}
                           onToggle={() => toggleMedia(t.media.id)}
+                          usage={seedUsage.get(t.media.id)}
                         />
                     }
                   </Box>
@@ -1344,11 +1349,12 @@ function ProductRelatedAltTile({
 // stacks a dense info block beneath: platform + post type, ad readiness,
 // classification + content nature, engagement, source + relation, date.
 function ProductRelatedUgcTile({
-  media, selected, onToggle
+  media, selected, onToggle, usage
 }: {
   media:    MediaRow;
   selected: boolean;
   onToggle: () => void;
+  usage?:   SeedUsage;
 }) {
   const platform = platformLabel(media.source);
   const postType = (media.postType || media.fileType || '').toLowerCase();
@@ -1361,7 +1367,7 @@ function ProductRelatedUgcTile({
   return (
     <Box w="148px">
       <Box position="relative">
-        <MediaTile media={media} selected={selected} onClick={onToggle} />
+        <MediaTile media={media} selected={selected} onClick={onToggle} usage={usage} />
         {/* Platform + post type chip — top left */}
         <Box
           position="absolute" top="4px" left="4px"
@@ -1550,6 +1556,7 @@ type BrandUnifiedViewProps = {
   // an empty ribbon on mount. Applied to alts + UGC; heroes pass
   // through unfiltered.
   lifestyleEligibleIds:   Set<string> | null;
+  seedUsage:              Map<string, SeedUsage>;
 };
 
 function BrandUnifiedView(props: BrandUnifiedViewProps) {
@@ -1558,7 +1565,7 @@ function BrandUnifiedView(props: BrandUnifiedViewProps) {
     toggleProduct, toggleMedia, toggleExclude,
     relatedProducts, productMatchedRelated, categoryMatchedRelated, brandMatches, catalogImagery,
     loadingP, loadingM, includeCategoryMatched, includeBrandMatched, onTierToggle, anyPicks,
-    lifestyleEligibleIds
+    lifestyleEligibleIds, seedUsage
   } = props;
 
   // Lifestyle filter helpers. While the eligible-ID set is loading
@@ -1680,6 +1687,7 @@ function BrandUnifiedView(props: BrandUnifiedViewProps) {
         toggleProduct={toggleProduct}
         toggleMedia={toggleMedia}
         toggleExclude={toggleExclude}
+        seedUsage={seedUsage}
       />
 
       {anyPicks && (
@@ -1698,6 +1706,7 @@ function BrandUnifiedView(props: BrandUnifiedViewProps) {
             toggleProduct={toggleProduct}
             toggleMedia={toggleMedia}
             toggleExclude={toggleExclude}
+            seedUsage={seedUsage}
           />
         </>
       )}
@@ -1735,10 +1744,11 @@ type UnifiedRibbonProps = {
   toggleProduct: (id: string) => void;
   toggleMedia:   (id: string) => void;
   toggleExclude: (productId: string | null, mediaId: string) => void;
+  seedUsage:     Map<string, SeedUsage>;
 };
 
 function UnifiedRibbon(props: UnifiedRibbonProps) {
-  const { tiles, loading, emptyHint, productSet, mediaSet, excludedSet, toggleProduct, toggleMedia, toggleExclude } = props;
+  const { tiles, loading, emptyHint, productSet, mediaSet, excludedSet, toggleProduct, toggleMedia, toggleExclude, seedUsage } = props;
 
   if (loading && tiles.length === 0) {
     return (
@@ -1803,6 +1813,7 @@ function UnifiedRibbon(props: UnifiedRibbonProps) {
                   media={m}
                   selected={sel}
                   onToggle={() => toggleMedia(m.id)}
+                  usage={seedUsage.get(m.id)}
                 />
               </Box>
             );

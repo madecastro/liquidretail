@@ -48,6 +48,11 @@ type AdRow = {
   readinessScore: number | null;
   campaignKind: string | null;
   kind:         'image' | 'video';
+  // What the SEED Media was, regardless of what shipped. When kind='image'
+  // but sourceFileType='video', the composite failed and the ad fell back
+  // to static — image-ref polish correctly skips video sources, so polish
+  // never lands and POLISHING badge would otherwise stick forever.
+  sourceFileType?: 'image' | 'video' | null;
   // Render-output fields null until status transitions to 'draft' or beyond.
   renderUrl:    string | null;
   // Phase B — gpt-image-1 polished version, joined from AiFullRender-
@@ -108,11 +113,17 @@ function isShowingPhotoreal(ad: AdRow): boolean {
 // True when only the HTML render has landed but the photoreal polish
 // hasn't yet — used to paint a POLISHING badge so the operator knows
 // the tile will refresh to the photoreal once the gpt-image-1 call
-// completes. Video ads are excluded: gpt-image-1 doesn't produce
-// video, so photorealUrl is permanently null for them — they live on
-// the Cloudinary video composite forever by design, not transiently.
+// completes. Two cases excluded:
+//   1. ad.kind='video' — gpt-image-1 doesn't produce video, so
+//      photorealUrl is permanently null for them.
+//   2. sourceFileType='video' but the ad fell back to image (composite
+//      failed) — image-ref's guard correctly skips video sources, so
+//      photorealUrl will never land. Without this check the POLISHING
+//      badge sticks forever on the stuck-fallback case.
 function isAwaitingPolish(ad: AdRow): boolean {
-  return !!(ad.renderUrl && !ad.photorealUrl && ad.kind !== 'video');
+  if (ad.kind === 'video') return false;
+  if (ad.sourceFileType === 'video') return false;
+  return !!(ad.renderUrl && !ad.photorealUrl);
 }
 
 type MetaAdsetRow = {

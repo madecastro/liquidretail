@@ -1,17 +1,25 @@
-// Generate Ads wizard — four-step state machine driving the
-// campaign → products → settings → generate flow described in the
-// reorg.
+// Generate Ads wizard — three-step state machine driving the
+// campaign → products → generate flow.
 //
-// Step state lives in the URL (?step=campaign|products|settings|generate)
-// so back/forward and sharable bookmarks work. Selections live in
-// React state and are passed to each step as props; once the backend
-// endpoints land (campaigns list, per-campaign filtered catalog,
-// templates list, /api/ads/generate) the steps swap their stub UI for
-// real data.
+// Settings (templates / CTA / tracking URL) was dropped from the wizard
+// in favor of AI-driven variety: all ai_* templates run by default per
+// (media × product) seed, copy_candidates feed the CTA text at render
+// time, and ctaUrl falls back to brand.websiteUrl. Operators no longer
+// pick templates or author CTA copy in the wizard — the four
+// CreativeDirector concepts per media are what drive output variety.
+//
+// Step state lives in the URL (?step=campaign|products|generate) so
+// back/forward and sharable bookmarks work. Selections live in React
+// state and are passed to each step as props.
 //
 // Routes that fold into this wizard via empty states:
 //   no campaigns → Step 1 offers Connect / New Campaign / Upload Media
 //   no media     → Step 2 redirects to /upload (deep-link route preserved)
+//
+// Legacy ?step=settings URLs from older bookmarks fall through to
+// 'campaign' via the STEPS.some() guard below — the type keeps
+// 'settings' as a valid (but unused) key so TS doesn't complain on
+// stale links until they get rewritten by the next save.
 
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams, Link as RouterLink } from 'react-router-dom';
@@ -19,10 +27,20 @@ import { Box, HStack, VStack, Button, Text, Heading, Flex, Badge } from '@chakra
 import { PageHeader } from '../../shell/PageHeader';
 import { Step1Campaign } from './Step1Campaign';
 import { Step2Picker } from './Step2Picker';
-import { Step3Settings } from './Step3Settings';
 import { Step4Generate } from './Step4Generate';
 
-export type WizardStepKey = 'campaign' | 'products' | 'settings' | 'generate';
+export type WizardStepKey = 'campaign' | 'products' | 'generate';
+
+// Default template fanout — all five ai_* templates run per seed so
+// the LLM has the widest creative-style menu without operator picking.
+// Variety within a template comes from the four Director concepts.
+const DEFAULT_TEMPLATE_IDS = [
+  'ai_brand_led',
+  'ai_ugc_led',
+  'ai_social_proof_led',
+  'ai_editorial',
+  'ai_promotional'
+];
 
 export type WizardSelections = {
   campaignId:   string | null;
@@ -60,7 +78,6 @@ export type WizardSelections = {
 const STEPS: Array<{ key: WizardStepKey; label: string; description: string }> = [
   { key: 'campaign', label: 'Campaign', description: 'Pick a synced campaign or create one' },
   { key: 'products', label: 'Products', description: 'Select what to feature' },
-  { key: 'settings', label: 'Settings', description: 'Templates, CTA, tracking' },
   { key: 'generate', label: 'Generate', description: 'Review & render' }
 ];
 
@@ -98,7 +115,12 @@ export function GenerateAdsWizard() {
     campaignKind: null,
     productIds:   initialProductIds,
     mediaIds:     initialMediaIds,
-    templateIds:  [],
+    // Settings step was dropped — defaults below replace what the
+    // operator used to author. Templates run all 5 ai_* by default,
+    // CTA text/URL/UTMs ship blank and the backend fills them in
+    // (copy_candidates for cta_text, brand.websiteUrl for ctaUrl,
+    // no UTM tracking).
+    templateIds:  DEFAULT_TEMPLATE_IDS.slice(),
     ctaText:      '',
     ctaUrl:       '',
     urlParams:    '',
@@ -186,7 +208,6 @@ export function GenerateAdsWizard() {
           || selections.mediaIds.length > 0
           || selections.campaignKind === 'brand';
     }
-    if (step === 'settings') return selections.templateIds.length > 0 && selections.ctaText.trim().length > 0;
     return true;
   }, [step, selections]);
 
@@ -195,7 +216,7 @@ export function GenerateAdsWizard() {
       <PageHeader
         eyebrow="Generate Ads"
         title="New ad batch"
-        description="Pick a campaign, choose products, set templates + CTA, and render. Each step locks in your selection before moving on."
+        description="Pick a campaign, choose products or media, and render. Templates and CTA copy are AI-driven — no setup required."
       />
 
       <Stepper current={step} steps={displayedSteps} />
@@ -203,7 +224,6 @@ export function GenerateAdsWizard() {
       <Box>
         {step === 'campaign' && <Step1Campaign value={selections} onChange={update} />}
         {step === 'products' && <Step2Picker value={selections} onChange={update} />}
-        {step === 'settings' && <Step3Settings value={selections} onChange={update} />}
         {step === 'generate' && <Step4Generate value={selections} />}
       </Box>
 

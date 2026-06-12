@@ -1,11 +1,18 @@
-// Step 4 — Review & Generate.
+// Step 3 — Review & Generate. (Was Step 4 before Settings was dropped.)
 //
-// Summarizes the selections from steps 1–3 so the operator can sanity-
+// Summarizes the selections from steps 1–2 so the operator can sanity-
 // check before kicking off the render. POST /api/ads/generate is
 // async — the server creates a CampaignRun, returns 202 immediately,
 // and renders in the background. We route to /ads?campaignRunId=X
 // where the page polls /api/ads/runs/:id to show progress as
 // creatives stream in.
+//
+// Templates / CTA copy / landing URL are no longer authored in the
+// wizard. The wizard plugs in defaults (all 5 ai_* templates, empty
+// CTA strings, empty UTMs); the backend fills in CTA text from
+// copy_candidates at render time and falls back to brand.websiteUrl
+// for ctaUrl. The summary below shows only the operator-authored
+// picks (campaign + products + media).
 
 import { useEffect, useState } from 'react';
 import { Box, VStack, HStack, Text, Button, Divider, Badge, Tooltip, useToast, Spinner } from '@chakra-ui/react';
@@ -56,7 +63,6 @@ export function Step4Generate({ value }: Props) {
   const seedCount      = value.productIds.length + value.mediaIds.length;
   const naiveEstimate  = seedCount * value.templateIds.length;
   const totalCreatives = preview?.total ?? naiveEstimate;
-  const composedUrl = composeCtaUrl(value.ctaUrl, value.urlParams);
 
   // Fetch the dry-run preview on entry + whenever selections change.
   // Skips when the form isn't valid enough to run expansion (no
@@ -172,21 +178,6 @@ export function Step4Generate({ value }: Props) {
               : '— none —'
           }
         />
-        <SummaryRow
-          label="Templates"
-          value={
-            value.templateIds.length
-              ? value.templateIds.join(', ')
-              : '— none —'
-          }
-        />
-        <SummaryRow label="CTA text" value={value.ctaText || '—'} />
-        <SummaryRow
-          label="Landing URL"
-          value={composedUrl || '—'}
-          mono
-        />
-
         <Divider my={2} />
 
         <HStack justify="space-between" align="center">
@@ -212,7 +203,7 @@ export function Step4Generate({ value }: Props) {
               onClick={generate}
               isLoading={busy}
               loadingText="Generating…"
-              isDisabled={gateDisabled || seedCount === 0 || value.templateIds.length === 0 || !value.ctaText.trim()}
+              isDisabled={gateDisabled || seedCount === 0}
             >
               Generate Ads
             </Button>
@@ -233,11 +224,6 @@ export function Step4Generate({ value }: Props) {
         {!gateDisabled && seedCount === 0 && (
           <Badge alignSelf="flex-start" colorScheme="orange" variant="subtle" fontSize="10px">
             Pick at least one product or one media to enable Generate.
-          </Badge>
-        )}
-        {!gateDisabled && seedCount > 0 && value.templateIds.length === 0 && (
-          <Badge alignSelf="flex-start" colorScheme="orange" variant="subtle" fontSize="10px">
-            Pick at least one template on Step 3 to enable Generate.
           </Badge>
         )}
       </VStack>
@@ -265,10 +251,3 @@ function SummaryRow({ label, value, mono }: { label: string; value: string; mono
   );
 }
 
-function composeCtaUrl(url: string, params: string): string {
-  const u = (url || '').trim();
-  const p = (params || '').trim().replace(/^[?&]/, '');
-  if (!u) return '';
-  if (!p) return u;
-  return u.includes('?') ? `${u}&${p}` : `${u}?${p}`;
-}

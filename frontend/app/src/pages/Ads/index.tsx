@@ -312,6 +312,18 @@ export function AdsPage() {
   // Ad list fetcher. Memoized into a stable callback via ref so the
   // poller can re-trigger it without re-running this effect.
   const fetchRef = useRef<() => Promise<void>>();
+
+  // Mirror `rows` into a ref so the run poller can check awaiting-
+  // polish state from inside its tick closure without forcing the
+  // effect to re-subscribe on every row update. The poller keeps
+  // ticking while ANY visible row is still waiting on its photoreal
+  // — image-ref runs fire-and-forget post-persist and frequently
+  // lands AFTER the run.status flips to 'done', so a poll that
+  // stopped purely on run.status left photorealUrl updates stranded
+  // and the operator had to manually refresh to see the polished
+  // image (renderUrl → photorealUrl swap never happened in-session).
+  const rowsRef = useRef<AdRow[]>([]);
+  useEffect(() => { rowsRef.current = rows; }, [rows]);
   useEffect(() => {
     fetchRef.current = async () => {
       if (!activeBrandId) return;
@@ -428,7 +440,14 @@ export function AdsPage() {
         if (cancelled) return;
         setRun(next);
         await fetchRef.current?.();
-        if (next.status === 'running') {
+        // Keep ticking while EITHER the run is still rendering OR any
+        // visible ad is still waiting on its photoreal polish. Image-
+        // ref is a shadow process kicked off post-persist; it routinely
+        // lands after run.status flips to 'done'. Without this second
+        // condition the operator never sees the renderUrl → photorealUrl
+        // swap until they manually refresh.
+        const stillAwaitingPolish = rowsRef.current.some(isAwaitingPolish);
+        if (next.status === 'running' || stillAwaitingPolish) {
           if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
             setPollTimedOut(true);
             return;

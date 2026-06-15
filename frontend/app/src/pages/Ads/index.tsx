@@ -14,7 +14,7 @@ import { useSearchParams, Link as RouterLink } from 'react-router-dom';
 import {
   Card, CardBody, VStack, HStack, Text, Heading, Button, SimpleGrid,
   Badge, Image, Box, Spinner, useDisclosure, Modal, ModalOverlay, ModalContent,
-  ModalHeader, ModalBody, ModalCloseButton, Select, Progress, useToast
+  ModalHeader, ModalBody, ModalCloseButton, Select, Progress, useToast, Link
 } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
 
@@ -830,6 +830,26 @@ export function AdsPage() {
                     <Text fontSize="11px" color="brand.muted" noOfLines={1}>
                       {ad.copy.productName} {ad.copy.productPrice ? `· ${ad.copy.productPrice}` : ''}
                     </Text>
+                  )}
+                  {/* Dev preview — three-column render-stage comparison
+                      page (LLM HTML vs Puppeteer overlay PNG vs final
+                      composite). Lets us spot variance the pipeline is
+                      introducing. Token embedded in URL so window.open
+                      (which can't set Authorization headers) still
+                      authenticates via the server-side adapter middleware
+                      that lifts ?_token= to the header before requireAuth.
+                      Only renders when the ad has actually rendered. */}
+                  {(ad.renderUrl || ad.photorealUrl) && (
+                    <Link
+                      fontSize="10px"
+                      color="brand.muted"
+                      href={`/api/ads/${ad.id}/preview-page?_token=${encodeURIComponent(localStorage.getItem('token') || '')}`}
+                      isExternal
+                      onClick={(e) => e.stopPropagation()}
+                      _hover={{ color: 'rsViolet.500', textDecoration: 'underline' }}
+                    >
+                      Preview render stages →
+                    </Link>
                   )}
                 </VStack>
               </CardBody>

@@ -24,6 +24,49 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams, Link as RouterLink } from 'react-router-dom';
 import { Box, HStack, VStack, Button, Text, Heading, Flex, Badge } from '@chakra-ui/react';
+
+// Inline component definition — kept here in the wizard shell file
+// rather than its own file because it's wizard-scoped and only ever
+// rendered by the wizard. Two-card selector for the format the run
+// targets.
+function PlatformFormatPicker({ value, onChange }: { value: 'meta_feed_1_1' | 'meta_reels_9_16'; onChange: (f: 'meta_feed_1_1' | 'meta_reels_9_16') => void }) {
+  const options: Array<{ id: 'meta_feed_1_1' | 'meta_reels_9_16'; label: string; sub: string; aspect: string }> = [
+    { id: 'meta_feed_1_1',   label: 'Feed',  sub: 'Image or video, no safe-area constraints', aspect: '1:1' },
+    { id: 'meta_reels_9_16', label: 'Reels', sub: 'Vertical video, top + bottom safe zones reserved for IG/FB UI', aspect: '9:16' }
+  ];
+  return (
+    <Box borderWidth="1px" borderColor="brand.border" borderRadius="lg" bg="brand.surface" p={4}>
+      <Text fontSize="11px" fontWeight="700" textTransform="uppercase" letterSpacing="0.06em" color="brand.muted" mb={2}>
+        Platform format
+      </Text>
+      <HStack spacing={2} align="stretch">
+        {options.map(opt => {
+          const isActive = opt.id === value;
+          return (
+            <Box
+              key={opt.id}
+              flex={1}
+              borderWidth="1px"
+              borderColor={isActive ? 'rsViolet.400' : 'brand.border'}
+              bg={isActive ? 'rsViolet.50' : 'white'}
+              borderRadius="md"
+              p={3}
+              cursor="pointer"
+              onClick={() => onChange(opt.id)}
+              transition="border-color 0.12s, background 0.12s"
+            >
+              <HStack spacing={2}>
+                <Text fontSize="sm" fontWeight="800" color={isActive ? 'rsViolet.700' : 'brand.ink'}>{opt.label}</Text>
+                <Badge fontSize="9px" colorScheme="purple" variant="subtle">{opt.aspect}</Badge>
+              </HStack>
+              <Text fontSize="11px" color="brand.muted" mt={1}>{opt.sub}</Text>
+            </Box>
+          );
+        })}
+      </HStack>
+    </Box>
+  );
+}
 import { PageHeader } from '../../shell/PageHeader';
 import { Step1Campaign } from './Step1Campaign';
 import { Step2Picker } from './Step2Picker';
@@ -230,6 +273,13 @@ export function GenerateAdsWizard() {
       />
 
       <Stepper current={step} steps={displayedSteps} />
+
+      {/* Platform format picker — wizard-level, persistent across every
+          step. Lives outside the per-step Box so it's visible even when
+          operators enter via deep-links that skip Step 1 (Campaigns
+          list "Generate" button, NewCampaignModal, CampaignDetail —
+          all jump to ?step=products with the campaign pre-selected). */}
+      <PlatformFormatPicker value={selections.platformFormat} onChange={(f) => update({ platformFormat: f })} />
 
       <Box>
         {step === 'campaign' && <Step1Campaign value={selections} onChange={update} />}

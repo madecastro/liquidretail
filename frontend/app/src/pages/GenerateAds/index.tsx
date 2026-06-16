@@ -42,6 +42,8 @@ const DEFAULT_TEMPLATE_IDS = [
   'ai_promotional'
 ];
 
+export type PlatformFormat = 'meta_feed_1_1' | 'meta_reels_9_16';
+
 export type WizardSelections = {
   campaignId:   string | null;
   // Hydrated by Step 2 from /api/campaigns/:id. Lets the wizard know
@@ -49,6 +51,13 @@ export type WizardSelections = {
   // "must pick something" gate (brand campaigns seed brand_match
   // media on the backend without explicit picks).
   campaignKind: string | null;
+  // Platform-format-aware ad generation (Phase 2 wizard picker).
+  // Drives the Director + HTML Gen format constraints + safe-area
+  // pixel boxes downstream. Default 'meta_feed_1_1' preserves legacy
+  // behavior (no extra constraints — same as Director was producing
+  // pre-Phase-2). Sent through /api/ads/generate body to expand-
+  // WizardJob, which overrides Campaign.platformFormat for this run.
+  platformFormat: PlatformFormat;
   productIds:  string[];
   // Pre-populated when the wizard is deep-linked from the media
   // library's "Generate Ads" button. Each id rides through to the
@@ -124,6 +133,7 @@ export function GenerateAdsWizard() {
     ctaText:      '',
     ctaUrl:       '',
     urlParams:    '',
+    platformFormat: 'meta_feed_1_1',
     excludedPairings: [],
     includeCategoryMatched: false,
     includeBrandMatched:    false

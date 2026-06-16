@@ -88,6 +88,7 @@ export function Step4Generate({ value }: Props) {
         templateIds: value.templateIds,
         cta:         { text: value.ctaText, url: value.ctaUrl },
         urlParams:   value.urlParams,
+        platformFormat: value.platformFormat,
         excludePairings,
         includeCategoryMatched: value.includeCategoryMatched,
         includeBrandMatched:    value.includeBrandMatched
@@ -131,6 +132,7 @@ export function Step4Generate({ value }: Props) {
           templateIds: value.templateIds,
           cta:         { text: value.ctaText, url: value.ctaUrl },
           urlParams:   value.urlParams,
+          platformFormat: value.platformFormat,
           excludePairings,
           includeCategoryMatched: value.includeCategoryMatched,
           includeBrandMatched:    value.includeBrandMatched

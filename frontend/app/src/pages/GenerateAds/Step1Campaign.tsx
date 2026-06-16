@@ -105,14 +105,59 @@ export function Step1Campaign({ value, onChange }: Props) {
 
   return (
     <StepShell heading="Pick a campaign" helper="Choose the campaign whose product set you want to generate ads for.">
-      <RadioGroup value={value.campaignId || ''} onChange={(v) => onChange({ campaignId: v || null })}>
-        <VStack align="stretch" spacing={2}>
-          {campaigns.map(c => (
-            <CampaignRow key={c.id} campaign={c} selected={c.id === value.campaignId} />
-          ))}
-        </VStack>
-      </RadioGroup>
+      <VStack align="stretch" spacing={5}>
+        <PlatformFormatPicker value={value.platformFormat} onChange={(f) => onChange({ platformFormat: f })} />
+        <RadioGroup value={value.campaignId || ''} onChange={(v) => onChange({ campaignId: v || null })}>
+          <VStack align="stretch" spacing={2}>
+            {campaigns.map(c => (
+              <CampaignRow key={c.id} campaign={c} selected={c.id === value.campaignId} />
+            ))}
+          </VStack>
+        </RadioGroup>
+      </VStack>
     </StepShell>
+  );
+}
+
+// Platform-format picker (Phase 2). Operator picks which Meta surface
+// this batch targets — drives canvas aspect + safe areas + archetype
+// weighting downstream. Default meta_feed_1_1 (current behavior).
+function PlatformFormatPicker({ value, onChange }: { value: 'meta_feed_1_1' | 'meta_reels_9_16'; onChange: (f: 'meta_feed_1_1' | 'meta_reels_9_16') => void }) {
+  const options: Array<{ id: 'meta_feed_1_1' | 'meta_reels_9_16'; label: string; sub: string; aspect: string }> = [
+    { id: 'meta_feed_1_1',   label: 'Feed',  sub: 'Image or video, no safe-area constraints', aspect: '1:1' },
+    { id: 'meta_reels_9_16', label: 'Reels', sub: 'Vertical video, top + bottom safe zones reserved for IG/FB UI', aspect: '9:16' }
+  ];
+  return (
+    <Box>
+      <Text fontSize="11px" fontWeight="700" textTransform="uppercase" letterSpacing="0.06em" color="brand.muted" mb={2}>
+        Platform format
+      </Text>
+      <HStack spacing={2} align="stretch">
+        {options.map(opt => {
+          const isActive = opt.id === value;
+          return (
+            <Box
+              key={opt.id}
+              flex={1}
+              borderWidth="1px"
+              borderColor={isActive ? 'rsViolet.400' : 'brand.border'}
+              bg={isActive ? 'rsViolet.50' : 'brand.surface'}
+              borderRadius="md"
+              p={3}
+              cursor="pointer"
+              onClick={() => onChange(opt.id)}
+              transition="border-color 0.12s, background 0.12s"
+            >
+              <HStack spacing={2}>
+                <Text fontSize="sm" fontWeight="800" color={isActive ? 'rsViolet.700' : 'brand.ink'}>{opt.label}</Text>
+                <Badge fontSize="9px" colorScheme="purple" variant="subtle">{opt.aspect}</Badge>
+              </HStack>
+              <Text fontSize="11px" color="brand.muted" mt={1}>{opt.sub}</Text>
+            </Box>
+          );
+        })}
+      </HStack>
+    </Box>
   );
 }
 

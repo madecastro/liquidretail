@@ -190,7 +190,7 @@ export function Step4Generate({ value }: Props) {
               <Text fontSize="sm" color="brand.muted">
                 creative{totalCreatives === 1 ? '' : 's'}
                 {preview ? (
-                  <> ({preview.byVariantKind.product_image} product image{preview.byVariantKind.product_image === 1 ? '' : 's'}, {preview.byVariantKind.ugc} UGC; ≤3 per product)</>
+                  <> ({preview.byVariantKind?.product_image ?? 0} product image{(preview.byVariantKind?.product_image ?? 0) === 1 ? '' : 's'}, {preview.byVariantKind?.ugc ?? 0} UGC; ≤3 per product)</>
                 ) : (
                   <> (estimate; backend dry-run pending)</>
                 )}

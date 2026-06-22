@@ -22,30 +22,56 @@
 // stale links until they get rewritten by the next save.
 
 import { useEffect, useMemo, useState } from 'react';
+import type { MouseEvent } from 'react';
 import { useSearchParams, Link as RouterLink } from 'react-router-dom';
 import { Box, HStack, VStack, Button, Text, Heading, Flex, Badge } from '@chakra-ui/react';
 
-// Inline component definition — kept here in the wizard shell file
-// rather than its own file because it's wizard-scoped and only ever
-// rendered by the wizard. Two-card selector for the format the run
-// targets.
-function PlatformFormatPicker({ value, onChange }: { value: 'meta_feed_1_1' | 'meta_reels_9_16'; onChange: (f: 'meta_feed_1_1' | 'meta_reels_9_16') => void }) {
-  const options: Array<{ id: 'meta_feed_1_1' | 'meta_reels_9_16'; label: string; sub: string; aspect: string }> = [
-    { id: 'meta_feed_1_1',   label: 'Feed',  sub: 'Image or video, no safe-area constraints', aspect: '1:1' },
-    { id: 'meta_reels_9_16', label: 'Reels', sub: 'Vertical video, top + bottom safe zones reserved for IG/FB UI', aspect: '9:16' }
-  ];
+// Inline picker — wizard-scoped, lives in the shell file. Renders a card
+// per platformFormat with a kind toggle (Image / Video / Both) per card.
+// Reels is video-only so its toggle locks to Video. The backend's
+// resolveKinds() (services/platformFormats.js) intersects the operator's
+// choice with each format's declared kinds, so even if the UI ever lets a
+// nonsense combo slip through (e.g. Reels + Image), the server clamps it.
+type PlatformFormatId = 'meta_feed_1_1' | 'meta_feed_4_5' | 'meta_reels_9_16' | 'meta_stories_9_16' | 'pmax_16_9';
+type AdKinds = 'image' | 'video' | 'both';
+type FormatOption = {
+  id:           PlatformFormatId;
+  label:        string;
+  aspect:       string;
+  sub:          string;
+  allowedKinds: AdKinds[];   // omits 'both' here — Both is implied if image+video both present in backend caps
+  lockedKind?:  'image' | 'video';   // hard-lock for single-kind formats (Reels)
+};
+const FORMAT_OPTIONS: FormatOption[] = [
+  { id: 'meta_feed_1_1',     label: 'Meta Feed',      aspect: '1:1',  sub: 'Square — Image or Video',                  allowedKinds: ['image', 'video', 'both'] },
+  { id: 'meta_feed_4_5',     label: 'Meta Feed',      aspect: '4:5',  sub: 'Portrait — Image or Video',                allowedKinds: ['image', 'video', 'both'] },
+  { id: 'meta_reels_9_16',   label: 'Meta Reels',     aspect: '9:16', sub: 'Vertical Video (safe area top + bottom)',  allowedKinds: ['video'], lockedKind: 'video' },
+  { id: 'meta_stories_9_16', label: 'Meta Stories',   aspect: '9:16', sub: 'Vertical — Image or Video',                allowedKinds: ['image', 'video', 'both'] },
+  { id: 'pmax_16_9',         label: 'Performance Max', aspect: '16:9', sub: 'Landscape — Image or Video',              allowedKinds: ['image', 'video', 'both'] }
+];
+
+function PlatformFormatPicker({
+  value, onChange, kinds, onKindsChange
+}: {
+  value:         PlatformFormatId;
+  onChange:      (f: PlatformFormatId) => void;
+  kinds:         AdKinds;
+  onKindsChange: (k: AdKinds) => void;
+}) {
   return (
     <Box borderWidth="1px" borderColor="brand.border" borderRadius="lg" bg="brand.surface" p={4}>
       <Text fontSize="11px" fontWeight="700" textTransform="uppercase" letterSpacing="0.06em" color="brand.muted" mb={2}>
         Platform format
       </Text>
-      <HStack spacing={2} align="stretch">
-        {options.map(opt => {
+      <Flex gap={2} wrap="wrap">
+        {FORMAT_OPTIONS.map(opt => {
           const isActive = opt.id === value;
+          const cardKinds: AdKinds = opt.lockedKind ? opt.lockedKind : (isActive ? kinds : 'both');
           return (
             <Box
               key={opt.id}
-              flex={1}
+              flex="1 1 calc(33% - 8px)"
+              minW="180px"
               borderWidth="1px"
               borderColor={isActive ? 'rsViolet.400' : 'brand.border'}
               bg={isActive ? 'rsViolet.50' : 'white'}
@@ -59,11 +85,43 @@ function PlatformFormatPicker({ value, onChange }: { value: 'meta_feed_1_1' | 'm
                 <Text fontSize="sm" fontWeight="800" color={isActive ? 'rsViolet.700' : 'brand.ink'}>{opt.label}</Text>
                 <Badge fontSize="9px" colorScheme="purple" variant="subtle">{opt.aspect}</Badge>
               </HStack>
-              <Text fontSize="11px" color="brand.muted" mt={1}>{opt.sub}</Text>
+              <Text fontSize="11px" color="brand.muted" mt={1} mb={2}>{opt.sub}</Text>
+              <HStack spacing={1}>
+                {opt.allowedKinds.map(k => {
+                  const selected = cardKinds === k;
+                  const disabled = !isActive && !opt.lockedKind;
+                  return (
+                    <Box
+                      key={k}
+                      as="button"
+                      type="button"
+                      onClick={(e: MouseEvent<HTMLButtonElement>) => {
+                        e.stopPropagation();
+                        if (disabled || opt.lockedKind) return;
+                        onKindsChange(k);
+                      }}
+                      px={2}
+                      py={0.5}
+                      fontSize="10px"
+                      fontWeight="700"
+                      textTransform="capitalize"
+                      borderWidth="1px"
+                      borderColor={selected ? 'rsViolet.500' : 'brand.border'}
+                      bg={selected ? 'rsViolet.500' : 'white'}
+                      color={selected ? 'white' : 'brand.muted'}
+                      borderRadius="sm"
+                      opacity={disabled ? 0.45 : 1}
+                      cursor={disabled || opt.lockedKind ? 'default' : 'pointer'}
+                    >
+                      {k}
+                    </Box>
+                  );
+                })}
+              </HStack>
             </Box>
           );
         })}
-      </HStack>
+      </Flex>
     </Box>
   );
 }
@@ -85,7 +143,14 @@ const DEFAULT_TEMPLATE_IDS = [
   'ai_promotional'
 ];
 
-export type PlatformFormat = 'meta_feed_1_1' | 'meta_reels_9_16';
+export type PlatformFormat =
+  | 'meta_feed_1_1'
+  | 'meta_feed_4_5'
+  | 'meta_reels_9_16'
+  | 'meta_stories_9_16'
+  | 'pmax_16_9';
+
+export type AdKindsSelection = 'image' | 'video' | 'both';
 
 export type WizardSelections = {
   campaignId:   string | null;
@@ -101,6 +166,12 @@ export type WizardSelections = {
   // pre-Phase-2). Sent through /api/ads/generate body to expand-
   // WizardJob, which overrides Campaign.platformFormat for this run.
   platformFormat: PlatformFormat;
+  // image / video / both per run. Backend's resolveKinds() (services/
+  // platformFormats.js) intersects this with the selected format's
+  // declared kinds (Reels is video-only), so 'image' on Reels gets
+  // clamped server-side. Default 'both' produces both pipelines where
+  // the format allows it (Veo for video, HTML Gen for image).
+  adKinds: AdKindsSelection;
   productIds:  string[];
   // Pre-populated when the wizard is deep-linked from the media
   // library's "Generate Ads" button. Each id rides through to the
@@ -177,6 +248,7 @@ export function GenerateAdsWizard() {
     ctaUrl:       '',
     urlParams:    '',
     platformFormat: 'meta_feed_1_1',
+    adKinds:        'both',
     excludedPairings: [],
     includeCategoryMatched: false,
     includeBrandMatched:    false
@@ -279,7 +351,12 @@ export function GenerateAdsWizard() {
           operators enter via deep-links that skip Step 1 (Campaigns
           list "Generate" button, NewCampaignModal, CampaignDetail —
           all jump to ?step=products with the campaign pre-selected). */}
-      <PlatformFormatPicker value={selections.platformFormat} onChange={(f) => update({ platformFormat: f })} />
+      <PlatformFormatPicker
+        value={selections.platformFormat}
+        onChange={(f) => update({ platformFormat: f })}
+        kinds={selections.adKinds}
+        onKindsChange={(k) => update({ adKinds: k })}
+      />
 
       <Box>
         {step === 'campaign' && <Step1Campaign value={selections} onChange={update} />}

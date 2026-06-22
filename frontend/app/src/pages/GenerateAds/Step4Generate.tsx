@@ -89,6 +89,7 @@ export function Step4Generate({ value }: Props) {
         cta:         { text: value.ctaText, url: value.ctaUrl },
         urlParams:   value.urlParams,
         platformFormat: value.platformFormat,
+        kinds:          value.adKinds,
         excludePairings,
         includeCategoryMatched: value.includeCategoryMatched,
         includeBrandMatched:    value.includeBrandMatched
@@ -106,6 +107,8 @@ export function Step4Generate({ value }: Props) {
     value.ctaText,
     value.ctaUrl,
     value.urlParams,
+    value.platformFormat,
+    value.adKinds,
     value.includeCategoryMatched,
     value.includeBrandMatched,
     (value.excludedPairings || []).join(','),
@@ -133,6 +136,7 @@ export function Step4Generate({ value }: Props) {
           cta:         { text: value.ctaText, url: value.ctaUrl },
           urlParams:   value.urlParams,
           platformFormat: value.platformFormat,
+          kinds:          value.adKinds,
           excludePairings,
           includeCategoryMatched: value.includeCategoryMatched,
           includeBrandMatched:    value.includeBrandMatched

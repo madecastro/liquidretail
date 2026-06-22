@@ -151,7 +151,7 @@ type RunStatus = {
   succeeded:       number;
   skipped:         number;
   failed:          number;
-  status:          'running' | 'done' | 'failed';
+  status:          'preparing' | 'running' | 'done' | 'failed';
   queuedRemaining: number;
   errors:          Array<{ index: number; stage: string; template: string; aspectRatio: string; message: string }>;
   startedAt:       string;
@@ -447,7 +447,10 @@ export function AdsPage() {
         // condition the operator never sees the renderUrl → photorealUrl
         // swap until they manually refresh.
         const stillAwaitingPolish = rowsRef.current.some(isAwaitingPolish);
-        if (next.status === 'running' || stillAwaitingPolish) {
+        // 'preparing' = expandWizardJob is still running in the background
+        // (Director + Judge ~15-25s). Keep polling until status flips to
+        // 'running' (total is set) or 'done'/'failed' (terminal).
+        if (next.status === 'preparing' || next.status === 'running' || stillAwaitingPolish) {
           if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
             setPollTimedOut(true);
             return;
@@ -1144,6 +1147,24 @@ function RunProgress({
         <CardBody>
           <Text fontWeight="700" color="red.700">Run crashed before completing</Text>
           <Text fontSize="sm" color="brand.muted">Check the server logs for the underlying error.</Text>
+        </CardBody>
+      </Card>
+    );
+  }
+
+  // Preparing — expandWizardJob is running in background (Director + Judge
+  // LLM calls). total isn't known yet; show an indeterminate state instead
+  // of "0 of 0".
+  if (run.status === 'preparing') {
+    return (
+      <Card variant="outline" borderColor="purple.300" bg="purple.50">
+        <CardBody>
+          <HStack spacing={2}>
+            <Spinner size="sm" color="purple.500" />
+            <Text fontWeight="700" color="brand.ink">
+              Preparing creatives — building the concept brief…
+            </Text>
+          </HStack>
         </CardBody>
       </Card>
     );

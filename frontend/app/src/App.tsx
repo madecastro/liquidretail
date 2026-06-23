@@ -15,6 +15,7 @@ import { DetectReviewPage } from './pages/DetectReview';
 import { CampaignsPage } from './pages/Campaigns';
 import { CampaignDetailPage } from './pages/CampaignDetail';
 import { AdsPage } from './pages/Ads';
+import { ProductAdsPage } from './pages/ProductAds';
 import { GenerateAdsWizard } from './pages/GenerateAds';
 import { MediaLibraryPage } from './pages/MediaLibrary';
 import { CatalogBrowserPage } from './pages/CatalogBrowser';
@@ -37,6 +38,11 @@ export function App() {
               <Route path="/brand"          element={<RequireAuth><BrandPage /></RequireAuth>} />
               <Route path="/campaigns"      element={<RequireAuth><CampaignsPage /></RequireAuth>} />
               <Route path="/campaigns/:id"  element={<RequireAuth><CampaignDetailPage /></RequireAuth>} />
+              <Route path="/product-ads"    element={<RequireAuth><ProductAdsPage /></RequireAuth>} />
+              {/* /ads is now a secondary route — primary nav points at
+                  /product-ads. /ads is still resolvable for the post-
+                  generate redirect (?campaignRunId=X) which shows the
+                  run-status poller + flat ad gallery. */}
               <Route path="/ads"            element={<RequireAuth><AdsPage /></RequireAuth>} />
               <Route path="/generate-ads"   element={<RequireAuth><GenerateAdsWizard /></RequireAuth>} />
               {/* Detect Review — secondary nav entry. Operator queue

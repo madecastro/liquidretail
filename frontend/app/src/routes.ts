@@ -23,7 +23,7 @@ export type StepDef = {
 export const STEPS: readonly StepDef[] = [
   { key: 'brand',     path: '/brand',     label: 'Brand',     description: 'Identity & rules' },
   { key: 'campaigns', path: '/campaigns', label: 'Campaigns', description: 'Sync & generate' },
-  { key: 'ads',       path: '/ads',       label: 'Ads',       description: 'Rendered creatives' }
+  { key: 'ads',       path: '/product-ads', label: 'Product Ads', description: 'Generate & manage at scale' }
 ] as const;
 
 // Secondary destinations — utility pages that aren't part of the
@@ -46,7 +46,11 @@ export const SECONDARY_NAV: readonly SecondaryNavItem[] = [
 // nav items when the user lands on them (deep links + the wizard).
 const ALIAS_TO_STEP: Record<string, StepKey> = {
   '/generate-ads':  'campaigns',
-  '/upload':        'campaigns'
+  '/upload':        'campaigns',
+  // /ads is the secondary post-generate run-status view — keep the
+  // sidebar highlighting "Product Ads" so operators don't lose context
+  // when the wizard redirects them.
+  '/ads':           'ads'
   // /detect is now a top-level secondary nav entry (Detect Review),
   // no longer aliased to a primary step.
 };

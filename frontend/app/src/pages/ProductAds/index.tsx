@@ -88,13 +88,14 @@ type ExpansionAd = {
 };
 
 // Same URL-priority rule as the legacy /ads page: video ads always use
-// renderUrl (the ffmpeg composite); image ads use photorealUrl when the
-// campaign opted in to the AI polish AND the URL has landed, else
-// renderUrl (the Puppeteer screenshot).
+// renderUrl (the ffmpeg composite); image ads ALWAYS prefer photorealUrl
+// (the gpt-image-1 polished version) over renderUrl (the raw Puppeteer
+// screenshot) whenever it's populated — regardless of the per-campaign
+// useImageRefAsProduction flag, which is reserved for production-Meta
+// pushes and is not the gate for the gallery thumbnail.
 function displayUrlFor(ad: ExpansionAd): string | null {
   if (ad.kind === 'video') return ad.renderUrl;
-  if (ad.useImageRefAsProduction && ad.photorealUrl) return ad.photorealUrl;
-  return ad.renderUrl || ad.photorealUrl;
+  return ad.photorealUrl || ad.renderUrl;
 }
 
 type ExpansionResponse = {

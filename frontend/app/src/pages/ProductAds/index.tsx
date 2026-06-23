@@ -20,7 +20,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import {
   Box, Card, CardBody, VStack, HStack, Text, Spinner, Button,
-  Image, Badge, Progress, Checkbox, SimpleGrid, useToast
+  Image, Badge, Progress, Checkbox, SimpleGrid, useToast,
+  Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody,
+  ModalFooter, ModalCloseButton
 } from '@chakra-ui/react';
 
 import { PageHeader } from '../../shell/PageHeader';
@@ -77,6 +79,8 @@ type ExpansionAd = {
   kind:           'image' | 'video';
   sourceFileType: 'image' | 'video' | null;
   status:         string;
+  approved:       boolean;
+  approvedAt:     string | null;
   renderUrl:      string | null;
   photorealUrl:   string | null;
   useImageRefAsProduction: boolean;
@@ -85,7 +89,21 @@ type ExpansionAd = {
   ctaText:        string | null;
   generatedAt:    string | null;
   metaSyncStatus: string | null;
+  metaAdId:       string | null;
+  metaAdsetId:    string | null;
 };
+
+// Three-section grouping rule for the inline expansion. Mirrors the
+// backend state model:
+//   Draft    = not approved yet
+//   Approved = operator-approved, not pushed to Meta yet
+//   Exported = synced to Meta (metaSyncStatus='synced')
+type AdSection = 'draft' | 'approved' | 'exported';
+function sectionFor(ad: ExpansionAd): AdSection {
+  if (ad.metaSyncStatus === 'synced') return 'exported';
+  if (ad.approved) return 'approved';
+  return 'draft';
+}
 
 // Same URL-priority rule as the legacy /ads page: video ads always use
 // renderUrl (the ffmpeg composite); image ads ALWAYS prefer photorealUrl
@@ -101,6 +119,16 @@ function displayUrlFor(ad: ExpansionAd): string | null {
 type ExpansionResponse = {
   campaigns: ExpansionCampaign[];
   ads:       ExpansionAd[];
+};
+
+// Meta AdSet shape returned by /api/ads/meta-adsets — same projection
+// the legacy /ads page uses; only the fields we display here are typed.
+type MetaAdset = {
+  id:           string;
+  name:         string;
+  status:       string | null;
+  campaignId:   string | null;
+  campaignName: string | null;
 };
 
 function relativeTime(iso: string | null): string {
@@ -149,6 +177,10 @@ export function ProductAdsPage() {
 
   // Bulk selection — Set<productId>. Header checkbox flips all.
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  // Ad detail modal — single state across the whole page so any
+  // expansion's thumbnail can open the same modal. Null = closed.
+  const [openAd, setOpenAd] = useState<ExpansionAd | null>(null);
 
   useEffect(() => {
     if (!activeBrandId) return;
@@ -337,17 +369,305 @@ export function ProductAdsPage() {
                   onToggleSelect={() => toggleOne(p.productId)}
                   onExpand={() => expandRow(p.productId)}
                   onGenerate={() => generateForOne(p.productId)}
+                  onOpenAd={setOpenAd}
                 />
               ))}
             </VStack>
           </CardBody>
         </Card>
       )}
+
+      {/* Ad detail modal — opens on thumbnail click. Hosts the larger
+          preview + Approve + Push-to-Meta (Export) actions. On a
+          state change (approve toggled, export pushed) the open
+          product's expansion is refetched so counts + sections stay
+          in sync. */}
+      {openAd && activeBrandId && (
+        <AdDetailModal
+          ad={openAd}
+          brandId={activeBrandId}
+          onClose={() => setOpenAd(null)}
+          onMutated={async (updated) => {
+            // Patch the open ad inline + refresh expansion for the
+            // product so section grouping rebalances.
+            setOpenAd(updated);
+            // Find which product's expansion contains this ad and
+            // invalidate its cache so the next open re-fetches.
+            for (const [productId, exp] of Object.entries(expansions)) {
+              if (exp.ads.some(a => a.adId === updated.adId)) {
+                const res = await apiJson<ExpansionResponse>(
+                  `/api/catalog/${encodeURIComponent(productId)}/ads-detail?brandId=${encodeURIComponent(activeBrandId)}`
+                ).catch(() => null);
+                if (res) setExpansions(prev => ({ ...prev, [productId]: res }));
+                break;
+              }
+            }
+          }}
+        />
+      )}
     </VStack>
   );
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────
+
+// Ad detail modal — full-size preview + Approve + Push-to-Meta. Push
+// uses the same /api/ads/push-to-meta endpoint the legacy /ads page
+// drives; adset list is fetched lazily on first export click so the
+// modal stays responsive when just viewing.
+function AdDetailModal({
+  ad, brandId, onClose, onMutated
+}: {
+  ad:        ExpansionAd;
+  brandId:   string;
+  onClose:   () => void;
+  onMutated: (updated: ExpansionAd) => void;
+}) {
+  const toast = useToast();
+  const [approving, setApproving] = useState(false);
+  const [pushing, setPushing] = useState(false);
+  const [adsets, setAdsets] = useState<MetaAdset[] | null>(null);
+  const [adsetsLoading, setAdsetsLoading] = useState(false);
+  const [chosenAdsetId, setChosenAdsetId] = useState<string>('');
+
+  const url = displayUrlFor(ad);
+  const isExported = ad.metaSyncStatus === 'synced';
+  const isApproved = ad.approved;
+
+  const toggleApprove = async () => {
+    setApproving(true);
+    try {
+      const res = await apiJson<{ ad: { id: string; approved: boolean; approvedAt: string | null } }>(
+        `/api/ads/${encodeURIComponent(ad.adId)}/approve?brandId=${encodeURIComponent(brandId)}`,
+        {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ approved: !isApproved })
+        }
+      );
+      onMutated({
+        ...ad,
+        approved:   res.ad.approved,
+        approvedAt: res.ad.approvedAt
+      });
+      toast({
+        title:    res.ad.approved ? 'Ad approved' : 'Ad unapproved',
+        status:   res.ad.approved ? 'success' : 'info',
+        duration: 2500
+      });
+    } catch (e) {
+      toast({
+        title:       'Approval failed',
+        description: e instanceof Error ? e.message : String(e),
+        status:      'error',
+        duration:    5000
+      });
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  const loadAdsets = async () => {
+    if (adsets) return;
+    setAdsetsLoading(true);
+    try {
+      const res = await apiJson<{ adsets: MetaAdset[] }>(
+        `/api/ads/meta-adsets?brandId=${encodeURIComponent(brandId)}`
+      );
+      setAdsets(res.adsets || []);
+    } catch (e) {
+      toast({
+        title:       'Could not load Meta AdSets',
+        description: e instanceof Error ? e.message : String(e),
+        status:      'error',
+        duration:    5000
+      });
+    } finally {
+      setAdsetsLoading(false);
+    }
+  };
+
+  const doExport = async () => {
+    if (!chosenAdsetId) {
+      toast({ title: 'Pick an AdSet first', status: 'warning', duration: 2500 });
+      return;
+    }
+    setPushing(true);
+    try {
+      type PushResult = {
+        pushed:  number;
+        failed:  number;
+        results: Array<{ adId: string; ok: boolean; metaSyncStatus?: string; metaAdId?: string; error?: string }>;
+      };
+      const result = await apiJson<PushResult>('/api/ads/push-to-meta', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ brandId, adsetId: chosenAdsetId, adIds: [ad.adId] })
+      });
+      const row = result.results?.[0];
+      if (row?.ok) {
+        onMutated({
+          ...ad,
+          metaSyncStatus: row.metaSyncStatus || 'synced',
+          metaAdId:       row.metaAdId || ad.metaAdId,
+          metaAdsetId:    chosenAdsetId
+        });
+        toast({ title: 'Exported to Meta', status: 'success', duration: 3000 });
+      } else {
+        toast({
+          title:       'Export failed',
+          description: row?.error || 'Unknown error from Meta',
+          status:      'error',
+          duration:    6000
+        });
+      }
+    } catch (e) {
+      toast({
+        title:       'Export failed',
+        description: e instanceof Error ? e.message : String(e),
+        status:      'error',
+        duration:    6000
+      });
+    } finally {
+      setPushing(false);
+    }
+  };
+
+  return (
+    <Modal isOpen={true} onClose={onClose} size="3xl" isCentered>
+      <ModalOverlay />
+      <ModalContent>
+        <ModalHeader>
+          <VStack align="stretch" spacing={1}>
+            <HStack spacing={2}>
+              <Text fontSize="md" fontWeight="800" color="brand.ink">{ad.headline || ad.template}</Text>
+              {isExported && <Badge colorScheme="blue" variant="subtle">Exported</Badge>}
+              {!isExported && isApproved && <Badge colorScheme="green" variant="subtle">Approved</Badge>}
+              {!isExported && !isApproved && <Badge colorScheme="purple" variant="subtle">Draft</Badge>}
+            </HStack>
+            <HStack spacing={2} fontSize="11px" color="brand.muted">
+              <Text fontFamily="mono">{ad.template}</Text>
+              <Text>·</Text>
+              <Text>{ad.aspectRatio}</Text>
+              {ad.platformFormat && (<><Text>·</Text><Text>{ad.platformFormat.replace(/_/g, ' ')}</Text></>)}
+              <Text>·</Text>
+              <Text>{ad.kind}</Text>
+            </HStack>
+          </VStack>
+        </ModalHeader>
+        <ModalCloseButton />
+        <ModalBody>
+          {/* Large preview — full ad at native aspect, dark frame. */}
+          <Box bg="gray.900" borderRadius="md" overflow="hidden" mb={3} maxH="70vh">
+            {url ? (
+              ad.kind === 'video' ? (
+                <video
+                  src={url}
+                  poster={ad.posterUrl || undefined}
+                  controls
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  preload="metadata"
+                  style={{ width: '100%', maxHeight: '70vh', objectFit: 'contain', display: 'block', background: '#000' }}
+                />
+              ) : (
+                <Image src={url} alt={ad.headline || ad.template} w="100%" maxH="70vh" objectFit="contain" />
+              )
+            ) : (
+              <Box w="100%" h="320px" display="flex" alignItems="center" justifyContent="center" color="gray.400" fontSize="sm">
+                No render available
+              </Box>
+            )}
+          </Box>
+
+          {/* Copy snapshot — what's actually printed on the ad. */}
+          {(ad.headline || ad.ctaText) && (
+            <VStack align="stretch" spacing={1} mb={3}>
+              {ad.headline && (
+                <HStack spacing={2}>
+                  <Text fontSize="11px" fontWeight="700" textTransform="uppercase" letterSpacing="0.06em" color="brand.muted" w="80px">Headline</Text>
+                  <Text fontSize="sm" color="brand.ink">{ad.headline}</Text>
+                </HStack>
+              )}
+              {ad.ctaText && (
+                <HStack spacing={2}>
+                  <Text fontSize="11px" fontWeight="700" textTransform="uppercase" letterSpacing="0.06em" color="brand.muted" w="80px">CTA</Text>
+                  <Text fontSize="sm" color="brand.ink">{ad.ctaText}</Text>
+                </HStack>
+              )}
+            </VStack>
+          )}
+
+          {/* AdSet picker — only renders once the operator clicks Export
+              for the first time. Avoids the legacy /ads-page pattern of
+              eager-fetching even when they were just browsing. */}
+          {adsets !== null && !isExported && (
+            <Box pt={2} borderTopWidth="1px" borderColor="brand.border">
+              <Text fontSize="11px" fontWeight="700" textTransform="uppercase" letterSpacing="0.06em" color="brand.muted" mb={1}>
+                Push to AdSet
+              </Text>
+              {adsets.length === 0 ? (
+                <Text fontSize="sm" color="brand.muted">No Meta AdSets found for this brand. Connect Meta or create an AdSet first.</Text>
+              ) : (
+                <Box as="select"
+                     value={chosenAdsetId}
+                     onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setChosenAdsetId(e.target.value)}
+                     borderWidth="1px" borderColor="brand.border" borderRadius="md" p={2}
+                     fontSize="sm" w="100%" bg="white">
+                  <option value="">— pick an AdSet —</option>
+                  {adsets.map(a => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}{a.campaignName ? ` (${a.campaignName})` : ''}{a.status ? ` — ${a.status}` : ''}
+                    </option>
+                  ))}
+                </Box>
+              )}
+            </Box>
+          )}
+        </ModalBody>
+        <ModalFooter>
+          <HStack spacing={2}>
+            <Button variant="ghost" onClick={onClose}>Close</Button>
+            <Button
+              variant={isApproved ? 'outline' : 'brand'}
+              onClick={toggleApprove}
+              isLoading={approving}
+              isDisabled={isExported}
+            >
+              {isApproved ? 'Unapprove' : 'Approve'}
+            </Button>
+            {isExported ? (
+              <Badge colorScheme="blue" variant="subtle" px={3} py={1} fontSize="11px">
+                Synced to Meta
+              </Badge>
+            ) : adsets === null ? (
+              <Button
+                variant="brand"
+                onClick={loadAdsets}
+                isLoading={adsetsLoading}
+                isDisabled={!isApproved}
+                title={!isApproved ? 'Approve before exporting' : undefined}
+              >
+                Export
+              </Button>
+            ) : (
+              <Button
+                variant="brand"
+                onClick={doExport}
+                isLoading={pushing}
+                isDisabled={!chosenAdsetId || !isApproved}
+              >
+                Push to Meta
+              </Button>
+            )}
+          </HStack>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
+  );
+}
 
 function KpiTile({
   label, value, sub, progressPct, tooltip
@@ -378,7 +698,7 @@ function KpiTile({
 
 function ProductRowView({
   row, expanded, expansion, expansionLoading, selected,
-  onToggleSelect, onExpand, onGenerate
+  onToggleSelect, onExpand, onGenerate, onOpenAd
 }: {
   row:             ProductRow;
   expanded:        boolean;
@@ -388,6 +708,7 @@ function ProductRowView({
   onToggleSelect:  () => void;
   onExpand:        () => void;
   onGenerate:      () => void;
+  onOpenAd:        (ad: ExpansionAd) => void;
 }) {
   const cov = coverageLabel(row.coveragePct);
   return (
@@ -461,7 +782,7 @@ function ProductRowView({
             </HStack>
           )}
           {!expansionLoading && expansion && (
-            <ExpansionPanel expansion={expansion} />
+            <ExpansionPanel expansion={expansion} onOpenAd={onOpenAd} />
           )}
         </Box>
       )}
@@ -469,7 +790,7 @@ function ProductRowView({
   );
 }
 
-function ExpansionPanel({ expansion }: { expansion: ExpansionResponse }) {
+function ExpansionPanel({ expansion, onOpenAd }: { expansion: ExpansionResponse; onOpenAd: (ad: ExpansionAd) => void }) {
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(
     expansion.campaigns[0]?.campaignId ?? null
   );
@@ -477,6 +798,22 @@ function ExpansionPanel({ expansion }: { expansion: ExpansionResponse }) {
     if (!selectedCampaignId) return expansion.ads;
     return expansion.ads.filter(a => a.campaignId === selectedCampaignId);
   }, [expansion.ads, selectedCampaignId]);
+
+  // Group filtered ads by section. Order matters in the UI:
+  // Draft first (operator's work queue), then Approved (export-ready),
+  // then Exported (audit/reference).
+  const grouped = useMemo(() => {
+    const draft:    ExpansionAd[] = [];
+    const approved: ExpansionAd[] = [];
+    const exported: ExpansionAd[] = [];
+    for (const ad of filteredAds) {
+      const s = sectionFor(ad);
+      if (s === 'draft') draft.push(ad);
+      else if (s === 'approved') approved.push(ad);
+      else exported.push(ad);
+    }
+    return { draft, approved, exported };
+  }, [filteredAds]);
 
   if (expansion.campaigns.length === 0 && expansion.ads.length === 0) {
     return (
@@ -511,20 +848,66 @@ function ExpansionPanel({ expansion }: { expansion: ExpansionResponse }) {
         ))}
       </VStack>
 
-      {/* Ads grid */}
-      <Box flex="1 1 0">
-        <Text fontSize="10px" fontWeight="800" textTransform="uppercase" letterSpacing="0.08em" color="brand.muted" mb={2}>
-          Generated Ads · {filteredAds.length} ad{filteredAds.length === 1 ? '' : 's'}
-        </Text>
-        {filteredAds.length === 0 ? (
+      {/* Ads — grouped Draft / Approved / Exported. Empty sections
+          hide entirely so the panel stays compact when only one
+          category exists. */}
+      <VStack align="stretch" flex="1 1 0" spacing={4}>
+        {filteredAds.length === 0 && (
           <Text fontSize="sm" color="brand.muted">No ads in this campaign yet.</Text>
-        ) : (
-          <SimpleGrid columns={{ base: 2, md: 4 }} spacing={2}>
-            {filteredAds.slice(0, 12).map(ad => <AdThumbnail key={ad.adId} ad={ad} />)}
-          </SimpleGrid>
         )}
-      </Box>
+        <AdSectionGrid
+          label="Draft"
+          tint="purple"
+          ads={grouped.draft}
+          onOpenAd={onOpenAd}
+        />
+        <AdSectionGrid
+          label="Approved"
+          tint="green"
+          ads={grouped.approved}
+          onOpenAd={onOpenAd}
+        />
+        <AdSectionGrid
+          label="Exported"
+          tint="blue"
+          ads={grouped.exported}
+          onOpenAd={onOpenAd}
+        />
+      </VStack>
     </HStack>
+  );
+}
+
+// One status section of the expansion. Hides when empty so a product
+// with only drafts doesn't render two empty stubs.
+function AdSectionGrid({
+  label, tint, ads, onOpenAd
+}: {
+  label:    string;
+  tint:     'purple' | 'green' | 'blue';
+  ads:      ExpansionAd[];
+  onOpenAd: (ad: ExpansionAd) => void;
+}) {
+  if (!ads.length) return null;
+  const labelColor = tint === 'purple' ? 'rsViolet.600'
+                   : tint === 'green'  ? 'green.700'
+                   :                     'blue.700';
+  return (
+    <Box>
+      <HStack spacing={2} mb={2} align="center">
+        <Text fontSize="10px" fontWeight="800" textTransform="uppercase" letterSpacing="0.08em" color={labelColor}>
+          {label}
+        </Text>
+        <Badge fontSize="9px" colorScheme={tint} variant="subtle">{ads.length}</Badge>
+      </HStack>
+      <SimpleGrid columns={{ base: 2, md: 4 }} spacing={2}>
+        {ads.slice(0, 12).map(ad => (
+          <Box key={ad.adId} onClick={() => onOpenAd(ad)} cursor="pointer">
+            <AdThumbnail ad={ad} />
+          </Box>
+        ))}
+      </SimpleGrid>
+    </Box>
   );
 }
 

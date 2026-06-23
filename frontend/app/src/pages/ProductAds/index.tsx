@@ -75,15 +75,27 @@ type ExpansionAd = {
   aspectRatio:    string;
   platformFormat: string | null;
   kind:           'image' | 'video';
+  sourceFileType: 'image' | 'video' | null;
   status:         string;
   renderUrl:      string | null;
   photorealUrl:   string | null;
+  useImageRefAsProduction: boolean;
   posterUrl:      string | null;
   headline:       string | null;
   ctaText:        string | null;
   generatedAt:    string | null;
   metaSyncStatus: string | null;
 };
+
+// Same URL-priority rule as the legacy /ads page: video ads always use
+// renderUrl (the ffmpeg composite); image ads use photorealUrl when the
+// campaign opted in to the AI polish AND the URL has landed, else
+// renderUrl (the Puppeteer screenshot).
+function displayUrlFor(ad: ExpansionAd): string | null {
+  if (ad.kind === 'video') return ad.renderUrl;
+  if (ad.useImageRefAsProduction && ad.photorealUrl) return ad.photorealUrl;
+  return ad.renderUrl || ad.photorealUrl;
+}
 
 type ExpansionResponse = {
   campaigns: ExpansionCampaign[];
@@ -551,7 +563,7 @@ function CampaignRow({
 }
 
 function AdThumbnail({ ad }: { ad: ExpansionAd }) {
-  const thumb = ad.photorealUrl || ad.renderUrl || ad.posterUrl;
+  const url = displayUrlFor(ad);
   return (
     <Box
       borderWidth="1px"
@@ -561,11 +573,58 @@ function AdThumbnail({ ad }: { ad: ExpansionAd }) {
       position="relative"
       bg="gray.50"
     >
-      {thumb ? (
-        <Image src={thumb} alt={ad.headline || ad.template} w="100%" h="120px" objectFit="cover" />
-      ) : (
-        <Box w="100%" h="120px" />
-      )}
+      {/* Uniform 1:1 tile — non-square ads letterbox inside the shared
+          frame so every card matches height. objectFit:contain (not
+          cover) so we don't crop faces / products mid-frame. Mirrors
+          the legacy /ads page card layout. */}
+      <Box
+        position="relative"
+        bg="gray.900"
+        style={{ aspectRatio: '1 / 1' }}
+        overflow="hidden"
+      >
+        {url ? (
+          ad.kind === 'video' ? (
+            <video
+              src={url}
+              poster={ad.posterUrl || undefined}
+              muted
+              loop
+              playsInline
+              autoPlay
+              preload="metadata"
+              style={{
+                width: '100%', height: '100%',
+                objectFit: 'contain', display: 'block',
+                background: '#000'
+              }}
+            />
+          ) : (
+            <Image
+              src={url}
+              alt={ad.headline || ad.template}
+              w="100%"
+              h="100%"
+              objectFit="contain"
+              loading="lazy"
+            />
+          )
+        ) : (
+          <Box
+            w="100%" h="100%"
+            display="flex" alignItems="center" justifyContent="center"
+            color="gray.400"
+            fontSize="10px"
+            textTransform="uppercase"
+            letterSpacing="0.06em"
+          >
+            {ad.status === 'queued'    ? 'Queued'
+            : ad.status === 'rendering' ? 'Rendering…'
+            : ad.status === 'failed'    ? 'Render failed'
+            : 'No render'}
+          </Box>
+        )}
+      </Box>
       <Box px={2} py={1.5} borderTopWidth="1px" borderColor="brand.border">
         <HStack justify="space-between" spacing={1}>
           <Text fontSize="9px" fontWeight="700" textTransform="uppercase" letterSpacing="0.04em" color="brand.muted" noOfLines={1}>

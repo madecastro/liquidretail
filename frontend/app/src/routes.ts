@@ -10,7 +10,7 @@
 // generate). The deep-link routes (/upload, /detect, /media-library,
 // /catalog) still resolve so internal links keep working.
 
-export type StepKey = 'brand' | 'campaigns' | 'ads';
+export type StepKey = 'home' | 'product-ads' | 'campaigns';
 export type StepStatus = 'pending' | 'active' | 'complete' | 'warning';
 
 export type StepDef = {
@@ -21,14 +21,14 @@ export type StepDef = {
 };
 
 export const STEPS: readonly StepDef[] = [
-  { key: 'brand',     path: '/brand',     label: 'Brand',     description: 'Identity & rules' },
-  { key: 'campaigns', path: '/campaigns', label: 'Campaigns', description: 'Sync & generate' },
-  { key: 'ads',       path: '/product-ads', label: 'Product Ads', description: 'Generate & manage at scale' }
+  { key: 'home',        path: '/home',        label: 'Home',        description: 'Workspace overview' },
+  { key: 'product-ads', path: '/product-ads', label: 'Product Ads', description: 'Generate & manage at scale' },
+  { key: 'campaigns',   path: '/campaigns',   label: 'Campaigns',   description: 'Sync & generate' }
 ] as const;
 
 // Secondary destinations — utility pages that aren't part of the
-// pipeline narrative but the operator reaches often. Rendered below
-// the numbered STEPS in the sidebar with simpler styling.
+// primary nav but the operator reaches often. Rendered below the
+// primary STEPS in the sidebar with simpler styling.
 export type SecondaryNavItem = {
   path:  string;
   label: string;
@@ -39,7 +39,8 @@ export const SECONDARY_NAV: readonly SecondaryNavItem[] = [
   { path: '/detect',        label: 'Detect Review' },
   { path: '/media-library', label: 'Media Library' },
   { path: '/team',          label: 'Team' },
-  { path: '/settings',      label: 'Settings' }
+  { path: '/settings',      label: 'Settings' },
+  { path: '/brand',         label: 'Brand' }
 ] as const;
 
 // Out-of-band routes that should still highlight one of the primary
@@ -50,7 +51,7 @@ const ALIAS_TO_STEP: Record<string, StepKey> = {
   // /ads is the secondary post-generate run-status view — keep the
   // sidebar highlighting "Product Ads" so operators don't lose context
   // when the wizard redirects them.
-  '/ads':           'ads'
+  '/ads':           'product-ads'
   // /detect is now a top-level secondary nav entry (Detect Review),
   // no longer aliased to a primary step.
 };

@@ -70,6 +70,16 @@ type ExpansionCampaign = {
   adCount:    number;
 };
 
+type RegenerationHistoryEntry = {
+  prompt:      string;
+  mode:        'light' | 'full';
+  requestedBy: string | null;
+  at:          string | null;
+  status:      'pending' | 'done' | 'failed';
+  error:       string | null;
+  durationMs:  number | null;
+};
+
 type ExpansionAd = {
   adId:           string;
   campaignId:     string | null;
@@ -91,7 +101,24 @@ type ExpansionAd = {
   metaSyncStatus: string | null;
   metaAdId:       string | null;
   metaAdsetId:    string | null;
+  regenerating:        boolean;
+  regenerationStage:   string | null;
+  regenerationHistory: RegenerationHistoryEntry[];
 };
+
+function stageLabel(stage: string | null): string {
+  switch (stage) {
+    case 'pending':   return 'Queued…';
+    case 'veo':       return 'Re-rolling video (~3 min)…';
+    case 'chrome':    return 'Generating chrome…';
+    case 'composite': return 'Compositing video…';
+    case 'image-gen': return 'Regenerating layout…';
+    case 'image-ref': return 'Polishing image…';
+    case 'done':      return 'Done';
+    case 'failed':    return 'Failed';
+    default:          return 'Regenerating…';
+  }
+}
 
 // Three-section grouping rule for the inline expansion. Mirrors the
 // backend state model:
@@ -430,9 +457,121 @@ function AdDetailModal({
   const [adsetsLoading, setAdsetsLoading] = useState(false);
   const [chosenAdsetId, setChosenAdsetId] = useState<string>('');
 
+  // Regenerate UI state
+  const [regenOpen, setRegenOpen] = useState(false);
+  const [regenPrompt, setRegenPrompt] = useState('');
+  const [regenMode, setRegenMode] = useState<'light' | 'full'>('light');
+  const [regenSubmitting, setRegenSubmitting] = useState(false);
+
   const url = displayUrlFor(ad);
   const isExported = ad.metaSyncStatus === 'synced';
   const isApproved = ad.approved;
+  const isRegenerating = !!ad.regenerating;
+  const lastHistory = (ad.regenerationHistory && ad.regenerationHistory.length)
+    ? ad.regenerationHistory[ad.regenerationHistory.length - 1]
+    : null;
+  const lastError = lastHistory?.status === 'failed' ? (lastHistory.error || null) : null;
+
+  // Poll the ad's detail row every 5s while regenerating. Stops when
+  // regenerating flips false. Uses the parent product's ads-detail
+  // endpoint (one query for the whole product, then we pick out our
+  // ad) — saves adding a per-ad endpoint just for polling.
+  useEffect(() => {
+    if (!isRegenerating || !ad.campaignId) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    // Shape returned by GET /api/ads/:id is projectAd's full shape —
+    // overlaps with ExpansionAd on the fields the modal cares about
+    // but uses different names (id vs adId, copy.headline vs headline,
+    // etc.). Map the subset we need.
+    type AdRow = {
+      id:                  string;
+      renderUrl:           string | null;
+      photorealUrl:        string | null;
+      posterUrl:           string | null;
+      approved:            boolean;
+      approvedAt:          string | null;
+      metaSyncStatus:      string | null;
+      metaAdId:            string | null;
+      metaAdsetId:         string | null;
+      regenerating:        boolean;
+      regenerationStage:   string | null;
+      regenerationHistory: RegenerationHistoryEntry[];
+    };
+
+    const tick = async () => {
+      if (cancelled) return;
+      try {
+        const res = await apiJson<{ ad: AdRow }>(
+          `/api/ads/${encodeURIComponent(ad.adId)}?brandId=${encodeURIComponent(brandId)}`
+        );
+        if (cancelled) return;
+        const r = res.ad;
+        const merged: ExpansionAd = {
+          ...ad,
+          renderUrl:           r.renderUrl,
+          photorealUrl:        r.photorealUrl,
+          posterUrl:           r.posterUrl,
+          approved:            r.approved,
+          approvedAt:          r.approvedAt,
+          metaSyncStatus:      r.metaSyncStatus,
+          metaAdId:            r.metaAdId,
+          metaAdsetId:         r.metaAdsetId,
+          regenerating:        r.regenerating,
+          regenerationStage:   r.regenerationStage,
+          regenerationHistory: r.regenerationHistory || []
+        };
+        onMutated(merged);
+        if (r.regenerating) {
+          timer = setTimeout(tick, 5000);
+        }
+      } catch {
+        // Network error — back off and try again. Stops only on cancel.
+        timer = setTimeout(tick, 10000);
+      }
+    };
+    timer = setTimeout(tick, 5000);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  // Only re-arm when regenerating flips true. ad reference changes on
+  // every mutation but we don't want to restart the poll on every tick.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRegenerating, ad.adId, brandId]);
+
+  const submitRegen = async () => {
+    const text = regenPrompt.trim();
+    if (!text) {
+      toast({ title: 'Add a prompt first', status: 'warning', duration: 2500 });
+      return;
+    }
+    setRegenSubmitting(true);
+    try {
+      await apiJson<{ regenerating: boolean; regenerationStage: string; mode: string }>(
+        `/api/ads/${encodeURIComponent(ad.adId)}/regenerate?brandId=${encodeURIComponent(brandId)}`,
+        {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ prompt: text, mode: ad.kind === 'video' ? regenMode : undefined })
+        }
+      );
+      onMutated({
+        ...ad,
+        regenerating:      true,
+        regenerationStage: 'pending'
+      });
+      setRegenOpen(false);
+      setRegenPrompt('');
+      toast({ title: 'Regenerating', description: 'You can keep this open to watch progress.', status: 'info', duration: 3000 });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast({ title: 'Regenerate failed to start', description: msg, status: 'error', duration: 6000 });
+    } finally {
+      setRegenSubmitting(false);
+    }
+  };
 
   const toggleApprove = async () => {
     setApproving(true);
@@ -600,6 +739,78 @@ function AdDetailModal({
             </VStack>
           )}
 
+          {/* Regenerate status banner — fires while a regen worker is
+              running. Shows the stage label so the operator knows
+              what's happening during long video regens (~5 min). */}
+          {isRegenerating && (
+            <Box mt={2} mb={3} p={3} borderWidth="1px" borderColor="rsViolet.300" bg="rsViolet.50" borderRadius="md">
+              <HStack spacing={2}>
+                <Spinner size="sm" color="rsViolet.500" />
+                <Text fontSize="sm" fontWeight="700" color="brand.ink">{stageLabel(ad.regenerationStage)}</Text>
+              </HStack>
+              <Text fontSize="11px" color="brand.muted" mt={1}>
+                Keep this open to watch progress, or close — we'll keep regenerating in the background.
+              </Text>
+            </Box>
+          )}
+          {lastError && !isRegenerating && (
+            <Box mt={2} mb={3} p={3} borderWidth="1px" borderColor="red.300" bg="red.50" borderRadius="md">
+              <Text fontSize="sm" fontWeight="700" color="red.700">Last regenerate failed</Text>
+              <Text fontSize="11px" color="brand.muted" mt={1}>{lastError}</Text>
+            </Box>
+          )}
+
+          {/* Regenerate input panel — expands when operator clicks
+              Regenerate in the footer. Inline so the preview stays
+              visible alongside the refinement they're writing. */}
+          {regenOpen && (
+            <Box mt={2} mb={3} p={3} borderWidth="1px" borderColor="brand.border" borderRadius="md" bg="brand.surface">
+              <Text fontSize="11px" fontWeight="700" textTransform="uppercase" letterSpacing="0.06em" color="brand.muted" mb={2}>
+                Regenerate with a refinement prompt
+              </Text>
+              <Box
+                as="textarea"
+                value={regenPrompt}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setRegenPrompt(e.target.value)}
+                placeholder={ad.kind === 'video'
+                  ? 'e.g. "Make the quote text larger and move it to the bottom-left."'
+                  : 'e.g. "Swap the headline color to brand purple and tighten the bottom padding."'}
+                maxLength={1000}
+                rows={3}
+                w="100%"
+                borderWidth="1px"
+                borderColor="brand.border"
+                borderRadius="md"
+                p={2}
+                fontSize="sm"
+                fontFamily="body"
+                resize="vertical"
+                bg="white"
+              />
+              <HStack mt={2} justify="space-between" align="center">
+                {ad.kind === 'video' ? (
+                  <Checkbox
+                    size="sm"
+                    isChecked={regenMode === 'full'}
+                    onChange={(e) => setRegenMode(e.target.checked ? 'full' : 'light')}
+                  >
+                    <Text fontSize="11px" color="brand.muted">
+                      Also re-roll the video (~$1.85, ~5 min) — otherwise only the chrome regenerates
+                    </Text>
+                  </Checkbox>
+                ) : <Box />}
+                <HStack spacing={2}>
+                  <Button size="sm" variant="ghost" onClick={() => { setRegenOpen(false); setRegenPrompt(''); }}>
+                    Cancel
+                  </Button>
+                  <Button size="sm" variant="brand" onClick={submitRegen} isLoading={regenSubmitting} isDisabled={!regenPrompt.trim()}>
+                    Regenerate
+                  </Button>
+                </HStack>
+              </HStack>
+            </Box>
+          )}
+
           {/* AdSet picker — only renders once the operator clicks Export
               for the first time. Avoids the legacy /ads-page pattern of
               eager-fetching even when they were just browsing. */}
@@ -631,10 +842,22 @@ function AdDetailModal({
           <HStack spacing={2}>
             <Button variant="ghost" onClick={onClose}>Close</Button>
             <Button
+              variant="outline"
+              onClick={() => setRegenOpen(v => !v)}
+              isDisabled={isExported || isRegenerating}
+              title={
+                isExported     ? 'Exported ads are read-only'
+              : isRegenerating ? 'Already regenerating'
+              : undefined
+              }
+            >
+              Regenerate
+            </Button>
+            <Button
               variant={isApproved ? 'outline' : 'brand'}
               onClick={toggleApprove}
               isLoading={approving}
-              isDisabled={isExported}
+              isDisabled={isExported || isRegenerating}
             >
               {isApproved ? 'Unapprove' : 'Approve'}
             </Button>

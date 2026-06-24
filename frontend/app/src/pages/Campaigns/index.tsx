@@ -16,6 +16,10 @@ import { apiJson } from '../../auth/apiFetch';
 import { NewCampaignModal } from './NewCampaignModal';
 import { useAdReadiness, type AdReadiness } from '../../brand/useAdReadiness';
 import { useBrand } from '../../brand/BrandContext';
+import {
+  AdSectionGrid, AdDetailModal, sectionFor,
+  type ExpansionAd
+} from '../ProductAds';
 
 // Legacy Campaign / CampaignInsights types were retired with the
 // product-ads-style redesign — the new endpoint /api/campaigns/ads-summary
@@ -32,6 +36,22 @@ type CampaignSummary = {
   adsCreated:          number;
   adsReadyToExport:    number;
   goodOpportunities:   number | null;
+};
+
+// Per-campaign expansion payload from GET /api/campaigns/:id/ads-detail.
+// Mirrors the catalog ads-detail response but with a products sidebar
+// (instead of campaigns sidebar like ProductAds).
+type CampaignAdsProduct = {
+  productId: string;
+  title:     string;
+  imageUrl:  string | null;
+  price:     number | null;
+  currency:  string | null;
+  adCount:   number;
+};
+type CampaignAdsDetail = {
+  products: CampaignAdsProduct[];
+  ads:      ExpansionAd[];
 };
 
 type CampaignRowData = {
@@ -127,6 +147,16 @@ export function CampaignsPage() {
   // multiple Refresh clicks don't collide with each other.
   const [refreshing, setRefreshing] = useState<Set<string>>(new Set());
 
+  // Row expansion — lazy-load /api/campaigns/:id/ads-detail on first
+  // expand, cache in state for the session. Mirrors ProductAds expansion.
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expansions, setExpansions] = useState<Record<string, CampaignAdsDetail>>({});
+  const [expansionLoading, setExpansionLoading] = useState<Record<string, boolean>>({});
+
+  // Ad detail modal — single state across the whole page so any
+  // expansion's thumbnail opens the same modal.
+  const [openAd, setOpenAd] = useState<ExpansionAd | null>(null);
+
   const refresh = useCallback(async () => {
     if (!activeBrandId) return;
     setLoading(true);
@@ -179,6 +209,31 @@ export function CampaignsPage() {
 
   const generateForCampaign = (campaignId: string) => {
     navigate(`/generate-ads?campaignId=${encodeURIComponent(campaignId)}`);
+  };
+
+  // Lazy-load + toggle the per-row expansion. Cached across the
+  // session so a re-expand doesn't refetch.
+  const expandRow = async (campaignId: string) => {
+    const newId = expandedId === campaignId ? null : campaignId;
+    setExpandedId(newId);
+    if (newId && !expansions[campaignId] && activeBrandId) {
+      setExpansionLoading(prev => ({ ...prev, [campaignId]: true }));
+      try {
+        const res = await apiJson<CampaignAdsDetail>(
+          `/api/campaigns/${encodeURIComponent(campaignId)}/ads-detail?brandId=${encodeURIComponent(activeBrandId)}`
+        );
+        setExpansions(prev => ({ ...prev, [campaignId]: res }));
+      } catch (e) {
+        toast({
+          title:       'Could not load campaign ads',
+          description: e instanceof Error ? e.message : String(e),
+          status:      'error',
+          duration:    5000
+        });
+      } finally {
+        setExpansionLoading(prev => ({ ...prev, [campaignId]: false }));
+      }
+    }
   };
 
   const refreshAdsForCampaign = async (campaignId: string) => {
@@ -414,6 +469,34 @@ export function CampaignsPage() {
           </CardBody>
         </Card>
       )}
+      {/* Ad detail modal — opens on any expansion's thumbnail click.
+          On a state change (approve / export / regenerate), invalidate
+          the open campaign's expansion cache so counts rebalance. */}
+      {openAd && activeBrandId && (
+        <AdDetailModal
+          ad={openAd}
+          brandId={activeBrandId}
+          onClose={() => setOpenAd(null)}
+          onMutated={async (updated) => {
+            setOpenAd(updated);
+            for (const [campaignId, det] of Object.entries(expansions)) {
+              if (det.ads.some(a => a.adId === updated.adId)) {
+                try {
+                  const res = await apiJson<CampaignAdsDetail>(
+                    `/api/campaigns/${encodeURIComponent(campaignId)}/ads-detail?brandId=${encodeURIComponent(activeBrandId)}`
+                  );
+                  setExpansions(prev => ({ ...prev, [campaignId]: res }));
+                } catch {
+                  // best-effort refresh; modal still shows the
+                  // mutated ad inline.
+                }
+                break;
+              }
+            }
+          }}
+        />
+      )}
+
       {!loading && !error && rows.length > 0 && (
         <Card variant="outline">
           <CardBody p={0}>
@@ -445,11 +528,16 @@ export function CampaignsPage() {
                 <CampaignRow
                   key={r.campaignId}
                   row={r}
+                  expanded={expandedId === r.campaignId}
+                  expansion={expansions[r.campaignId] || null}
+                  expansionLoading={!!expansionLoading[r.campaignId]}
                   gateDisabled={gateDisabled}
                   isRefreshing={refreshing.has(r.campaignId)}
+                  onExpand={() => expandRow(r.campaignId)}
                   onGenerate={() => generateForCampaign(r.campaignId)}
                   onRefreshAds={() => refreshAdsForCampaign(r.campaignId)}
                   onView={() => navigate(`/campaigns/${encodeURIComponent(r.campaignId)}`)}
+                  onOpenAd={setOpenAd}
                 />
               ))}
             </VStack>
@@ -502,14 +590,20 @@ function CampaignKpiTile({
 }
 
 function CampaignRow({
-  row, gateDisabled, isRefreshing, onGenerate, onRefreshAds, onView
+  row, expanded, expansion, expansionLoading, gateDisabled, isRefreshing,
+  onExpand, onGenerate, onRefreshAds, onView, onOpenAd
 }: {
-  row:          CampaignRowData;
-  gateDisabled: boolean;
-  isRefreshing: boolean;
-  onGenerate:   () => void;
-  onRefreshAds: () => void;
-  onView:       () => void;
+  row:              CampaignRowData;
+  expanded:         boolean;
+  expansion:        CampaignAdsDetail | null;
+  expansionLoading: boolean;
+  gateDisabled:     boolean;
+  isRefreshing:     boolean;
+  onExpand:         () => void;
+  onGenerate:       () => void;
+  onRefreshAds:     () => void;
+  onView:           () => void;
+  onOpenAd:         (ad: ExpansionAd) => void;
 }) {
   const cov = coverageLabel(row.coveragePct);
   const status = (row.status || '').toUpperCase();
@@ -538,7 +632,16 @@ function CampaignRow({
   const primaryDisabled = gateDisabled && primaryActionLabel !== 'View Campaign';
 
   return (
-    <HStack px={4} py={3} spacing={4} align="center" _hover={{ bg: 'gray.50' }}>
+    <Box bg={expanded ? 'rsViolet.50' : undefined}>
+    <HStack
+      px={4}
+      py={3}
+      spacing={4}
+      align="center"
+      cursor="pointer"
+      _hover={{ bg: expanded ? undefined : 'gray.50' }}
+      onClick={onExpand}
+    >
       <HStack flex="2.4 1 0" spacing={3} align="center" minW={0}>
         {row.thumbUrl ? (
           <Image
@@ -601,7 +704,7 @@ function CampaignRow({
         <Text fontSize="11px" color="brand.muted">{relativeTime(row.lastActivityAt)}</Text>
         <Text fontSize="10px" color="brand.muted" noOfLines={1}>{row.lastActivityLabel}</Text>
       </Box>
-      <HStack flex="1.6 1 0" justify="flex-end" spacing={1}>
+      <HStack flex="1.6 1 0" justify="flex-end" spacing={1} onClick={(e) => e.stopPropagation()}>
         <Button
           size="xs"
           variant="outline"
@@ -615,6 +718,127 @@ function CampaignRow({
           <Button size="xs" variant="ghost" onClick={onView}>View</Button>
         )}
       </HStack>
+    </HStack>
+
+    {/* Inline expansion — products sidebar + ads grouped Draft /
+        Approved / Exported. Same shape as the ProductAds expansion;
+        sidebar lists this campaign's products instead of the
+        product's campaigns. */}
+    {expanded && (
+      <Box px={4} pb={4} borderTopWidth="1px" borderColor="brand.border" bg="white">
+        {expansionLoading && (
+          <HStack py={6} justify="center">
+            <Spinner size="sm" />
+            <Text fontSize="sm" color="brand.muted">Loading campaign ads…</Text>
+          </HStack>
+        )}
+        {!expansionLoading && expansion && (
+          <CampaignExpansionPanel expansion={expansion} onOpenAd={onOpenAd} />
+        )}
+      </Box>
+    )}
+    </Box>
+  );
+}
+
+// Per-campaign expansion content: products sidebar + ads grid grouped
+// into Draft / Approved / Exported sections. Reuses the shared
+// AdSectionGrid from ProductAds.
+function CampaignExpansionPanel({
+  expansion, onOpenAd
+}: {
+  expansion: CampaignAdsDetail;
+  onOpenAd:  (ad: ExpansionAd) => void;
+}) {
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const filteredAds = useMemo(() => {
+    if (!selectedProductId) return expansion.ads;
+    return expansion.ads.filter(a => a.productId === selectedProductId);
+  }, [expansion.ads, selectedProductId]);
+
+  const grouped = useMemo(() => {
+    const draft:    ExpansionAd[] = [];
+    const approved: ExpansionAd[] = [];
+    const exported: ExpansionAd[] = [];
+    for (const ad of filteredAds) {
+      const s = sectionFor(ad);
+      if (s === 'draft') draft.push(ad);
+      else if (s === 'approved') approved.push(ad);
+      else exported.push(ad);
+    }
+    return { draft, approved, exported };
+  }, [filteredAds]);
+
+  if (expansion.ads.length === 0 && expansion.products.length === 0) {
+    return (
+      <Box py={4}>
+        <Text fontSize="sm" color="brand.muted">No ads generated for this campaign yet.</Text>
+      </Box>
+    );
+  }
+
+  return (
+    <HStack align="flex-start" spacing={4} pt={4}>
+      {/* Products sidebar */}
+      <VStack align="stretch" spacing={1} flex="0 0 240px">
+        <Text fontSize="10px" fontWeight="800" textTransform="uppercase" letterSpacing="0.08em" color="brand.muted" mb={1}>
+          Products
+        </Text>
+        <ProductSidebarRow
+          label="All products"
+          adCount={expansion.ads.length}
+          selected={selectedProductId === null}
+          onClick={() => setSelectedProductId(null)}
+        />
+        {expansion.products.map(p => (
+          <ProductSidebarRow
+            key={p.productId}
+            label={p.title}
+            adCount={p.adCount}
+            selected={p.productId === selectedProductId}
+            onClick={() => setSelectedProductId(p.productId)}
+          />
+        ))}
+      </VStack>
+
+      {/* Ads — grouped Draft / Approved / Exported. */}
+      <VStack align="stretch" flex="1 1 0" spacing={4}>
+        {filteredAds.length === 0 && (
+          <Text fontSize="sm" color="brand.muted">No ads for this product yet.</Text>
+        )}
+        <AdSectionGrid label="Draft"    tint="purple" ads={grouped.draft}    onOpenAd={onOpenAd} />
+        <AdSectionGrid label="Approved" tint="green"  ads={grouped.approved} onOpenAd={onOpenAd} />
+        <AdSectionGrid label="Exported" tint="blue"   ads={grouped.exported} onOpenAd={onOpenAd} />
+      </VStack>
+    </HStack>
+  );
+}
+
+function ProductSidebarRow({
+  label, adCount, selected, onClick
+}: {
+  label:    string;
+  adCount:  number;
+  selected: boolean;
+  onClick:  () => void;
+}) {
+  return (
+    <HStack
+      px={2}
+      py={2}
+      spacing={2}
+      borderRadius="md"
+      cursor="pointer"
+      bg={selected ? 'rsViolet.100' : 'transparent'}
+      _hover={{ bg: selected ? 'rsViolet.100' : 'gray.50' }}
+      onClick={onClick}
+      justify="space-between"
+    >
+      <HStack spacing={2} minW={0}>
+        <Box w="6px" h="6px" borderRadius="full" bg={selected ? 'rsViolet.500' : 'brand.border'} flexShrink={0} />
+        <Text fontSize="13px" fontWeight={selected ? '700' : '500'} color="brand.ink" noOfLines={1}>{label}</Text>
+      </HStack>
+      <Text fontSize="11px" color="brand.muted" flexShrink={0}>{adCount} ad{adCount === 1 ? '' : 's'}</Text>
     </HStack>
   );
 }

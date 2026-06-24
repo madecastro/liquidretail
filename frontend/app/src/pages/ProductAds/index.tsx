@@ -70,7 +70,7 @@ type ExpansionCampaign = {
   adCount:    number;
 };
 
-type RegenerationHistoryEntry = {
+export type RegenerationHistoryEntry = {
   prompt:      string;
   mode:        'light' | 'full';
   requestedBy: string | null;
@@ -80,8 +80,9 @@ type RegenerationHistoryEntry = {
   durationMs:  number | null;
 };
 
-type ExpansionAd = {
+export type ExpansionAd = {
   adId:           string;
+  productId?:     string | null;
   campaignId:     string | null;
   template:       string;
   aspectRatio:    string;
@@ -106,7 +107,7 @@ type ExpansionAd = {
   regenerationHistory: RegenerationHistoryEntry[];
 };
 
-function stageLabel(stage: string | null): string {
+export function stageLabel(stage: string | null): string {
   switch (stage) {
     case 'pending':   return 'Queued…';
     case 'veo':       return 'Re-rolling video (~3 min)…';
@@ -126,7 +127,7 @@ function stageLabel(stage: string | null): string {
 //   Approved = operator-approved, not pushed to Meta yet
 //   Exported = synced to Meta (metaSyncStatus='synced')
 type AdSection = 'draft' | 'approved' | 'exported';
-function sectionFor(ad: ExpansionAd): AdSection {
+export function sectionFor(ad: ExpansionAd): AdSection {
   if (ad.metaSyncStatus === 'synced') return 'exported';
   if (ad.approved) return 'approved';
   return 'draft';
@@ -138,7 +139,7 @@ function sectionFor(ad: ExpansionAd): AdSection {
 // screenshot) whenever it's populated — regardless of the per-campaign
 // useImageRefAsProduction flag, which is reserved for production-Meta
 // pushes and is not the gate for the gallery thumbnail.
-function displayUrlFor(ad: ExpansionAd): string | null {
+export function displayUrlFor(ad: ExpansionAd): string | null {
   if (ad.kind === 'video') return ad.renderUrl;
   return ad.photorealUrl || ad.renderUrl;
 }
@@ -442,7 +443,7 @@ export function ProductAdsPage() {
 // uses the same /api/ads/push-to-meta endpoint the legacy /ads page
 // drives; adset list is fetched lazily on first export click so the
 // modal stays responsive when just viewing.
-function AdDetailModal({
+export function AdDetailModal({
   ad, brandId, onClose, onMutated
 }: {
   ad:        ExpansionAd;
@@ -1103,7 +1104,7 @@ function ExpansionPanel({ expansion, onOpenAd }: { expansion: ExpansionResponse;
 
 // One status section of the expansion. Hides when empty so a product
 // with only drafts doesn't render two empty stubs.
-function AdSectionGrid({
+export function AdSectionGrid({
   label, tint, ads, onOpenAd
 }: {
   label:    string;
@@ -1169,7 +1170,7 @@ function CampaignRow({
   );
 }
 
-function AdThumbnail({ ad }: { ad: ExpansionAd }) {
+export function AdThumbnail({ ad }: { ad: ExpansionAd }) {
   const url = displayUrlFor(ad);
   return (
     <Box

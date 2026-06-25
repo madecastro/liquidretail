@@ -34,6 +34,7 @@ const POLISHING_IMG_FILTER = 'grayscale(0.4) brightness(0.9) contrast(0.95)';
 import { PageHeader } from '../../shell/PageHeader';
 import { apiJson } from '../../auth/apiFetch';
 import { useBrand } from '../../brand/BrandContext';
+import { CreativeBriefCard } from './CreativeBriefCard';
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -51,6 +52,30 @@ type PromotionalDetails = {
   rafflePrize?:            string | null;
   rafflePrizeMediaId?:     string | null;
   raffleDrawDate?:         string | null;
+};
+
+export type CreativeBrief = {
+  goal?:         string;
+  pitch?:        string;
+  focus?:        string;
+  cta_emphasis?: string;
+  tone?:         string[];
+  audience?: {
+    description?: string;
+    segments?:    string[];
+    geo?:         string[];
+    ageRange?:    string;
+    interests?:   string[];
+  };
+  evidence?: {
+    adCount?:                  number;
+    topPerformerCreativeIds?:  string[];
+    productCount?:             number;
+    hasInsights?:              boolean;
+  };
+  derivedFrom?:   'ingest' | 'manual';
+  model?:         string;
+  promptVersion?: string;
 };
 
 type Campaign = {
@@ -72,6 +97,11 @@ type Campaign = {
   // screenshot. Requires backend AI_IMAGE_REFERENCE_ENABLED for the
   // polish to actually exist; falls back to renderUrl when it hasn't.
   useImageRefAsProduction?: boolean;
+  // Derived creative brief — extracted by campaignBriefDerivationService
+  // from this campaign's targeting + objective + creatives + matched
+  // products. Threaded into the Director on ad generation.
+  creativeBrief?:  CreativeBrief | null;
+  briefDerivedAt?: string | null;
 };
 
 type ProductRow = {
@@ -177,12 +207,15 @@ export function CampaignDetailPage() {
         apiJson<{ pinnedProducts: { id: string }[]; pinnedMedia: { id: string }[]; campaign?: Campaign }>(`/api/campaigns/${id}`)
           .catch(() => ({ pinnedProducts: [], pinnedMedia: [], campaign: undefined as Campaign | undefined }))
       ]);
-      // Stamp promotionalDetails + isExpired onto the campaign from the
-      // detail response — /products doesn't project either field.
+      // Stamp promotionalDetails + isExpired + creativeBrief onto the
+      // campaign from the detail response — /products doesn't project
+      // those fields.
       const fullCampaign: Campaign = {
         ...productsRes.campaign,
         promotionalDetails: (detailRes.campaign?.promotionalDetails ?? null) as PromotionalDetails | null,
-        isExpired:          detailRes.campaign?.isExpired ?? false
+        isExpired:          detailRes.campaign?.isExpired ?? false,
+        creativeBrief:      detailRes.campaign?.creativeBrief ?? null,
+        briefDerivedAt:     detailRes.campaign?.briefDerivedAt ?? null
       };
       setCampaign(fullCampaign);
       setProducts(productsRes.products || []);
@@ -312,6 +345,13 @@ export function CampaignDetailPage() {
           </HStack>
         </CardBody>
       </Card>
+
+      <CreativeBriefCard
+        campaignId={campaign.id || campaign._id || ''}
+        brief={campaign.creativeBrief}
+        briefDerivedAt={campaign.briefDerivedAt}
+        onChanged={refreshAll}
+      />
 
       <Modal isOpen={deleteModal.isOpen} onClose={deleteModal.onClose} isCentered>
         <ModalOverlay />

@@ -22,6 +22,7 @@ import { useBrandEdit } from './useBrandEdit';
 import { BrandHeader } from './Header';
 import { OnboardingStatusPanel } from './OnboardingStatusPanel';
 import { BrandVoiceCard } from './BrandVoiceCard';
+import { DerivedVoiceCard } from './DerivedVoiceCard';
 import { VisualIdentityCard } from './VisualIdentityCard';
 import { AudiencePersonasCard } from './AudiencePersonasCard';
 import { IntegrationsCard, type IntegrationsCardHandle } from './IntegrationsCard';
@@ -193,6 +194,8 @@ export function BrandPage() {
         </SimpleGrid>
 
         <BrandVoiceCard brand={brand} edit={edit} />
+
+        <DerivedVoiceCard brand={brand} onChanged={refresh} />
 
         <BrandReviewsCard brand={brand} onChanged={refresh} />
 

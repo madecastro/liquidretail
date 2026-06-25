@@ -52,6 +52,25 @@ export type Brand = {
   // Audience
   demographics?:     BrandDemographic[];
 
+  // Derived voice — extracted from existing Meta/Google ad creatives
+  // by brandVoiceDerivationService. Refreshed automatically on
+  // campaign sync (debounced) plus a nightly sweep. Operator can
+  // override via PATCH /api/brand/:id/voice.
+  derivedVoice?: {
+    tone?:           string[];
+    value_props?:    string[];
+    hooks?:          string[];
+    cta_patterns?:   { text: string; frequency?: number }[];
+    common_phrases?: string[];
+    audience_pitch?: { segment: string; pitch_style: string }[];
+    voice_summary?:  string;
+    evidence_count?: number;
+    weighted?:       boolean;
+    model?:          string;
+    promptVersion?:  string;
+  } | null;
+  derivedVoiceAt?: string | null;
+
   // Reviews + enrichment provenance
   brandReviews?:     BrandReviews | null;
   source?:           'stub' | 'enriched' | 'curated' | string;

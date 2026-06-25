@@ -661,8 +661,13 @@ function CampaignRow({
           <HStack spacing={1.5}>
             <Text fontSize="sm" fontWeight="700" color="brand.ink" noOfLines={1}>{row.name}</Text>
           </HStack>
-          <HStack spacing={1.5} mt={0.5}>
+          <HStack spacing={1.5} mt={0.5} flexWrap="wrap">
             <Badge fontSize="9px" colorScheme={statusColor} variant="subtle">{statusLabel}</Badge>
+            {row.productCount > 0 && (
+              <Badge fontSize="9px" variant="outline" color="brand.muted" fontWeight="600">
+                {row.productCount} product{row.productCount === 1 ? '' : 's'}
+              </Badge>
+            )}
             {row.channels.length > 0 && (
               <Text fontSize="10px" color="brand.muted" noOfLines={1}>{row.channels.join(', ')}</Text>
             )}

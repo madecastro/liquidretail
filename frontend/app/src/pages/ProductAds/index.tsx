@@ -22,12 +22,19 @@ import {
   Box, Card, CardBody, VStack, HStack, Text, Spinner, Button,
   Image, Badge, Progress, Checkbox, SimpleGrid, useToast,
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody,
-  ModalFooter, ModalCloseButton, Select
+  ModalFooter, ModalCloseButton, Select, Wrap, WrapItem
 } from '@chakra-ui/react';
 
 import { PageHeader } from '../../shell/PageHeader';
 import { apiJson } from '../../auth/apiFetch';
 import { useBrand } from '../../brand/BrandContext';
+
+type CampaignChip = {
+  id:     string;
+  name:   string;
+  kind:   string | null;
+  status: string | null;
+};
 
 type ProductRow = {
   productId:        string;
@@ -40,6 +47,7 @@ type ProductRow = {
   size:             string | null;
   adCount:          number;
   campaignCount:    number;
+  campaignChips?:   CampaignChip[];
   readyToExport:    number;
   draftCount:       number;
   liveCount:        number;
@@ -1011,13 +1019,44 @@ function ProductRowView({
           ) : (
             <Box boxSize="48px" bg="gray.100" borderRadius="md" flexShrink={0} />
           )}
-          <VStack align="stretch" spacing={0} minW={0}>
+          <VStack align="stretch" spacing={1} minW={0}>
             <Text fontSize="sm" fontWeight="700" color="brand.ink" noOfLines={1}>{row.title}</Text>
             <HStack spacing={2} fontSize="11px" color="brand.muted">
               {row.price != null && <Text>{priceLabel(row.price, row.currency)}</Text>}
               {row.size && <><Text>·</Text><Text>{row.size}</Text></>}
               {row.category && <><Text>·</Text><Text noOfLines={1}>{row.category}</Text></>}
             </HStack>
+            {Array.isArray(row.campaignChips) && row.campaignChips.length > 0 && (
+              <Wrap spacing={1.5} pt={1} onClick={(e) => e.stopPropagation()}>
+                {row.campaignChips.slice(0, 4).map(c => (
+                  <WrapItem key={c.id}>
+                    <Badge
+                      as={RouterLink}
+                      to={`/campaigns/${c.id}`}
+                      variant="subtle"
+                      colorScheme="purple"
+                      fontSize="10px"
+                      px={2}
+                      py={0.5}
+                      borderRadius="md"
+                      textTransform="none"
+                      fontWeight="600"
+                      _hover={{ bg: 'rsViolet.100', textDecoration: 'none' }}
+                      title={c.kind ? `${c.name} · ${c.kind}` : c.name}
+                    >
+                      {c.name}
+                    </Badge>
+                  </WrapItem>
+                ))}
+                {row.campaignChips.length > 4 && (
+                  <WrapItem>
+                    <Badge variant="outline" fontSize="10px" px={2} py={0.5} borderRadius="md" fontWeight="500">
+                      +{row.campaignChips.length - 4}
+                    </Badge>
+                  </WrapItem>
+                )}
+              </Wrap>
+            )}
           </VStack>
         </HStack>
         <Box flex="1 1 0">

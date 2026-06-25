@@ -616,17 +616,18 @@ function CampaignRow({
                     : (row.status || 'Unknown');
 
   // Primary action depends on state:
-  //   active + has ads + has queued inventory → Refresh Ads (best CTA)
-  //   active + has ads + nothing queued        → Generate Ads (need more)
-  //   paused / expired                         → View Campaign (read-only)
-  // We don't have queuedRemaining yet on this row, so fall back to:
-  //   paused/expired   → View
-  //   has ads          → Refresh (will toast if nothing queued)
-  //   no ads           → Generate
-  const primaryActionLabel = (isPaused || row.isExpired) ? 'View Campaign'
+  //   paused                                   → View Campaign (read-only)
+  //   active or expired + has ads              → Refresh Ads
+  //   active or expired + no ads               → Generate Ads
+  // Expired campaigns now allow generation + push: Meta accepts the
+  // create-ad API call against an expired campaign (creatives land
+  // paused) which is what we want for end-to-end push testing.
+  // Paused campaigns stay read-only because Meta typically rejects
+  // edits to paused-by-operator campaigns until they're resumed.
+  const primaryActionLabel = isPaused ? 'View Campaign'
                            : row.adCount > 0 ? 'Refresh Ads'
                            : 'Generate Ads';
-  const primaryAction = (isPaused || row.isExpired) ? onView
+  const primaryAction = isPaused ? onView
                       : row.adCount > 0 ? onRefreshAds
                       : onGenerate;
   const primaryDisabled = gateDisabled && primaryActionLabel !== 'View Campaign';

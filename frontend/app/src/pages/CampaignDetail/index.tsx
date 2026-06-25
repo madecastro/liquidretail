@@ -336,8 +336,7 @@ export function CampaignDetailPage() {
               <Button
                 variant="brand"
                 onClick={() => launchWizard()}
-                isDisabled={!!campaign.isExpired}
-                title={campaign.isExpired ? 'This campaign has ended' : undefined}
+                title={campaign.isExpired ? 'Campaign has ended — ads will be created in Meta as paused (no delivery until end date is extended)' : undefined}
               >
                 Generate Ads
               </Button>
@@ -399,7 +398,7 @@ export function CampaignDetailPage() {
             <HStack spacing={3} align="center">
               <Badge colorScheme="red" variant="solid">Expired</Badge>
               <Text fontSize="sm" color="brand.ink">
-                This campaign has ended ({formatDate(campaign.promotionalDetails?.endsAt)}). Extend the end date below or create a new campaign to generate more ads.
+                This campaign has ended ({formatDate(campaign.promotionalDetails?.endsAt)}). Ad generation and Meta push are still allowed — useful for testing the push flow — but Meta will create the ads in paused state and they won't deliver until the campaign's end date is extended.
               </Text>
             </HStack>
           </CardBody>
@@ -435,7 +434,7 @@ export function CampaignDetailPage() {
                 variant="brand"
                 size="sm"
                 onClick={() => launchWizard({ onlyPinned: true })}
-                isDisabled={!!campaign.isExpired}
+                title={campaign.isExpired ? 'Campaign expired — ads land paused on Meta until end date is extended' : undefined}
               >
                 Generate from pinned
               </Button>

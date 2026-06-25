@@ -135,7 +135,7 @@ function CampaignRow({ campaign, selected }: { campaign: Campaign; selected: boo
       p={3}
       opacity={campaign.isExpired ? 0.7 : 1}
     >
-      <Radio value={campaign.id} isDisabled={campaign.isExpired}>
+      <Radio value={campaign.id}>
         <HStack spacing={2} wrap="wrap">
           <Text fontSize="sm" fontWeight="700" color="brand.ink">{campaign.name}</Text>
           <Badge fontSize="9px" colorScheme="purple" variant="subtle">{platformLabel}</Badge>

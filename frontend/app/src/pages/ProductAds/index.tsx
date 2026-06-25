@@ -22,7 +22,7 @@ import {
   Box, Card, CardBody, VStack, HStack, Text, Spinner, Button,
   Image, Badge, Progress, Checkbox, SimpleGrid, useToast,
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody,
-  ModalFooter, ModalCloseButton
+  ModalFooter, ModalCloseButton, Select
 } from '@chakra-ui/react';
 
 import { PageHeader } from '../../shell/PageHeader';
@@ -60,6 +60,15 @@ type Summary = {
 type SummaryResponse = {
   summary:  Summary;
   products: ProductRow[];
+};
+
+type CategoryRow = {
+  categoryId:   string;
+  name:         string;
+  breadcrumb:   string;
+  depth:        number;
+  url:          string | null;
+  productCount: number;
 };
 
 type ExpansionCampaign = {
@@ -197,6 +206,12 @@ export function ProductAdsPage() {
   const [loading, setLoading]   = useState(true);
   const [err, setErr]           = useState<string | null>(null);
 
+  // Category filter — null = "All categories". Categories come from
+  // /api/catalog/categories and are populated by either the JSON-LD
+  // inference job (catalog-sync hook) or a future Shopify direct sync.
+  const [categories, setCategories]         = useState<CategoryRow[]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
+
   // Inline expansion state — keyed by productId. Lazy load on first
   // expand; cached after that for the session.
   const [expandedId, setExpandedId]       = useState<string | null>(null);
@@ -215,7 +230,9 @@ export function ProductAdsPage() {
     let cancelled = false;
     setLoading(true);
     setErr(null);
-    apiJson<SummaryResponse>(`/api/catalog/ads-summary?brandId=${encodeURIComponent(activeBrandId)}`)
+    const params = new URLSearchParams({ brandId: activeBrandId });
+    if (selectedCategoryId && selectedCategoryId !== 'all') params.set('categoryId', selectedCategoryId);
+    apiJson<SummaryResponse>(`/api/catalog/ads-summary?${params.toString()}`)
       .then(res => {
         if (cancelled) return;
         setSummary(res.summary);
@@ -223,6 +240,16 @@ export function ProductAdsPage() {
       })
       .catch(e => { if (!cancelled) setErr(e instanceof Error ? e.message : String(e)); })
       .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [activeBrandId, selectedCategoryId]);
+
+  // Categories list — loaded once per brand (not per filter change).
+  useEffect(() => {
+    if (!activeBrandId) return;
+    let cancelled = false;
+    apiJson<CategoryRow[]>(`/api/catalog/categories?brandId=${encodeURIComponent(activeBrandId)}`)
+      .then(rows => { if (!cancelled) setCategories(rows || []); })
+      .catch(() => { if (!cancelled) setCategories([]); });
     return () => { cancelled = true; };
   }, [activeBrandId]);
 
@@ -312,6 +339,28 @@ export function ProductAdsPage() {
           sub="Ads ready to push"
         />
       </SimpleGrid>
+
+      {/* ── Filter bar ─────────────────────────────────────────────── */}
+      {categories.length > 0 && (
+        <HStack spacing={3} align="center">
+          <Text fontSize="xs" color="brand.muted" fontWeight="700" textTransform="uppercase" letterSpacing="0.06em">
+            Category
+          </Text>
+          <Select
+            size="sm"
+            maxW="320px"
+            value={selectedCategoryId}
+            onChange={(e) => setSelectedCategoryId(e.target.value)}
+          >
+            <option value="all">All categories ({categories.reduce((s, c) => s + c.productCount, 0)})</option>
+            {categories.map(c => (
+              <option key={c.categoryId} value={c.categoryId}>
+                {c.breadcrumb} ({c.productCount})
+              </option>
+            ))}
+          </Select>
+        </HStack>
+      )}
 
       {/* ── Bulk selection bar ─────────────────────────────────────── */}
       {selected.size > 0 && (

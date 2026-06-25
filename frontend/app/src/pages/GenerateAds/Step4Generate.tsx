@@ -21,6 +21,7 @@ import { apiJson } from '../../auth/apiFetch';
 import { useAdReadiness } from '../../brand/useAdReadiness';
 import type { WizardSelections } from './index';
 import { StepShell } from './index';
+import { WizardBriefEditor } from './WizardBriefEditor';
 
 type Props = {
   value: WizardSelections;
@@ -167,6 +168,9 @@ export function Step4Generate({ value }: Props) {
   return (
     <StepShell heading="Review & generate" helper="Confirm selections, then kick off the render.">
       <VStack align="stretch" spacing={4}>
+        {value.campaignId && (
+          <WizardBriefEditor campaignId={value.campaignId} />
+        )}
         <SummaryRow label="Campaign" value={value.campaignId || '—'} />
         <SummaryRow
           label="Products"
